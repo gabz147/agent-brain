@@ -1,0 +1,41 @@
+{
+  "_comment": "Merge these three vault hooks into the `hooks` object of your ~/.claude/settings.json. Do NOT paste this file wholesale over settings.json if you already have other hooks — merge each array. Replace {{CLAUDE_DIR}} with the absolute path to your .claude directory (e.g. C:/Users/you/.claude), using forward slashes. `node` and `python` must be on PATH; if not, replace them with absolute exe paths. On non-Windows, keep the same shape — just adjust the interpreter paths.",
+
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"{{CLAUDE_DIR}}/hooks/vault/validate-vault-frontmatter.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"{{CLAUDE_DIR}}/hooks/vault/stop-vault-gate.js\"",
+            "timeout": 30,
+            "asyncRewake": true,
+            "rewakeSummary": "Vault checkpoint"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"{{CLAUDE_DIR}}/hooks/vault/session-end-enqueue.js\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+# Automation runtime state — never commit these
+automation/queue.jsonl
+automation/queue.batch.jsonl
+automation/queue.batch.jsonl.tmp
+automation/processed.jsonl
+automation/failed.jsonl
+automation/stop-state.json
+automation/last-audit-date.txt
+automation/*.log
+automation/.drain.lock
+
+# Python
+__pycache__/
+*.pyc
+
+# Obsidian workspace/app state (if you ever commit a real vault)
+.obsidian/workspace*
+.obsidian/cache
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
