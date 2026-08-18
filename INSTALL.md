@@ -97,6 +97,12 @@ Validate the JSON after editing (`python -c "import json,sys;json.load(open(sys.
 
 Only if the user opted in at step 0. Follow `automation/README.md` end to end: copy the folder, dry-run both scripts, register the two scheduled tasks, tune the presence guard. Verify via `drain.log` / `audit.log`. This is Windows-only.
 
+## 8.5. Optional — Agent Pulse Obsidian plugin
+
+Only if the user wants the in-Obsidian indicator. Copy `plugins/agent-pulse/` to `<BRAIN_VAULT_ROOT>/.obsidian/plugins/agent-pulse/` (all three files: `manifest.json`, `main.js`, `styles.css`). Then, in Obsidian: Settings → Community plugins → turn **Restricted Mode off** → enable **Agent Pulse**.
+
+It's an unsigned local plugin, so it will not appear in the community directory — that's expected. It reads the automation module's runtime files under `BRAIN_AUTOMATION_DIR`; with automation not installed those files are simply absent and the orb stays idle (the refresh button still works). Desktop only. See `plugins/agent-pulse/README.md` for details.
+
 ## 9. Optional — git + Obsidian
 
 - If the user wants the vault version-controlled, `git init` inside `BRAIN_VAULT_ROOT` and commit. (Keep private notes private — a vault repo should usually be a **private** GitHub repo.)

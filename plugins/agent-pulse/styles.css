@@ -1,0 +1,197 @@
+/* Agent Pulse — 8-dot ring orb. See orb-visual-spec.md Part 2.2 (paste-ready block),
+   applied to the ribbon-action container that Obsidian's addRibbonIcon() creates. */
+
+/* ---- container / sizing ---- */
+.agent-pulse-orb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: default;
+  /* per-state defaults; overridden below */
+  --apo-color: var(--text-muted);
+  --apo-rotate-dur: 22s;
+  --apo-pulse-dur: 4.8s;
+  --apo-pulse-ease: cubic-bezier(0.42, 0, 0.58, 1); /* smoothstep-like, matches source's easing feel */
+  --apo-op-lo: 0.15;
+  --apo-op-hi: 0.35;
+  --apo-scale-lo: 0.85;
+  --apo-scale-hi: 1;
+}
+
+.apo-svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  overflow: visible;
+  color: var(--apo-color); /* dots use currentColor -> theme reactive, no hardcoded hex */
+}
+
+/* whole ring spins at constant (linear) angular velocity, like the source's camera rotation */
+.apo-ring {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: apo-rotate var(--apo-rotate-dur) linear infinite;
+  will-change: transform;
+}
+
+@keyframes apo-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* each dot breathes opacity+scale; --n (0..7, set inline per dot) staggers phase around the ring,
+   reproducing the source's per-point phase offsets with one shared keyframe definition */
+.apo-dot {
+  fill: currentColor;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: var(--apo-op-lo);
+  animation: apo-pulse var(--apo-pulse-dur) var(--apo-pulse-ease) infinite;
+  animation-delay: calc(var(--apo-pulse-dur) / -8 * var(--n));
+  will-change: transform, opacity;
+}
+
+@keyframes apo-pulse {
+  0%, 100% { opacity: var(--apo-op-lo); transform: scale(var(--apo-scale-lo)); }
+  50%      { opacity: var(--apo-op-hi); transform: scale(var(--apo-scale-hi)); }
+}
+
+/* ---------------------------------------------------------- */
+/* idle — nothing running: slow, dim, low-contrast             */
+/* ---------------------------------------------------------- */
+.agent-pulse-orb.is-idle {
+  --apo-color: var(--text-muted);
+  --apo-rotate-dur: 22s;
+  --apo-pulse-dur: 4.8s;
+  --apo-op-lo: 0.15;
+  --apo-op-hi: 0.35;
+  --apo-scale-lo: 0.85;
+  --apo-scale-hi: 1;
+}
+
+/* ---------------------------------------------------------- */
+/* agent-present — alive but not writing: gentle pulse         */
+/* ---------------------------------------------------------- */
+.agent-pulse-orb.is-agent-present {
+  --apo-color: var(--icon-color, var(--text-normal));
+  --apo-rotate-dur: 10s;
+  --apo-pulse-dur: 2.4s;
+  --apo-op-lo: 0.35;
+  --apo-op-hi: 0.75;
+  --apo-scale-lo: 0.85;
+  --apo-scale-hi: 1.15;
+}
+
+/* ---------------------------------------------------------- */
+/* active — actively writing right now: faster, brighter       */
+/* ---------------------------------------------------------- */
+.agent-pulse-orb.is-active {
+  --apo-color: var(--interactive-accent, var(--text-accent));
+  --apo-rotate-dur: 3.6s;
+  --apo-pulse-dur: 1s;
+  --apo-op-lo: 0.55;
+  --apo-op-hi: 1;
+  --apo-scale-lo: 0.8;
+  --apo-scale-hi: 1.35;
+}
+
+/* ---------------------------------------------------------- */
+/* reduced motion: freeze to a static per-state frame, no       */
+/* rotation, no pulse — mirrors the source's JS-side behavior   */
+/* of painting one static frame instead of animating            */
+/* ---------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .agent-pulse-orb .apo-ring,
+  .agent-pulse-orb .apo-dot {
+    animation: none !important;
+  }
+  .agent-pulse-orb.is-idle .apo-dot          { opacity: 0.25; }
+  .agent-pulse-orb.is-agent-present .apo-dot { opacity: 0.55; }
+  .agent-pulse-orb.is-active .apo-dot        { opacity: 0.9; }
+}
+
+/* ---------------------------------------------------------------------
+   Tab-strip placement (agent-pulse-in-tabstrip). main.js adds this class
+   to the refresh + orb elements when the Bookmarks tab header is found and
+   they're relocated into .workspace-tab-header-container-inner (see
+   repositionInTabStrip() in main.js), and removes it again if they fall
+   back to the ribbon (repositionInRibbon()) — so this block only ever
+   applies in the tab-strip case; the ribbon styling above is untouched.
+
+   Both elements still carry their ribbon-sized base classes (clickable-icon
+   / side-dock-ribbon-action, applied by Obsidian's addRibbonIcon()), so
+   geometry here uses !important to win over that ribbon sizing rather than
+   depending on selector specificity against markup this file doesn't own.
+   Colors stay on theme variables throughout — nothing hardcoded.
+   --------------------------------------------------------------------- */
+.agent-pulse-in-tabstrip {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  align-self: stretch !important; /* match neighbouring .workspace-tab-header height exactly */
+  width: auto !important;
+  height: auto !important;
+  padding: 0 var(--size-2-2, 6px) !important;
+  margin: 0 !important;
+  border: none !important;
+  border-radius: var(--radius-s, 4px);
+  background: transparent !important;
+  cursor: pointer;
+}
+
+/* The orb is a status indicator, not a click target for navigation —
+   keep the ribbon's default (non-pointer) cursor even in the tab strip. */
+.agent-pulse-orb.agent-pulse-in-tabstrip {
+  cursor: default;
+}
+
+.agent-pulse-in-tabstrip:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+/* Icon size matches .workspace-tab-header-inner-icon: the source SVGs are
+   drawn at a 24px viewBox but rendered small inside the tab strip. */
+.agent-pulse-in-tabstrip svg,
+.agent-pulse-orb.agent-pulse-in-tabstrip .apo-svg {
+  width: var(--icon-s, 16px) !important;
+  height: var(--icon-s, 16px) !important;
+}
+
+/* ---------------------------------------------------------------------
+   Soft-refresh flourish (main.js softRefresh()). Replaces the old
+   app:reload: no window teardown, so instead of a collapse/respring each
+   refreshed pane fades in briefly and the button icon spins once. Motion is
+   opacity/transform only, so it's compositor-driven and rides the display's
+   refresh rate automatically (no hardcoded frame rate); both are frozen
+   under reduced-motion, matching the orb's behaviour above.
+   --------------------------------------------------------------------- */
+@keyframes agent-pulse-fade-in {
+  from { opacity: 0.72; }
+  to   { opacity: 1; }
+}
+.agent-pulse-fade-in {
+  animation: agent-pulse-fade-in 150ms ease-out;
+  will-change: opacity;
+}
+
+@keyframes agent-pulse-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.agent-pulse-spin svg {
+  animation: agent-pulse-spin 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-pulse-fade-in,
+  .agent-pulse-spin svg {
+    animation: none !important;
+  }
+}

@@ -12,6 +12,7 @@ This is the reusable, sanitized template extracted from a working personal setup
 - **Automatic checkpointing.** A Stop hook notices when a turn did real work and prompts the agent to write it into the daily note before moving on.
 - **Multi-agent handoff.** Every entry is signed (`claude` / `codex` / `human`), so two agents can share one vault without stepping on each other.
 - **Optional self-population.** A Windows automation layer turns finished sessions into daily notes and runs a nightly audit that fixes drift — fully hands-off.
+- **Optional live indicator.** A small Obsidian plugin (`plugins/agent-pulse`) shows a status orb for whether an agent is working in the vault, and a soft-refresh button that picks up agent edits without a jarring full reload.
 
 ## Repo layout
 
@@ -23,6 +24,7 @@ skills/          obsidian-vault/ — the retrieval + write procedure the agent i
 hooks/vault/     validate-vault-frontmatter.py, stop-vault-gate.js, session-end-enqueue.js
 settings/        vault-hooks.snippet.json — the hook wiring to merge into ~/.claude/settings.json
 automation/      OPTIONAL Windows self-population layer (drainer + nightly audit + scheduler wiring)
+plugins/         OPTIONAL Obsidian plugin (agent-pulse): a status orb + soft-refresh button
 INSTALL.md       step-by-step setup, written for an installing agent to execute
 ```
 
