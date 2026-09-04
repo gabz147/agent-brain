@@ -41,6 +41,8 @@ Every `.md` file in the vault must have YAML frontmatter with exactly these keys
 
 Daily notes (filename pattern `YYYY-MM-DD.md`) must be exactly `status: active`, `project: personal`, `type: log`.
 
+`aliases` is an allowed **optional** key (Obsidian's native alias list). Never remove it. Skip `09 - Archive/Old Memory/` entirely — it is a frozen pre-migration snapshot in the old format and is exempt from this scan.
+
 Fix violations directly. Infer the correct value from the note's folder location and content — never ask, never leave a violation unfixed if it is mechanically inferable. Remove undeclared/extra keys. Add missing keys with inferred values. Correct invalid enum values.
 
 **Inferring the two signature keys when they are missing:** set `updated` from the file's own last-modified time, and `updated_by` to `claude` unless the note's content clearly shows another agent wrote it. Do **not** overwrite an existing `updated_by` — a note already signed `codex` stays `codex`. Only your own edits to a note make you its new `updated_by`, and since you are the audit, prefer leaving an existing signature intact over claiming it.
@@ -62,6 +64,10 @@ For an entry you **add**, sign it from the note's own `updated_by` frontmatter v
 ## 5. Vault Structure drift
 
 The `## Vault Structure` section inside `VAULT-INDEX.md` (vault root) must match the real top-level folder layout of the vault. Update it only if a folder was actually added, renamed, or removed since it was last written — do not rewrite it for cosmetic reasons.
+
+## 6a. Machine Inventory drift (report only)
+
+If a note named `Machine Inventory.md` exists anywhere in the vault, read it. Compare its **Agent hooks** table with the `hooks` object in `{{AUTOMATION_DIR}}\..\settings.json` (skip if unreadable) and its **Scheduled tasks** table with the vault tasks that actually exist (if you can run `Get-ScheduledTask`; otherwise say "tasks not checked"). Report any hook, task, or file that exists on one side and not the other to the Inbox audit note. Do not edit the inventory yourself — a human or an interactive session reconciles it.
 
 ## 6. Bloat / duplicates (report only, do not merge)
 
@@ -87,6 +93,10 @@ Flag notes that clearly cover the same subject and look like they should be cons
   ```
 
   Append a dated section for this run with your findings as a terse bullet list.
+
+## Required final line
+
+Finish with exactly one line of the form `audit complete: <n> notes scanned` (n = the number of `.md` files you actually checked in step 3). The launcher only records a successful audit when it sees this line, so never print it if you could not read the vault.
 
 ## Hard constraints
 

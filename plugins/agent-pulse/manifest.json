@@ -1,9 +1,9 @@
 {
   "id": "agent-pulse",
   "name": "Agent Pulse",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "minAppVersion": "1.4.0",
-  "description": "Ribbon status orb showing whether a background coding agent is idle, present, or actively writing to the vault, plus a one-click soft refresh that reloads the open notes in place to pick up agent edits.",
+  "description": "Sidebar status orb for background coding agents (idle / present / active / paused) with queue depth and last-drain in the tooltip, a click-to-toggle for the vault automation (AFK or all), and a soft refresh button that reloads open panes to pick up agent edits without an app reload.",
   "author": "Gabriel Marquez",
   "isDesktopOnly": true
 }

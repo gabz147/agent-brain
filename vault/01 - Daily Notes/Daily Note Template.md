@@ -11,6 +11,9 @@ updated: 2026-01-01
 
 # {{Day of week}}, {{Month}} {{Day}}, {{Year}}
 
+<!-- The ONE mutable line in a daily note. Whichever session ends last rewrites it (Edit the line in place, keep the bold label). One sentence: what the next session should pick up first. Read it before anything else when reviewing yesterday's note. -->
+**Open for tomorrow:** —
+
 ## Index
 <!-- One bullet per session/topic. Bold the topic, then a one-sentence past-tense outcome, then your agent signature. Update this BEFORE adding session body content below. -->
 

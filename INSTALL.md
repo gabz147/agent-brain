@@ -29,11 +29,15 @@ Create the vault at `BRAIN_VAULT_ROOT` and copy the contents of this repo's `vau
 <BRAIN_VAULT_ROOT>/
   VAULT-INDEX.md
   Active Priorities.md
+  Decisions.md                 ← decision ledger (locked / active / superseded rows)
+  Dead Ends.md                 ← what failed and what to do instead; search it first
+  Automation Costs.md          ← per-run ledger the automation scripts append to (optional module)
+  Machine Inventory.md         ← tasks, hooks, ports, versions on this machine (fill in)
   00 - Inbox/
   01 - Daily Notes/Daily Note Template.md
   02 - Example Project/02 - Example Project.md
   09 - Archive/
-  10 - Resources/
+  10 - Resources/Handoff Template.md
 ```
 
 - Delete the `.gitkeep` files once real notes exist.
@@ -101,7 +105,7 @@ Only if the user opted in at step 0. Follow `automation/README.md` end to end: c
 
 Only if the user wants the in-Obsidian indicator. Copy `plugins/agent-pulse/` to `<BRAIN_VAULT_ROOT>/.obsidian/plugins/agent-pulse/` (all three files: `manifest.json`, `main.js`, `styles.css`). Then, in Obsidian: Settings → Community plugins → turn **Restricted Mode off** → enable **Agent Pulse**.
 
-It's an unsigned local plugin, so it will not appear in the community directory — that's expected. It reads the automation module's runtime files under `BRAIN_AUTOMATION_DIR`; with automation not installed those files are simply absent and the orb stays idle (the refresh button still works). Desktop only. See `plugins/agent-pulse/README.md` for details.
+It's an unsigned local plugin, so it will not appear in the community directory — that's expected. It reads the automation module's runtime files under `BRAIN_AUTOMATION_DIR`; with automation not installed those files are simply absent and the orb stays idle (the refresh button still works). Clicking the orb writes `automation-state.json` in that dir — the pause toggle the automation scripts and the Stop gate honour. Desktop only. See `plugins/agent-pulse/README.md` for details.
 
 ## 9. Optional — git + Obsidian
 

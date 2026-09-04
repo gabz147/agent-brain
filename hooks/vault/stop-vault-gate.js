@@ -45,10 +45,24 @@ const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
 // Shell commands that only read state. Anything not matching counts as mutating.
 const READ_ONLY_SHELL = /^\s*(ls|dir|pwd|cd|cat|type|head|tail|wc|grep|rg|find|which|where|echo|printf|stat|file|du|df|jq|tree|env|date|whoami|hostname|git\s+(status|log|diff|show|branch|remote|rev-parse|describe|config\s+--get)|npm\s+(ls|list|view|outdated)|pip\s+(show|list)|Get-(ChildItem|Content|Item|Location|Command|Process|Date|Service)|Test-Path|Select-String|Measure-Object)\b/i;
 
+const fs = require('fs');
+
+// The user's automation toggle (written by the Obsidian Agent Pulse plugin).
+// Only scope "all" silences this in-session gate; scope "afk" pauses just the
+// scheduled drainer and audit. Missing or unreadable file = not paused.
+function isPausedForLiveCapture() {
+  try {
+    const raw = fs.readFileSync(path.join(STATE_DIR, 'automation-state.json'), 'utf8');
+    const st = JSON.parse(raw);
+    return !!(st && typeof st === 'object' && st.paused === true && st.scope === 'all');
+  } catch (_) {
+    return false;
+  }
+}
+
 function main() {
   if (process.env.VAULT_AUTOMATION === '1') return 0;
-
-  const fs = require('fs');
+  if (isPausedForLiveCapture()) return 0;
 
   let payload = {};
   try {
@@ -246,8 +260,10 @@ function buildInstruction(writes, shells, textChars) {
   parts.push('1. Append a new `## Session N` to today\'s daily note (create it from the Daily Note Template if missing) and add its one-line entry to the `## Index` block. Existing session sections are immutable - Edit only, never Write over an existing note.');
   parts.push('2. Update the relevant project/topic note, plus that folder\'s index if anything was created, renamed, or materially changed.');
   parts.push('3. Update `Active Priorities.md` if this opened or closed an item.');
-  parts.push('4. Sign everything you write as `claude`: frontmatter `updated_by: claude` + `updated: <today YYYY-MM-DD>` (both keys are required - the validator hook rejects a note without them), a trailing `` `(claude)` `` on any Index line or folder-index entry you add, and `- `claude`` at the end of the session heading. Never re-sign an entry another agent wrote.');
-  parts.push('5. Read back each file you wrote to verify it landed.');
+  parts.push('4. Ledgers at the vault root: if this turn made or confirmed a deliberate cross-session decision, append one row to `Decisions.md` (never edit an existing row); if an approach was abandoned for one that works on a recurring operation, append one line to `Dead Ends.md`. Skip both if nothing qualifies.');
+  parts.push('5. Rewrite the daily note\'s single mutable `**Open for tomorrow:**` line (under the date heading) with the one thing the next session should pick up first, if something is left open.');
+  parts.push('6. Sign everything you write as `claude`: frontmatter `updated_by: claude` + `updated: <today YYYY-MM-DD>` (both keys are required - the validator hook rejects a note without them), a trailing `` `(claude)` `` on any Index line or folder-index entry you add, and `- `claude`` at the end of the session heading (`Session N` is a label - take max+1, never renumber; the local time in the heading is the order). Never re-sign an entry another agent wrote.');
+  parts.push('7. Read back each file you wrote to verify it landed.');
   parts.push('');
   parts.push('If the work genuinely does not warrant a vault entry, say so in one line and stop - do not manufacture content. Keep this brief; do not restate the work to the user.');
   return parts.join('\n');

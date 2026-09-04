@@ -54,6 +54,12 @@ PROJECT_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 TYPE_VALUES = {"index", "reference", "guide", "plan", "log"}
 UPDATED_BY_VALUES = {"claude", "codex", "human"}
 REQUIRED_KEYS = {"status", "project", "type", "updated_by", "updated"}
+# Optional keys the schema tolerates. `aliases` is Obsidian's native alias
+# list; 16 live notes carry it and the frozen Old Memory links resolve through
+# it, so stripping it breaks links. Added 2026-09-03.
+OPTIONAL_KEYS = {"aliases"}
+# Frozen pre-migration snapshot, kept as provenance. Never validated.
+EXEMPT_PATH_PARTS = ("\\09 - archive\\old memory\\",)
 
 DAILY_NOTE_FILENAME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$", re.IGNORECASE)
 UPDATED_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -130,11 +136,14 @@ def project_is_valid(project):
 
 def validate(frontmatter, file_path):
     """Return a violation message string, or None if frontmatter is valid."""
-    extra_keys = sorted(k for k in frontmatter.keys() if k not in REQUIRED_KEYS)
+    extra_keys = sorted(
+        k for k in frontmatter.keys() if k not in REQUIRED_KEYS and k not in OPTIONAL_KEYS
+    )
     if extra_keys:
         return (
             f"frontmatter has undeclared key(s) {extra_keys} "
-            f"-- only allowed keys are: status, project, type, updated_by, updated"
+            f"-- only allowed keys are: status, project, type, updated_by, updated "
+            f"(optional: aliases)"
         )
 
     missing_keys = sorted(k for k in REQUIRED_KEYS if k not in frontmatter)
@@ -231,6 +240,8 @@ def run():
     if not norm_path.endswith(".md"):
         return 0
     if not (norm_path == norm_vault or norm_path.startswith(norm_vault + "\\")):
+        return 0
+    if any(part in norm_path for part in EXEMPT_PATH_PARTS):
         return 0
 
     with open(file_path, "r", encoding="utf-8") as f:

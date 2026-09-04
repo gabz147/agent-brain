@@ -5,6 +5,9 @@ automation/queue.batch.jsonl.tmp
 automation/processed.jsonl
 automation/failed.jsonl
 automation/stop-state.json
+automation/automation-state.json
+automation/automation-state.json.tmp
+automation/deferral-*.json
 automation/last-audit-date.txt
 automation/*.log
 automation/.drain.lock

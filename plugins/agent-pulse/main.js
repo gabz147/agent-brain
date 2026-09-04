@@ -46,6 +46,12 @@ const STOP_STATE_PATH = path.join(AUTOMATION_DIR, 'stop-state.json');
 const QUEUE_PATH = path.join(AUTOMATION_DIR, 'queue.jsonl');
 const QUEUE_BATCH_PATH = path.join(AUTOMATION_DIR, 'queue.batch.jsonl');
 const DRAIN_LOCK_PATH = path.join(AUTOMATION_DIR, '.drain.lock');
+// The user's automation toggle (v1.2.0). Written here, read by drain-queue.ps1,
+// nightly-audit.ps1 and stop-vault-gate.js. {"paused":bool,"scope":"afk"|"all",
+// "since":ISO,"by":"obsidian"}. Scope "afk" pauses the scheduled drainer and
+// audit; "all" also silences the live Stop-hook checkpoint.
+const AUTOMATION_STATE_PATH = path.join(AUTOMATION_DIR, 'automation-state.json');
+const DRAIN_LOG_PATH = path.join(AUTOMATION_DIR, 'drain.log');
 
 // ---------------------------------------------------------------------
 // Timing constants.
@@ -56,6 +62,9 @@ const FS_POLL_MS = 5000; // fs.promises.stat poll interval (>=5000ms required)
 const PROCESS_POLL_MS = 60000; // tasklist poll interval (60s only, never per-second)
 const PROCESS_SIGNAL_STALE_MS = PROCESS_POLL_MS * 3; // stop trusting agentProcessAlive if not refreshed within this window
 const VAULT_WARMUP_MS = 3000; // ignore vault events for this long after handlers are registered
+const QUEUE_STATS_POLL_MS = 60000; // queue depth / drain.log / toggle state poll (60s; these are bigger reads)
+const DRAIN_LOG_TAIL_BYTES = 64 * 1024; // only the tail of drain.log is scanned for the last successful drain
+const PURGE_WARN_DAYS = 20; // Claude Code deletes transcripts at 30 days; warn when the oldest queued one is this old
 
 // ---------------------------------------------------------------------
 // The orb markup (8 dots evenly spaced on a ring, per orb-visual-spec.md
@@ -74,8 +83,69 @@ const ORB_SVG_MARKUP = [
   '<circle class="apo-dot" style="--n:6" cx="4" cy="12" r="1.6"/>',
   '<circle class="apo-dot" style="--n:7" cx="6.34" cy="6.34" r="1.6"/>',
   '</g>',
+  '<line class="apo-slash" x1="5.5" y1="18.5" x2="18.5" y2="5.5"/>',
   '</svg>',
 ].join('');
+
+// Orb click / command cycle for the automation toggle: on -> AFK paused ->
+// ALL paused -> on. Pure: takes the current scope (null when not paused).
+function nextPauseScope(currentScope) {
+  if (currentScope === 'afk') return 'all';
+  if (currentScope === 'all') return null;
+  return 'afk';
+}
+
+// Parse automation-state.json content into {scope, sinceMs} or null (not
+// paused). Anything malformed is "not paused", matching the scripts.
+function parsePauseState(raw) {
+  try {
+    const st = JSON.parse(raw);
+    if (!st || typeof st !== 'object' || st.paused !== true) return null;
+    const scope = st.scope === 'all' ? 'all' : 'afk';
+    const sinceMs = typeof st.since === 'string' ? Date.parse(st.since) : NaN;
+    return { scope, sinceMs: Number.isNaN(sinceMs) ? null : sinceMs };
+  } catch (_) {
+    return null;
+  }
+}
+
+// Queue statistics from the raw text of queue.jsonl (+ queue.batch.jsonl):
+// number of entries and the oldest entry's ts. Pure.
+function summarizeQueue(rawTexts) {
+  let count = 0;
+  let oldestMs = null;
+  for (const raw of rawTexts) {
+    if (typeof raw !== 'string') continue;
+    for (const line of raw.split('\n')) {
+      const s = line.trim();
+      if (!s) continue;
+      count++;
+      try {
+        const e = JSON.parse(s);
+        const t = typeof e.ts === 'string' ? Date.parse(e.ts) : NaN;
+        if (!Number.isNaN(t) && (oldestMs === null || t < oldestMs)) oldestMs = t;
+      } catch (_) {
+        /* unparseable line still counts as queued work */
+      }
+    }
+  }
+  return { count, oldestMs };
+}
+
+// Timestamp of the last successful drain from a tail of drain.log ("[YYYY-MM-DD
+// HH:mm:ss] [INFO] OK <sid>" or "verified <sid>"). Pure; null if none.
+function lastSuccessfulDrainMs(logTail) {
+  if (typeof logTail !== 'string') return null;
+  const re = /^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] \[INFO\] (OK |verified )/;
+  let last = null;
+  for (const line of logTail.split('\n')) {
+    const m = re.exec(line);
+    if (m) last = m[1];
+  }
+  if (!last) return null;
+  const t = Date.parse(last.replace(' ', 'T'));
+  return Number.isNaN(t) ? null : t;
+}
 
 // ---------------------------------------------------------------------
 // computeState — the signal engine. PURE function of (signals, now).
@@ -140,6 +210,10 @@ function computeState(signals, now) {
 
   if (isActive) return 'active';
 
+  // Paused by the user (v1.2.0): shown whenever nothing is actively writing,
+  // so a forced manual drain still reads "active" while paused.
+  if (s.paused && typeof s.paused === 'object') return 'paused';
+
   const processFresh = !isProcessSignalStale(s.agentProcessCheckedMs, now);
   if (s.agentProcessAlive && processFresh) return 'agent-present';
   return 'idle';
@@ -167,9 +241,30 @@ class AgentPulsePlugin extends Plugin {
       drainLockHeld: false,
       agentProcessAlive: null,
       agentProcessCheckedMs: null,
+      paused: null, // {scope, sinceMs} | null
+      queueCount: null,
+      queueOldestMs: null,
+      lastDrainOkMs: null,
     };
     this._lastTouchedFile = null;
     this._currentState = 'idle';
+
+    // Automation toggle: one command per scope plus the cycle the orb uses.
+    this.addCommand({
+      id: 'toggle-afk-automation',
+      name: 'Toggle AFK automation (scheduled drainer + nightly audit)',
+      callback: () => this.setPause(this._signals.paused && this._signals.paused.scope === 'afk' ? null : 'afk'),
+    });
+    this.addCommand({
+      id: 'toggle-all-automation',
+      name: 'Toggle ALL vault automation (also the live Stop-hook checkpoint)',
+      callback: () => this.setPause(this._signals.paused && this._signals.paused.scope === 'all' ? null : 'all'),
+    });
+    this.addCommand({
+      id: 'resume-automation',
+      name: 'Resume vault automation',
+      callback: () => this.setPause(null),
+    });
 
     this._repositioning = false;
     this._ribbonObserver = null;
@@ -241,9 +336,17 @@ class AgentPulsePlugin extends Plugin {
       }, PROCESS_POLL_MS)
     );
 
-    // Prime both so the orb isn't blank on first paint.
+    // Queue depth, last successful drain, and the pause toggle: 60s.
+    this.registerInterval(
+      window.setInterval(() => {
+        this.pollQueueStats();
+      }, QUEUE_STATS_POLL_MS)
+    );
+
+    // Prime all three so the orb isn't blank on first paint.
     this.pollAutomationFiles();
     this.pollProcesses();
+    this.pollQueueStats();
   }
 
   onunload() {
@@ -271,8 +374,9 @@ class AgentPulsePlugin extends Plugin {
   mountRibbonIcons() {
     if (!this._orbEl) {
       this._orbEl = this.addRibbonIcon('circle', 'Agent Pulse', () => {
-        // Manual nudge: re-poll automation files immediately on click.
-        this.pollAutomationFiles();
+        // Click = the automation toggle: on -> AFK paused -> ALL paused -> on.
+        // (The command palette has the individual toggles.)
+        this.setPause(nextPauseScope(this._signals.paused ? this._signals.paused.scope : null));
       });
       this._orbEl.addClass('agent-pulse-orb');
       this._orbEl.addClass('is-idle');
@@ -623,6 +727,69 @@ class AgentPulsePlugin extends Plugin {
     this.refreshUI();
   }
 
+  // Queue depth + oldest entry, last successful drain, and the pause toggle.
+  // Bigger reads than pollAutomationFiles(), so on their own 60s cadence
+  // (and immediately after the toggle is changed). Every source is optional.
+  async pollQueueStats() {
+    const raws = [];
+    for (const p of [QUEUE_PATH, QUEUE_BATCH_PATH]) {
+      try {
+        raws.push(await fs.promises.readFile(p, 'utf8'));
+      } catch (_) {
+        /* missing is normal */
+      }
+    }
+    const q = summarizeQueue(raws);
+    this._signals.queueCount = q.count;
+    this._signals.queueOldestMs = q.oldestMs;
+
+    try {
+      const handle = await fs.promises.open(DRAIN_LOG_PATH, 'r');
+      try {
+        const st = await handle.stat();
+        const len = Math.min(st.size, DRAIN_LOG_TAIL_BYTES);
+        const buf = Buffer.alloc(len);
+        await handle.read(buf, 0, len, st.size - len);
+        this._signals.lastDrainOkMs = lastSuccessfulDrainMs(buf.toString('utf8'));
+      } finally {
+        await handle.close();
+      }
+    } catch (_) {
+      this._signals.lastDrainOkMs = null;
+    }
+
+    try {
+      const raw = await fs.promises.readFile(AUTOMATION_STATE_PATH, 'utf8');
+      this._signals.paused = parsePauseState(raw);
+    } catch (_) {
+      this._signals.paused = null;
+    }
+
+    this.refreshUI();
+  }
+
+  // Write the toggle. scope: 'afk' | 'all' | null (resume). Temp + rename so
+  // a reader never sees a half-written file. Failure is surfaced in the
+  // tooltip only; the scripts treat a missing/unreadable file as "not paused".
+  async setPause(scope) {
+    const state = {
+      paused: scope === 'afk' || scope === 'all',
+      scope: scope === 'all' ? 'all' : 'afk',
+      since: new Date().toISOString(),
+      by: 'obsidian',
+    };
+    try {
+      await fs.promises.mkdir(AUTOMATION_DIR, { recursive: true });
+      const tmp = AUTOMATION_STATE_PATH + '.tmp';
+      await fs.promises.writeFile(tmp, JSON.stringify(state), 'utf8');
+      await fs.promises.rename(tmp, AUTOMATION_STATE_PATH);
+      this._pauseWriteError = null;
+    } catch (err) {
+      this._pauseWriteError = (err && err.message) || 'write failed';
+    }
+    await this.pollQueueStats();
+  }
+
   pollProcesses() {
     exec('tasklist /fo csv /nh', { windowsHide: true, timeout: 10000 }, (err, stdout) => {
       if (err || typeof stdout !== 'string') {
@@ -685,15 +852,44 @@ class AgentPulsePlugin extends Plugin {
     this._orbEl.removeClass('is-idle');
     this._orbEl.removeClass('is-agent-present');
     this._orbEl.removeClass('is-active');
+    this._orbEl.removeClass('is-paused');
     this._orbEl.addClass(`is-${state}`);
+  }
+
+  // Second tooltip line: queue depth, oldest queued age, last successful
+  // drain, toggle state, and the transcript-purge warning.
+  describeQueue(now) {
+    const s = this._signals;
+    const parts = [];
+    if (typeof s.queueCount === 'number') {
+      let q = `${s.queueCount} queued`;
+      if (s.queueCount > 0 && typeof s.queueOldestMs === 'number') {
+        q += ` (oldest ${formatRelative(now - s.queueOldestMs)})`;
+      }
+      parts.push(q);
+    }
+    parts.push(typeof s.lastDrainOkMs === 'number' ? `last drain ${formatRelative(now - s.lastDrainOkMs)}` : 'last drain: none logged');
+    if (s.paused && typeof s.paused === 'object') {
+      const since = typeof s.paused.sinceMs === 'number' ? ` since ${formatRelative(now - s.paused.sinceMs)}` : '';
+      parts.push(`automation: ${s.paused.scope === 'all' ? 'ALL paused' : 'AFK paused'}${since}`);
+    } else {
+      parts.push('automation: on');
+    }
+    if (this._pauseWriteError) parts.push(`toggle write failed: ${this._pauseWriteError}`);
+    if (typeof s.queueOldestMs === 'number' && s.queueCount > 0) {
+      const days = Math.floor((now - s.queueOldestMs) / 86400000);
+      if (days >= PURGE_WARN_DAYS) parts.push(`WARNING: oldest queued transcript is ${days}d old (purged at 30d)`);
+    }
+    return parts.join(' · ');
   }
 
   updateTooltip(state, now) {
     if (!this._orbEl) return;
-    const stateWords = { idle: 'Idle', 'agent-present': 'Agent present', active: 'Active' }[state] || state;
+    const stateWords =
+      { idle: 'Idle', 'agent-present': 'Agent present', active: 'Active', paused: 'Paused' }[state] || state;
     const { label, sinceMs } = this.describeSignal(now);
     const rel = typeof sinceMs === 'number' ? formatRelative(now - sinceMs) : 'unknown';
-    const text = `Agent Pulse: ${stateWords} — ${label} — ${rel}`;
+    const text = `Agent Pulse: ${stateWords} — ${label} — ${rel}\n${this.describeQueue(now)}\nClick: cycle on → AFK paused → ALL paused`;
 
     try {
       if (typeof setTooltip === 'function') {
@@ -716,3 +912,7 @@ module.exports.computeState = computeState;
 module.exports.formatRelative = formatRelative;
 module.exports.isWithinVaultWarmup = isWithinVaultWarmup;
 module.exports.VAULT_WARMUP_MS = VAULT_WARMUP_MS;
+module.exports.nextPauseScope = nextPauseScope;
+module.exports.parsePauseState = parsePauseState;
+module.exports.summarizeQueue = summarizeQueue;
+module.exports.lastSuccessfulDrainMs = lastSuccessfulDrainMs;

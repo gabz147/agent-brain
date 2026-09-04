@@ -101,6 +101,38 @@
 }
 
 /* ---------------------------------------------------------- */
+/* paused — the user switched automation off (v1.2.0): static, */
+/* dim, and slashed. No rotation, no pulse: nothing is running  */
+/* on purpose, so nothing should look alive.                    */
+/* ---------------------------------------------------------- */
+.apo-slash {
+  display: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.agent-pulse-orb.is-paused {
+  --apo-color: var(--text-faint, var(--text-muted));
+}
+.agent-pulse-orb.is-paused .apo-ring,
+.agent-pulse-orb.is-paused .apo-dot {
+  animation: none !important;
+}
+.agent-pulse-orb.is-paused .apo-dot {
+  opacity: 0.3;
+  transform: scale(0.85);
+}
+.agent-pulse-orb.is-paused .apo-slash {
+  display: block;
+  opacity: 0.8;
+}
+/* the orb is a click target now (toggle), in the tab strip too */
+.agent-pulse-orb,
+.agent-pulse-orb.agent-pulse-in-tabstrip {
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------- */
 /* reduced motion: freeze to a static per-state frame, no       */
 /* rotation, no pulse — mirrors the source's JS-side behavior   */
 /* of painting one static frame instead of animating            */

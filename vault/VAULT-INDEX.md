@@ -39,6 +39,14 @@ _[Fill me in. Example: "Solo developer on Windows 11, working heavily with Claud
 
 Folders that hold substantial content each carry a folder index (`<Folder Name>.md`); `00`, `01`, `09`, `10` typically don't — `01` has only the Daily Note Template.
 
+Root files: `VAULT-INDEX.md` · `Active Priorities.md` · `Decisions.md` · `Dead Ends.md` · `Machine Inventory.md` · `Automation Costs.md` (only with the automation module).
+
+## The two root ledgers
+
+- [[Decisions]] — every deliberate cross-session choice, one row each, with status `locked` / `active` / `superseded`. Before acting on anything that might contradict a prior choice, check it here; the boot-file rule "Locked decisions stay locked" points at this table. When a decision is made in a session, append a row.
+- [[Dead Ends]] — approaches that failed and what to do instead, grouped by area. Search it **first** when something is not working. When you abandon an approach for one that works, add a line (recurring operations only).
+- Machine facts (tasks, hooks, ports, versions) live in [[Machine Inventory]]; the automation's token burn in [[Automation Costs]].
+
 ## What's Active Right Now
 
 All open work lives in one note: [[Active Priorities]]. Tag each item with its project where it isn't obvious. Check it at the start of every conversation; verify an item's real state before acting on it (a listed item may already be done).
@@ -118,7 +126,7 @@ When creating or editing a note, add `wikilinks`:
 **updated_by:** `claude` | `codex` | `human`
 **updated:** `YYYY-MM-DD`
 
-All five keys are required on every note, and no other key is allowed. A `PostToolUse` hook (`hooks/vault/validate-vault-frontmatter.py`) enforces this for Claude Code sessions and exits 2 on a violation. Agents not covered by that hook must self-check.
+All five keys are required on every note. One optional key is tolerated: `aliases` (Obsidian's native alias list; keep it where it exists, don't add it). No other key is allowed. A `PostToolUse` hook (`hooks/vault/validate-vault-frontmatter.py`) enforces this for Claude Code sessions and exits 2 on a violation. Agents not covered by that hook must self-check.
 
 ### Agent Signatures
 
@@ -185,9 +193,9 @@ Rules the AI always follows when it writes for the user. One worth keeping for e
 
 Daily notes capture what happened across all of the user's work sessions for a day. They live in `01 - Daily Notes/`, ideally sorted into month subfolders (`01 - Daily Notes/06 - June 2026/`) once the folder fills up. Filename `YYYY-MM-DD.md`. Frontmatter `status: active`, `project: personal`, `type: log`.
 
-Start the body with a human-readable date heading (`# Monday, June 8, 2026`). Then, right after it, an **`## Index`** block: one bold-topic line per session/entry with a one-sentence outcome. The index makes a day with many entries scannable instead of a wall of prose. Then the entry body follows the Daily Note Template — during setup it is copied into the vault as `01 - Daily Notes/Daily Note Template.md`. Its sections: **What Got Done · What's Still In Progress · Decisions Made · Notes Touched · Profile Updates**. Create every daily note FROM the template; never hand-roll one.
+Start the body with a human-readable date heading (`# Monday, June 8, 2026`). Right under it sits the note's **one mutable line**, `**Open for tomorrow:** …` — whichever session ends last rewrites it in place (Edit the line, keep the label) with the single thing the next session should pick up first. Then an **`## Index`** block: one bold-topic line per session/entry with a one-sentence outcome. The index makes a day with many entries scannable instead of a wall of prose. Then the entry body follows the Daily Note Template — during setup it is copied into the vault as `01 - Daily Notes/Daily Note Template.md`. Its sections: **What Got Done · What's Still In Progress · Decisions Made · Notes Touched · Profile Updates**. Create every daily note FROM the template; never hand-roll one.
 
-If today's note already exists from an earlier session, append a new session section (`## Session 2`, `## Evening Session`) and add a line to the Index block — don't overwrite. Timestamp each entry with local time.
+If today's note already exists from an earlier session, append a new session section (`## Session 2`, `## Evening Session`) and add a line to the Index block — don't overwrite. Timestamp each entry with local time. **Session N is a label, not a sequence:** take max+1 when you write, but a collision or out-of-order N (two agents writing at once, a drainer backfilling) is not an error and is never renumbered — the time in the heading is the order, so every heading carries one. Exactly three edits are allowed on an existing daily note: insert an Index bullet, append a session section, rewrite the `Open for tomorrow` line.
 
 #### Trigger 1: Wrap-Up Signal
 Never ask the user if they're done working. When they signal it ("I'm done," "calling it," "goodnight"), offer to create or update today's daily note. Always check the actual current date and time first — conversations can stay open overnight.
@@ -195,7 +203,7 @@ Never ask the user if they're done working. When they signal it ("I'm done," "ca
 #### Trigger 2: Review Yesterday's Note at Start of Conversation
 At the start of every conversation, after reading this index, check yesterday's daily note (or the most recent weekday if today is Monday).
 - **If it doesn't exist:** create it from whatever context you have (chat history, session context), and say it's reconstructed and may be incomplete. Zero context for that day → assume a day off and skip it. Don't create empty daily notes.
-- **If it exists:** read it; if you have context it's missing, append a session section; otherwise leave it alone.
+- **If it exists:** read its `Open for tomorrow` line first — that is what the last session wanted picked up — then the rest; if you have context it's missing, append a session section; otherwise leave it alone.
 
 This is universal — every AI that reads this vault does it. When multiple AIs work across multiple sessions, no single one sees everything, so each contributes what it knows and the daily note fills in over time. Don't make a production of it. Briefly say what you did and move on.
 

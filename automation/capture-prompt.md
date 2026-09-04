@@ -57,10 +57,11 @@ Create it from the template at `{{VAULT_ROOT}}\01 - Daily Notes\Daily Note Templ
 
 ### If the note already exists
 
-Existing `## Session N` sections are IMMUTABLE — their bytes must not change. Exactly TWO edits are permitted on an existing note:
+Existing `## Session N` sections are IMMUTABLE — their bytes must not change. Exactly THREE edits are permitted on an existing note:
 
 1. A targeted Edit inserting one new bullet into the existing `## Index` block.
-2. Appending a new `## Session N` section at the end of the note, where N is one greater than the highest existing session number.
+2. Appending a new `## Session N` section at the end of the note, where N is one greater than the highest existing session number. N is a label, not a sequence: if another writer used the same N, that is not an error and you never renumber anything — the local time in the heading is the order.
+3. A targeted Edit rewriting the single `**Open for tomorrow:** …` line under the date heading, only if this session is the latest one recorded for that day and the transcript leaves something concrete open. Keep the bold label; one sentence.
 
 Whole-file Write or regeneration is FORBIDDEN on a path that already exists — never overwrite, rewrite, reorder, or regenerate the file. If a targeted Edit fails because the content changed underneath, re-read the file and retry with Edit — NEVER fall back to Write.
 
@@ -113,6 +114,12 @@ Update an existing note before creating a new one. When you create, rename, move
 
 Do not create topic notes for trivial changes. One source of truth, written tight — no duplicate notes, no restating the daily note.
 
+## Step 6b — The two root ledgers
+
+- If the transcript shows the user making or confirming a deliberate cross-session decision (a rule, a constraint, a locked choice), append **one row** to the table in `{{VAULT_ROOT}}\Decisions.md` (columns: Date | Decision | Why | Enforced in | Status). Never edit an existing row. Passing preferences are not decisions.
+- If the transcript shows an approach abandoned for one that worked on a recurring operation, append **one line** under the matching heading in `{{VAULT_ROOT}}\Dead Ends.md` using its format (`- **operation** — tried: X. Failed: Y. Do instead: Z. → [[source note]] (YYYY-MM-DD, claude)`).
+- Both are targeted appends (Edit), never whole-file writes. Restamp `updated_by`/`updated` on any ledger you touch.
+
 ## Frontmatter schema — ALL notes
 
 Every note you create or update must carry exactly these five keys, and only these values:
@@ -122,6 +129,7 @@ Every note you create or update must carry exactly these five keys, and only the
 - `type`: `index` | `reference` | `guide` | `plan` | `log`
 - `updated_by`: `claude` | `codex` | `human` — always `claude` for you
 - `updated`: `YYYY-MM-DD` — the date of your write
+- `aliases` (optional): Obsidian alias list. Leave it in place on notes that have it; do not add it.
 
 A PostToolUse hook rejects any note that breaks this schema, so a note written without the last two keys will be blocked.
 

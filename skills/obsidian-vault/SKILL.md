@@ -23,7 +23,7 @@ Classify before searching. A request to find, explain, review, report, or audit 
 
 Start high (identity, rules, system map → `VAULT-INDEX.md` + boot file), descend to project context (`Active Priorities.md`, the folder index, the main project note), then to specific facts (headings, linked notes), then to chronology (daily notes). Descend only as far as the request needs; return to the source note before asserting a fact.
 
-1. Start at `VAULT-INDEX.md`; use its folder map to pick the likely project. For status or continuation, read `Active Priorities.md`, then verify the project's actual state.
+1. Start at `VAULT-INDEX.md`; use its folder map to pick the likely project. For status or continuation, read `Active Priorities.md`, then verify the project's actual state. Two root ledgers short-circuit common questions: "is X allowed / why was this chosen" → `Decisions.md`; "X is not working / has this been tried" → `Dead Ends.md` (search it before inventing an approach). Machine facts (tasks, hooks, ports, versions) → `Machine Inventory.md`.
 2. Search filenames first (`rg --files`), then exact note names and `[[wikilinks]]`, then headings and body. Exclude `.obsidian/` and non-Markdown. Exclude the Archive folder unless the request is historical, names archived work, or the active-note search misses.
 3. Rank: exact filename → exact wikilink/backlink → heading → body → recency (tiebreaker only, never over a stronger match).
 4. Fully read each selected note before relying on it — start with the best 3–5, expand through direct wikilinks as needed.
@@ -50,9 +50,9 @@ rg -n -F --glob '*.md' --glob '!.obsidian/**' --glob '!09 - Archive/**' -- '[[Ex
 2. Append to an existing logical home before creating a note. Preserve unrelated user and agent changes.
 3. Edit with the current agent's native targeted mechanism (Codex `apply_patch`; Claude Edit/Write). Never rewrite an existing daily note wholesale.
 4. Apply the live frontmatter, wikilink, signature, folder-index, daily-note, rename, move, archive, and profile rules from `VAULT-INDEX.md` and the boot file.
-5. When a decision or status changes, update the canonical project note and reconcile `Active Priorities.md` in the same pass — following the lifecycle defined inside `Active Priorities.md`.
+5. When a decision or status changes, update the canonical project note and reconcile `Active Priorities.md` in the same pass — following the lifecycle defined inside `Active Priorities.md`. A deliberate cross-session decision also gets one row appended to `Decisions.md` (never edit an existing row; supersede it). An approach abandoned for one that works gets one line in `Dead Ends.md`.
 6. Update the touched folder's index for a created, renamed, moved, or materially changed note; scan direct backlinks for drift.
-7. Append a new signed daily session and Index line; never edit another agent's existing daily session.
+7. Append a new signed daily session and Index line; never edit another agent's existing daily session. `Session N` is a label (take max+1, never renumber a collision); the heading's local time is the order. If yours is the last session of the day, rewrite the note's `**Open for tomorrow:**` line in place — the only mutable line in a daily note. On a handoff, the `Resume:` line of the handoff block is a runnable first step (cwd, note, skill), not a description.
 8. Self-check the five-key frontmatter schema, links, and signatures; confirm the intended text landed exactly once.
 
 ## Boundaries

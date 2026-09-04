@@ -41,6 +41,12 @@ if (Test-Path -LiteralPath $BusyGuardPath) {
 # How far back the audit may reach when the machine has been off for a while.
 $MaxLookbackDays = 7
 
+# The child MUST run with the vault as its cwd (Task Scheduler starts us in
+# C:\WINDOWS\system32, and a headless `claude -p` sandboxes to its cwd - before
+# 2026-09-03 every scheduled audit was denied the vault, said so, exited 0 and
+# was stamped as a success). $ScriptDir is added so the audit can read
+# processed.jsonl as evidence for missing daily notes.
+
 $Utf8NoBom    = New-Object System.Text.UTF8Encoding($false)
 
 function Write-Log {
@@ -90,7 +96,9 @@ function Get-VaultLock {
     return $null
 }
 
-Write-Log 'START nightly vault audit'
+# START is logged only once the run gets past the skip/pause/presence guards
+# (see Write-Log 'START …' below); a deferred run leaves at most the one
+# streak line, so the log stays readable instead of three lines an hour.
 
 $auditLock = $null
 try {
@@ -105,6 +113,7 @@ try {
     $promptContent = $promptContent.Replace('{{VAULT_ROOT}}', $VaultRoot)
 
     if ($DryRun) {
+        Write-Log 'START nightly vault audit'
         Write-Log "DRYRUN would invoke: claude -p <contents of $PromptPath> (VAULT_AUTOMATION=1)"
         Write-Log "DRYRUN prompt length: $($promptContent.Length) chars"
         Write-Log 'END nightly vault audit (dry run, outcome=skipped)'
@@ -126,21 +135,50 @@ try {
             $lastAudit = ''
         }
     }
+    # Deferrals and skips log once per streak, not once per hour
+    # (Update-DeferralStreak in user-busy.ps1 decides when a line is due).
+    function Write-AuditDeferral {
+        param([string]$Reason, [string]$Outcome)
+        $line = $null
+        if (Get-Command Update-DeferralStreak -ErrorAction SilentlyContinue) {
+            $line = Update-DeferralStreak -Name 'audit' -Reason $Reason
+        } else {
+            $line = 'deferred: ' + $Reason
+        }
+        if ($null -ne $line) {
+            Write-Log $line
+            Write-Log "END nightly vault audit (outcome=$Outcome)"
+        }
+    }
+
     if (($lastAudit -eq $today) -and (-not $Force)) {
-        Write-Log "already audited today ($today) - skipping"
-        Write-Log 'END nightly vault audit (outcome=skipped)'
+        Write-AuditDeferral -Reason "already audited today ($today) - skipping" -Outcome 'skipped'
         exit 0
     }
 
-    # Not while the user is at the machine. The stamp is NOT written, so the
-    # next trigger picks the day back up.
-    if ((-not $Force) -and (Get-Command Get-UserBusyReason -ErrorAction SilentlyContinue)) {
-        $busy = Get-UserBusyReason
-        if ($null -ne $busy) {
-            Write-Log "deferred: $busy - not stamping today"
-            Write-Log 'END nightly vault audit (outcome=deferred)'
-            exit 0
+    # Not if the user has paused automation (Obsidian toggle), and not while
+    # the user is at the machine. The stamp is NOT written, so the next
+    # trigger (hourly repetition) picks the day back up.
+    if (-not $Force) {
+        if (Get-Command Get-AutomationPause -ErrorAction SilentlyContinue) {
+            $pauseReason = Get-AutomationPause -Scope 'afk'
+            if ($null -ne $pauseReason) {
+                Write-AuditDeferral -Reason "$pauseReason - not stamping today" -Outcome 'paused'
+                exit 0
+            }
         }
+        if (Get-Command Get-UserBusyReason -ErrorAction SilentlyContinue) {
+            $busy = Get-UserBusyReason
+            if ($null -ne $busy) {
+                Write-AuditDeferral -Reason "$busy - not stamping today" -Outcome 'deferred'
+                exit 0
+            }
+        }
+    }
+    Write-Log 'START nightly vault audit'
+    if (Get-Command Close-DeferralStreak -ErrorAction SilentlyContinue) {
+        $streak = Close-DeferralStreak -Name 'audit'
+        if ($null -ne $streak) { Write-Log $streak }
     }
 
     # --- date range --------------------------------------------------------
@@ -175,12 +213,24 @@ try {
     }
 
     $env:VAULT_AUTOMATION = '1'
+    $auditStart = Get-Date
 
     # --permission-mode acceptEdits: headless has no TTY, so the interactive
     # permission prompt auto-denies and every Write/Edit silently fails while
     # the process still exits 0. Scoped to this child only.
-    $claudeOutput = claude -p --permission-mode acceptEdits "$promptContent" 2>&1
-    $exitCode = $LASTEXITCODE
+    # Push-Location + --add-dir: see the note at $VaultRoot above.
+    # --add-dir: the parent of the automation dir (normally ~\.claude) so the
+    # audit can read processed.jsonl AND settings.json (Machine Inventory
+    # hooks diff, audit item 6a). Read-only use; the prompt forbids writes
+    # outside the vault.
+    $ClaudeDir = Split-Path -Parent $ScriptDir
+    Push-Location -LiteralPath $VaultRoot
+    try {
+        $claudeOutput = claude -p --permission-mode acceptEdits --add-dir $ClaudeDir "$promptContent" 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
 
     Remove-Item Env:\VAULT_AUTOMATION -ErrorAction SilentlyContinue
 
@@ -188,25 +238,56 @@ try {
         $exitCode = 0
     }
 
-    if ($exitCode -eq 0) {
+    # Log what the child actually said. Exit 0 alone cannot distinguish a
+    # real audit pass from a run that silently did nothing.
+    $lastLine = '<no output>'
+    $allText  = ''
+    if ($null -ne $claudeOutput) {
+        $outLines = @($claudeOutput |
+                      ForEach-Object { [string]$_ } |
+                      Where-Object { $_.Trim() -ne '' })
+        if ($outLines.Count -gt 0) { $lastLine = $outLines[-1] }
+        $allText = ($outLines -join "`n")
+    }
+    Write-Log "claude output (last line): $lastLine"
+
+    # Success = exit 0 AND the child was not sandbox-blocked AND either it
+    # printed the required 'audit complete: N notes scanned' line or at least
+    # one vault note changed. Only then is the day stamped; otherwise the next
+    # hourly trigger retries.
+    $blocked  = ($allText -match 'cannot access|--add-dir|unreadable|sandbox|not granted|permission')
+    $complete = ($allText -match 'audit complete:')
+    $wrote    = $false
+    try {
+        $hit = Get-ChildItem -LiteralPath $VaultRoot -Recurse -Filter *.md -File -ErrorAction Stop |
+               Where-Object { ($_.FullName -notlike '*\.obsidian\*') -and ($_.LastWriteTime -gt $auditStart) } |
+               Select-Object -First 1
+        $wrote = ($null -ne $hit)
+    } catch {
+        $wrote = $false
+    }
+
+    $auditSecs = [int]((Get-Date) - $auditStart).TotalSeconds
+    $costOutcome = 'failure'
+    if (($exitCode -eq 0) -and (-not $blocked) -and ($complete -or $wrote)) { $costOutcome = 'success' }
+    elseif ($exitCode -eq 0) { $costOutcome = 'unverified' }
+    if (Get-Command Add-AutomationCostRow -ErrorAction SilentlyContinue) {
+        $null = Add-AutomationCostRow -Run 'audit' -Session "$sinceDate..$today" -TranscriptKB '-' -Seconds $auditSecs -Outcome $costOutcome -Wrote '-' -Notes ("blocked=$blocked complete=$complete wrote=$wrote")
+    }
+
+    if ($costOutcome -eq 'success') {
         try {
             [System.IO.File]::WriteAllText($StampPath, $today, $Utf8NoBom)
         } catch {
             # Not fatal - worst case the audit runs again later today.
             Write-Log "WARN could not write stamp file: $($_.Exception.Message)"
         }
-
-        # Log what the child actually said. Exit 0 alone cannot distinguish a
-        # real audit pass from a run that silently did nothing.
-        $lastLine = '<no output>'
-        if ($null -ne $claudeOutput) {
-            $outLines = @($claudeOutput |
-                          ForEach-Object { [string]$_ } |
-                          Where-Object { $_.Trim() -ne '' })
-            if ($outLines.Count -gt 0) { $lastLine = $outLines[-1] }
-        }
-        Write-Log "claude output (last line): $lastLine"
+        Write-Log "verified: complete-line=$complete vault-written=$wrote ($auditSecs s)"
         Write-Log 'END nightly vault audit (outcome=success)'
+    }
+    elseif ($exitCode -eq 0) {
+        Write-Log "NOT stamped: exit 0 but blocked=$blocked complete-line=$complete vault-written=$wrote ($auditSecs s)"
+        Write-Log 'END nightly vault audit (outcome=unverified)'
     }
     else {
         Write-Log "claude -p exited with code $exitCode"

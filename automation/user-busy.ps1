@@ -150,3 +150,134 @@ function Get-UserBusyReason {
 
     return $null
 }
+
+# =========================================================================
+# Shared helpers (added 2026-09-03). Dot-sourced by drain-queue.ps1 and
+# nightly-audit.ps1 alongside the presence guard above:
+#   Get-AutomationPause     - the user's on/off toggle (automation-state.json,
+#                             written by the Obsidian Agent Pulse plugin)
+#   Update-DeferralStreak / Close-DeferralStreak
+#                           - one log line per deferral streak, not per hour
+#   Add-AutomationCostRow   - one table row per headless child run in the
+#                             vault's Automation Costs ledger
+# Every helper fails open: any error returns the "do nothing special" value.
+# =========================================================================
+$script:HelperDir = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($script:HelperDir)) { $script:HelperDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
+$script:AutomationStatePath = Join-Path $script:HelperDir 'automation-state.json'
+$script:HelperVaultRoot = if ($env:BRAIN_VAULT_ROOT) { $env:BRAIN_VAULT_ROOT } else { Join-Path $env:USERPROFILE 'Documents\Brain' }
+# Ledger location: BRAIN_COST_LEDGER if set; else the note under the agent
+# tooling folder if that folder exists; else `Automation Costs.md` at the
+# vault root (the layout the public template ships with).
+$script:CostLedgerPath = $env:BRAIN_COST_LEDGER
+if ([string]::IsNullOrWhiteSpace($script:CostLedgerPath)) {
+    $inFolder = Join-Path $script:HelperVaultRoot '04 - Agent Orchestration & Tooling\Automation Costs.md'
+    if (Test-Path -LiteralPath (Split-Path -Parent $inFolder)) { $script:CostLedgerPath = $inFolder }
+    else { $script:CostLedgerPath = Join-Path $script:HelperVaultRoot 'Automation Costs.md' }
+}
+$script:HelperUtf8 = New-Object System.Text.UTF8Encoding($false)
+
+function Get-AutomationPause {
+    # Returns a reason string when the user has paused automation for $Scope,
+    # else $null. Scope 'afk' (drainer + audit) is paused by either
+    # {"scope":"afk"} or {"scope":"all"}; scope 'all' (also the live Stop-hook
+    # gate) only by {"scope":"all"}. A missing or unreadable file means NOT
+    # paused - a bug here may cost tokens, never a session.
+    param([string]$Scope = 'afk')
+    try {
+        if (-not (Test-Path -LiteralPath $script:AutomationStatePath)) { return $null }
+        $st = [System.IO.File]::ReadAllText($script:AutomationStatePath) | ConvertFrom-Json -ErrorAction Stop
+        if (-not $st.paused) { return $null }
+        $sc = [string]$st.scope
+        if ([string]::IsNullOrWhiteSpace($sc)) { $sc = 'afk' }
+        if (($Scope -eq 'all') -and ($sc -ne 'all')) { return $null }
+        $since = ''
+        try { $since = ([datetime]::Parse([string]$st.since)).ToLocalTime().ToString('yyyy-MM-dd HH:mm') } catch { $since = [string]$st.since }
+        return ('paused by user (scope ' + $sc + ') since ' + $since)
+    } catch {
+        return $null
+    }
+}
+
+function Get-DeferralReasonKey {
+    param([string]$Reason)
+    if ($Reason -match 'user active') { return 'user active' }
+    if ($Reason -match 'fullscreen') { return 'fullscreen' }
+    if ($Reason -match 'paused') { return 'paused' }
+    if ($Reason -match 'already audited') { return 'already audited' }
+    if ($Reason -match 'drain in progress') { return 'drain in progress' }
+    return 'other'
+}
+
+function Update-DeferralStreak {
+    # Call on every deferral or skip. Returns a line to log on the FIRST
+    # deferral of a streak and roughly once a day after that (every 24th);
+    # $null means stay silent. State: deferral-<Name>.json next to this file.
+    param([string]$Name, [string]$Reason)
+    $p = Join-Path $script:HelperDir ('deferral-' + $Name + '.json')
+    $key = Get-DeferralReasonKey $Reason
+    try {
+        $st = $null
+        if (Test-Path -LiteralPath $p) { $st = [System.IO.File]::ReadAllText($p) | ConvertFrom-Json -ErrorAction Stop }
+        if ($null -eq $st) {
+            $obj = @{ count = 1; since = (Get-Date).ToString('yyyy-MM-dd HH:mm'); reasons = @{ $key = 1 } }
+            [System.IO.File]::WriteAllText($p, ($obj | ConvertTo-Json -Compress), $script:HelperUtf8)
+            return ('deferred: ' + $Reason + ' (streak started; later deferrals are summarised when a run proceeds)')
+        }
+        $count = [int]$st.count + 1
+        $reasons = @{}
+        foreach ($prop in $st.reasons.PSObject.Properties) { $reasons[$prop.Name] = [int]$prop.Value }
+        if ($reasons.ContainsKey($key)) { $reasons[$key]++ } else { $reasons[$key] = 1 }
+        $obj = @{ count = $count; since = [string]$st.since; reasons = $reasons }
+        [System.IO.File]::WriteAllText($p, ($obj | ConvertTo-Json -Compress), $script:HelperUtf8)
+        if (($count % 24) -eq 0) {
+            $parts = @(); foreach ($k in $reasons.Keys) { $parts += ($k + ' x' + $reasons[$k]) }
+            return ('still deferred: ' + $Reason + ' - ' + $count + 'x since ' + $st.since + ' (' + ($parts -join ', ') + ')')
+        }
+        return $null
+    } catch {
+        return ('deferred: ' + $Reason)
+    }
+}
+
+function Close-DeferralStreak {
+    # Call when a run actually proceeds. Returns a one-line summary of the
+    # streak that just ended (if it had more than one deferral), else $null.
+    param([string]$Name)
+    $p = Join-Path $script:HelperDir ('deferral-' + $Name + '.json')
+    try {
+        if (-not (Test-Path -LiteralPath $p)) { return $null }
+        $st = [System.IO.File]::ReadAllText($p) | ConvertFrom-Json -ErrorAction Stop
+        Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+        if ([int]$st.count -le 1) { return $null }
+        $parts = @()
+        foreach ($prop in $st.reasons.PSObject.Properties) { $parts += ($prop.Name + ' x' + $prop.Value) }
+        return ('deferred ' + $st.count + 'x since ' + $st.since + ' (' + ($parts -join ', ') + ') - proceeding now')
+    } catch {
+        return $null
+    }
+}
+
+function Add-AutomationCostRow {
+    # Appends one row to the Automation Costs ledger note. That note keeps its
+    # ledger table as the LAST section so a plain append lands inside the
+    # table; the frontmatter signature is restamped in the same write.
+    param([string]$Run, [string]$Session, [string]$TranscriptKB, [int]$Seconds, [string]$Outcome, [string]$Wrote, [string]$Notes)
+    try {
+        if (-not (Test-Path -LiteralPath $script:CostLedgerPath)) { return $false }
+        $cells = @($Run, $Session, $TranscriptKB, $Seconds, $Outcome, $Wrote, $Notes) | ForEach-Object {
+            $c = ([string]$_) -replace '[\r\n|]', ' '
+            if ([string]::IsNullOrWhiteSpace($c)) { '-' } else { $c.Trim() }
+        }
+        $row = '| ' + (Get-Date).ToString('yyyy-MM-dd') + ' | ' + ($cells -join ' | ') + ' |'
+        $text = [System.IO.File]::ReadAllText($script:CostLedgerPath)
+        $today = (Get-Date).ToString('yyyy-MM-dd')
+        $text = (New-Object System.Text.RegularExpressions.Regex('^updated: .*$', 'Multiline')).Replace($text, 'updated: ' + $today, 1)
+        $text = (New-Object System.Text.RegularExpressions.Regex('^updated_by: .*$', 'Multiline')).Replace($text, 'updated_by: claude', 1)
+        if (-not $text.EndsWith("`n")) { $text += "`n" }
+        [System.IO.File]::WriteAllText($script:CostLedgerPath, $text + $row + "`n", $script:HelperUtf8)
+        return $true
+    } catch {
+        return $false
+    }
+}

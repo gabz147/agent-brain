@@ -51,6 +51,27 @@ $FailedPath    = Join-Path $Root 'failed.jsonl'
 $LogPath       = Join-Path $Root 'drain.log'
 $LockPath      = Join-Path $Root '.drain.lock'
 $PromptPath    = Join-Path $Root 'capture-prompt.md'
+# The child MUST run with the vault as its working directory and the transcript
+# tree added via --add-dir. Task Scheduler launches this script with cwd
+# C:\WINDOWS\system32; a headless `claude -p` sandboxes to its cwd, so before
+# 2026-09-03 every scheduled child was denied both the transcript and the vault,
+# said so on its last line, exited 0, and was journaled as OK. (Review finding
+# #1, 2026-09-03.)
+$ProjectsDir   = if ($env:BRAIN_PROJECTS_DIR) { $env:BRAIN_PROJECTS_DIR } else { Join-Path $env:USERPROFILE '.claude\projects' }
+
+# A child that prints "nothing recorded" is only believed when the transcript
+# itself looks trivial: fewer than $TrivialMaxToolUses tool calls AND fewer
+# than $TrivialMaxTextChars characters of assistant prose (the same signals
+# the Stop gate uses; byte size is a bad proxy - an 86 KB transcript held one
+# prompt and a 344-char answer). Anything bigger with no vault write is a
+# failure (retry, then poison to failed.jsonl - recoverable), never silent OK.
+$TrivialMaxToolUses = 3
+$TrivialMaxTextChars = 1500
+
+# Sentinel exit code from Invoke-CaptureChild: the child hit a usage/session
+# limit. The batch halts without charging an attempt; the next run retries.
+$RateLimitedExit = 75
+
 
 # Vault root injected into the capture prompt.
 $VaultRoot     = if ($env:BRAIN_VAULT_ROOT) { $env:BRAIN_VAULT_ROOT } else { Join-Path $env:USERPROFILE 'Documents\Brain' }
@@ -207,14 +228,111 @@ function Get-DrainLock {
 }
 
 # ----------------------------------------------------------- the child ----
-function Invoke-CaptureChild {
-    param([string]$Prompt, [string]$SessionId)
+function Test-VaultWrittenSince {
+    param([datetime]$Since)
 
-    # Returns the child exit code. A timeout is reported as exit 1 so the
-    # existing attempt / poison path handles it like any other failure.
-    $tmpPrompt = $null
-    $tmpOut    = $null
-    $childExit = 1
+    # True if any vault note was modified after $Since. If the scan itself
+    # fails we return $true (cannot verify -> do not penalise; fail open).
+    try {
+        $hit = Get-ChildItem -LiteralPath $VaultRoot -Recurse -Filter *.md -File -ErrorAction Stop |
+               Where-Object { ($_.FullName -notlike '*\.obsidian\*') -and ($_.LastWriteTime -gt $Since) } |
+               Select-Object -First 1
+        return ($null -ne $hit)
+    } catch {
+        return $true
+    }
+}
+
+function Get-NamedVaultFilesWritten {
+    param([string]$Line, [datetime]$Since)
+
+    # The child is told to finish with a line naming the files it wrote. Pull
+    # every *.md path or [[wikilink]] out of that line, resolve it inside the
+    # vault, and return the ones modified after $Since. A concurrent writer
+    # (Obsidian, another agent, the interactive session) cannot fake this.
+    $found = New-Object System.Collections.Generic.List[string]
+    if ([string]::IsNullOrWhiteSpace($Line)) { return $found }
+    $names = New-Object System.Collections.Generic.List[string]
+    foreach ($m in [regex]::Matches($Line, '\[\[([^\]\|#]+)')) { $names.Add($m.Groups[1].Value.Trim()) }
+    foreach ($m in [regex]::Matches($Line, '([A-Za-z]:\\[^`"''<>|*?]+?\.md|[^\\/`"''<>|*?:]+?\.md)')) { $names.Add($m.Groups[1].Value.Trim()) }
+    foreach ($n in $names) {
+        try {
+            if ($n -match '^[A-Za-z]:\\') {
+                $cands = @(Get-Item -LiteralPath $n -ErrorAction Stop)
+            } else {
+                $leaf = [System.IO.Path]::GetFileName($n)
+                if (-not $leaf.EndsWith('.md')) { $leaf = $leaf + '.md' }
+                $cands = @(Get-ChildItem -LiteralPath $VaultRoot -Recurse -Filter $leaf -File -ErrorAction Stop)
+            }
+            foreach ($c in $cands) {
+                if ($c.LastWriteTime -gt $Since -and -not $found.Contains($c.FullName)) { $found.Add($c.FullName) }
+            }
+        } catch { }
+    }
+    return $found
+}
+
+function Get-TranscriptWorkSignals {
+    param([string]$Path)
+
+    # Cheap scan of the JSONL: count tool_use blocks and assistant text chars
+    # on main-thread assistant lines. Regex on raw lines, no JSON parsing, so
+    # a 10 MB transcript costs well under a second. On any error report the
+    # session as NON-trivial (fail towards retry, never towards silent OK).
+    $sig = @{ toolUses = 0; textChars = 0; ok = $false }
+    try {
+        $toolRe = [regex]'"type":"tool_use"'
+        $textRe = [regex]'"type":"text","text":"((?:[^"\\]|\\.)*)"'
+        foreach ($line in [System.IO.File]::ReadLines($Path)) {
+            if ($line.IndexOf('"type":"assistant"') -lt 0) { continue }
+            if ($line.IndexOf('"isSidechain":true') -ge 0) { continue }
+            $sig.toolUses += $toolRe.Matches($line).Count
+            foreach ($m in $textRe.Matches($line)) { $sig.textChars += $m.Groups[1].Length }
+        }
+        $sig.ok = $true
+    } catch { }
+    return $sig
+}
+
+function Test-DailyNoteExistsFor {
+    param([string]$Ts)
+
+    # Does a daily note exist for the session's local date (or the day
+    # before, for sessions that crossed midnight)? Used to sanity-check a
+    # child that claims the day is already captured.
+    try {
+        $d = ([datetime]::Parse($Ts)).ToLocalTime()
+    } catch { return $false }
+    foreach ($day in @($d, $d.AddDays(-1))) {
+        $p = Join-Path $VaultRoot ('01 - Daily Notes\' + $day.ToString('MM') + ' - ' + $day.ToString('MMMM yyyy') + '\' + $day.ToString('yyyy-MM-dd') + '.md')
+        if (Test-Path -LiteralPath $p) { return $true }
+    }
+    return $false
+}
+
+function Invoke-CaptureChild {
+    param(
+        [string]$Prompt,
+        [string]$SessionId,
+        [string]$TranscriptPath,
+        [bool]$InSessionCaptured,
+        [string]$EntryTs
+    )
+
+    # Returns the child exit code. 0 means a VERIFIED capture (a vault note
+    # changed) or an accepted no-op. $RateLimitedExit means the child hit a
+    # usage limit. A timeout, or exit 0 with no vault write and no accepted
+    # no-op line, is reported as exit 1 so the attempt / poison path handles
+    # it like any other failure. Exit 0 alone is never trusted: the child
+    # exits 0 after explaining that it could not read or write anything.
+    $tmpPrompt  = $null
+    $tmpOut     = $null
+    $childExit  = 1
+    $childStart = Get-Date
+    $costOutcome = 'error'
+    $costWrote   = '-'
+    $costNotes   = ''
+    $tSize       = 0
     try {
         $tmpPrompt = [System.IO.Path]::GetTempFileName()
         $tmpOut    = [System.IO.Path]::GetTempFileName()
@@ -227,8 +345,10 @@ function Invoke-CaptureChild {
         # permission prompt auto-denies and every Write/Edit silently fails while
         # the process still exits 0. Scoped to this child only - interactive
         # sessions keep their normal prompting.
+        # -WorkingDirectory + --add-dir: see the note at $VaultRoot above.
         $p = Start-Process -FilePath 'claude' `
-                           -ArgumentList '-p', '--permission-mode', 'acceptEdits' `
+                           -ArgumentList '-p', '--permission-mode', 'acceptEdits', '--add-dir', $ProjectsDir `
+                           -WorkingDirectory $VaultRoot `
                            -RedirectStandardInput $tmpPrompt `
                            -RedirectStandardOutput $tmpOut `
                            -NoNewWindow -PassThru -ErrorAction Stop
@@ -246,6 +366,7 @@ function Invoke-CaptureChild {
             # normal path is a real exit code (including 0).
             if ($null -eq $childExit) { $childExit = 1 }
         } else {
+            $costOutcome = 'timeout'
             Write-DrainLog ('TIMEOUT ' + $SessionId + ' - claude child pid ' + $p.Id +
                             ' exceeded ' + [int]($ChildTimeoutMs / 1000) + 's - killing tree') 'ERROR'
             try {
@@ -259,22 +380,91 @@ function Invoke-CaptureChild {
         # capture-prompt.md tells the child to finish with a single line naming
         # the files it wrote, or 'nothing recorded' if it bailed. Log it: an
         # exit 0 alone cannot distinguish a real capture from a silent no-op.
+        $lastLine = '<no output>'
         try {
             $outLines = @(Get-Content -LiteralPath $tmpOut -Encoding UTF8 -ErrorAction Stop |
                           ForEach-Object { [string]$_ } |
                           Where-Object { $_.Trim() -ne '' })
-            if ($outLines.Count -gt 0) {
-                Write-DrainLog ('CHILD ' + $SessionId + ': ' + $outLines[-1])
-            } else {
-                Write-DrainLog ('CHILD ' + $SessionId + ': <no output>')
-            }
+            if ($outLines.Count -gt 0) { $lastLine = $outLines[-1] }
         } catch {
-            Write-DrainLog ('CHILD ' + $SessionId + ': <output unreadable>')
+            $lastLine = '<output unreadable>'
+        }
+        $tSize = 0
+        try { $tSize = (Get-Item -LiteralPath $TranscriptPath -ErrorAction Stop).Length } catch { $tSize = 0 }
+        Write-DrainLog ('CHILD ' + $SessionId + ' (transcript ' + [int]($tSize / 1KB) + ' KB, exit ' + $childExit + '): ' + $lastLine)
+
+        # -- verify that "exit 0" meant work -------------------------------
+        if ($lastLine -match 'session limit|usage limit|rate limit') {
+            $childExit = $RateLimitedExit
+            $costOutcome = 'rate-limited'
+        }
+        elseif ($childExit -eq 0) {
+            $blockedText = ($lastLine -match 'block|unread|cannot access|cannot read|denied|--add-dir|not granted|sandbox')
+            $named = Get-NamedVaultFilesWritten -Line $lastLine -Since $childStart
+            if ($blockedText) {
+                Write-DrainLog ('UNVERIFIED ' + $SessionId + ' - child reports it was blocked -> treating as failure') 'ERROR'
+                $childExit = 1
+                $costOutcome = 'blocked'
+            }
+            elseif ($named.Count -gt 0) {
+                $costWrote = (($named | ForEach-Object { [System.IO.Path]::GetFileNameWithoutExtension($_) }) -join ', ')
+                $costOutcome = 'verified'
+                Write-DrainLog ('verified ' + $SessionId + ' - wrote: ' + $costWrote)
+            }
+            elseif ($lastLine -match 'already captured in-session') {
+                # Strong form: the enqueue hook saw the Stop gate fire for this
+                # session. Weak form: the child read the note and judged the
+                # work already present; accept only if that day's note exists.
+                if ($InSessionCaptured) {
+                    $costOutcome = 'no-op'; $costNotes = 'captured live by the Stop gate'
+                    Write-DrainLog ('accepted no-op ' + $SessionId + ' - captured live by the Stop gate')
+                } elseif (Test-DailyNoteExistsFor $EntryTs) {
+                    $costOutcome = 'no-op'; $costNotes = 'child judged the day already covered'
+                    Write-DrainLog ('accepted no-op ' + $SessionId + ' - child judged the day already covered (note exists; entry not flagged live-captured)') 'WARN'
+                } else {
+                    $costOutcome = 'unverified'; $costNotes = 'claims already captured; no daily note for its date'
+                    Write-DrainLog ('UNVERIFIED ' + $SessionId + ' - claims already captured but no daily note exists for its date -> treating as failure') 'ERROR'
+                    $childExit = 1
+                }
+            }
+            elseif ($lastLine -match 'nothing recorded') {
+                $sig = Get-TranscriptWorkSignals -Path $TranscriptPath
+                $sigText = 'tool_use=' + $sig.toolUses + ' text_chars=' + $sig.textChars
+                if ($sig.ok -and ($sig.toolUses -lt $TrivialMaxToolUses) -and ($sig.textChars -lt $TrivialMaxTextChars)) {
+                    $costOutcome = 'no-op'; $costNotes = 'trivial transcript (' + $sigText + ')'
+                    Write-DrainLog ('accepted no-op ' + $SessionId + ' - trivial transcript (' + $sigText + ')')
+                } else {
+                    $costOutcome = 'unverified'; $costNotes = 'nothing recorded on a non-trivial transcript (' + $sigText + ')'
+                    Write-DrainLog ('UNVERIFIED ' + $SessionId + ' - child says nothing recorded but the transcript is not trivial (' + $sigText + ') -> treating as failure') 'ERROR'
+                    $childExit = 1
+                }
+            }
+            elseif (Test-VaultWrittenSince $childStart) {
+                # Something in the vault changed but the child did not name it.
+                # Could be the child, could be a concurrent writer. Accept, flagged.
+                $costOutcome = 'verified-weak'; $costNotes = 'vault changed, child named no file'
+                Write-DrainLog ('verified-weak ' + $SessionId + ' - a vault note changed after child start but the output named no file') 'WARN'
+            }
+            else {
+                $costOutcome = 'unverified'; $costNotes = 'exit 0, nothing named, not an accepted no-op'
+                Write-DrainLog ('UNVERIFIED ' + $SessionId + ' - exit 0, no named file written, not an accepted no-op -> treating as failure') 'ERROR'
+                $childExit = 1
+            }
+        }
+        elseif ($costOutcome -ne 'timeout') {
+            $costOutcome = 'exit ' + $childExit
         }
     } catch {
         Write-DrainLog ('claude invocation threw for ' + $SessionId + ': ' + $_.Exception.Message) 'ERROR'
         $childExit = 1
+        $costNotes = 'invocation threw: ' + $_.Exception.Message
     } finally {
+        if (Get-Command Add-AutomationCostRow -ErrorAction SilentlyContinue) {
+            $secs = [int]((Get-Date) - $childStart).TotalSeconds
+            $sid8 = $SessionId; if ($sid8.Length -gt 8) { $sid8 = $sid8.Substring(0, 8) }
+            $ok = Add-AutomationCostRow -Run 'drain' -Session $sid8 -TranscriptKB ([string][int]($tSize / 1KB)) -Seconds $secs -Outcome $costOutcome -Wrote $costWrote -Notes $costNotes
+            if (-not $ok) { Write-DrainLog ('cost ledger append skipped for ' + $SessionId + ' (ledger missing or unwritable)') 'WARN' }
+        }
         if ($null -ne $tmpPrompt) {
             try { Remove-Item -LiteralPath $tmpPrompt -Force -ErrorAction SilentlyContinue } catch { }
         }
@@ -294,7 +484,7 @@ function Invoke-DrainBatch {
         [bool]$IsDryRun
     )
 
-    $result = @{ ok = 0; retry = 0; poison = 0; deferred = 0; halted = $false }
+    $result = @{ ok = 0; retry = 0; poison = 0; deferred = 0; halted = $false; ratelimited = $false }
 
     $rawLines = @()
     try {
@@ -437,7 +627,19 @@ function Invoke-DrainBatch {
                 $prompt = $PromptTemplate.Replace('{{TRANSCRIPT_PATH}}', $tp).Replace('{{SESSION_CWD}}', $cwd)
                 Write-DrainLog ('processing session ' + $sid + ' | transcript=' + $tp)
 
-                $childExit = Invoke-CaptureChild -Prompt $prompt -SessionId $sid
+                $isc = [bool](Get-EntryProp $e 'in_session_captured')
+                $ets = [string](Get-EntryProp $e 'ts')
+                $childExit = Invoke-CaptureChild -Prompt $prompt -SessionId $sid -TranscriptPath $tp -InSessionCaptured $isc -EntryTs $ets
+
+                if ($childExit -eq $RateLimitedExit) {
+                    # Not the entry's fault. Leave it (and everything after it)
+                    # in queue.batch.jsonl untouched; the next run recovers the
+                    # batch. No attempt is charged.
+                    Write-DrainLog ('RATE-LIMITED ' + $sid + ' - halting batch, no attempt charged; entries stay in queue.batch.jsonl') 'WARN'
+                    $result['ratelimited'] = $true
+                    $result['halted'] = $true
+                    break
+                }
 
                 if ($childExit -eq 0) {
                     $result['ok']++
@@ -515,14 +717,68 @@ $hasQueue = Test-HasContent $QueuePath
 $hasBatch = Test-HasContent $BatchPath
 if ((-not $hasQueue) -and (-not $hasBatch)) { exit 0 }
 
-# There IS work, but not while the user is at the machine. Take no lock and
-# consume nothing - the queue is left exactly as-is for the next scheduled run.
-if ((-not $Force) -and (Get-Command Get-UserBusyReason -ErrorAction SilentlyContinue)) {
-    $busy = Get-UserBusyReason
-    if ($null -ne $busy) {
-        Write-DrainLog ('deferred: ' + $busy + ' - queue left intact') 'INFO'
-        exit 0
+function Get-OldestQueuedAgeDays {
+    # Age in days of the oldest queued session (queue + in-flight batch), or
+    # -1 if unknown. Claude Code purges transcripts at 30 days, so a backlog
+    # older than ~20 days is about to become unrecoverable.
+    $oldest = $null
+    foreach ($p in @($QueuePath, $BatchPath)) {
+        try {
+            if (-not (Test-Path -LiteralPath $p)) { continue }
+            foreach ($line in [System.IO.File]::ReadLines($p)) {
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                try {
+                    $ts = [datetime]::Parse([string]((ConvertFrom-Json $line).ts))
+                    if ($null -eq $oldest -or $ts -lt $oldest) { $oldest = $ts }
+                } catch { }
+            }
+        } catch { }
     }
+    if ($null -eq $oldest) { return -1 }
+    return [int]((Get-Date).ToUniversalTime() - $oldest.ToUniversalTime()).TotalDays
+}
+
+function Write-DeferralLine {
+    param([string]$Reason)
+    # One line per streak, not per hour (Update-DeferralStreak decides), plus
+    # the transcript-purge warning whenever a line is written at all.
+    $line = $null
+    if (Get-Command Update-DeferralStreak -ErrorAction SilentlyContinue) {
+        $line = Update-DeferralStreak -Name 'drain' -Reason $Reason
+    } else {
+        $line = 'deferred: ' + $Reason
+    }
+    if ($null -ne $line) {
+        Write-DrainLog ($line + ' - queue left intact') 'INFO'
+        $age = Get-OldestQueuedAgeDays
+        if ($age -ge 20) {
+            Write-DrainLog ('WARNING: oldest queued transcript is ' + $age + ' days old - Claude Code purges transcripts at 30 days; run drain-queue.ps1 -Force or resume automation') 'WARN'
+        }
+    }
+}
+
+# There IS work, but not if the user has paused automation (Obsidian toggle)
+# or is at the machine. Take no lock and consume nothing - the queue is left
+# exactly as-is for the next scheduled run.
+if (-not $Force) {
+    if (Get-Command Get-AutomationPause -ErrorAction SilentlyContinue) {
+        $pauseReason = Get-AutomationPause -Scope 'afk'
+        if ($null -ne $pauseReason) {
+            Write-DeferralLine $pauseReason
+            exit 0
+        }
+    }
+    if (Get-Command Get-UserBusyReason -ErrorAction SilentlyContinue) {
+        $busy = Get-UserBusyReason
+        if ($null -ne $busy) {
+            Write-DeferralLine $busy
+            exit 0
+        }
+    }
+}
+if (Get-Command Close-DeferralStreak -ErrorAction SilentlyContinue) {
+    $streak = Close-DeferralStreak -Name 'drain'
+    if ($null -ne $streak) { Write-DrainLog $streak 'INFO' }
 }
 
 $lock = Get-DrainLock
@@ -565,7 +821,7 @@ try {
             Write-DrainLog 'recovering queue.batch.jsonl left by an interrupted run' 'WARN'
             $r = Invoke-DrainBatch -SourcePath $BatchPath -Label 'recovered batch' -PromptTemplate $promptTemplate -IsDryRun $false
             $totOk += $r['ok']; $totRetry += $r['retry']; $totPoison += $r['poison']; $totDeferred += $r['deferred']
-            if ($r['halted']) { $exitCode = 1 }
+            if ($r['halted'] -and -not $r['ratelimited']) { $exitCode = 1 }
         }
 
         # 2. Rotate the live queue into a batch and drain that. The hook keeps
@@ -586,7 +842,7 @@ try {
             if ($rotated) {
                 $r = Invoke-DrainBatch -SourcePath $BatchPath -Label 'batch' -PromptTemplate $promptTemplate -IsDryRun $false
                 $totOk += $r['ok']; $totRetry += $r['retry']; $totPoison += $r['poison']; $totDeferred += $r['deferred']
-                if ($r['halted']) { $exitCode = 1 }
+                if ($r['halted'] -and -not $r['ratelimited']) { $exitCode = 1 }
             }
         }
     }

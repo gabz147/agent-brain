@@ -12,12 +12,20 @@ It is Windows-only (PowerShell 5.1 + Task Scheduler + a VBS launcher) and depend
 | `drain-queue.ps1` | Consumes `queue.jsonl`, runs headless `claude -p` per session against `capture-prompt.md` to write daily notes. Lock + batch + retry/poison handling. |
 | `nightly-audit.ps1` | Once/day: runs headless `claude -p` against `audit-prompt.md` to fix frontmatter drift, age Active Priorities, sync folder indexes, backfill missing daily notes. |
 | `capture-prompt.md` / `audit-prompt.md` | The headless prompts. `{{VAULT_ROOT}}` / `{{AUTOMATION_DIR}}` / `{{TRANSCRIPT_PATH}}` / `{{SESSION_CWD}}` are substituted by the scripts at runtime. |
-| `user-busy.ps1` | Shared presence guard: dot-sourced by both runners. Defers work while you are at the machine (input idle < 5 min, or a fullscreen app is foreground). |
+| `user-busy.ps1` | Shared presence guard plus helpers, dot-sourced by both runners. Defers work while you are at the machine (input idle < 5 min, or a fullscreen app is foreground) or while you have paused automation from Obsidian (`automation-state.json`). Also holds the deferral-streak logger and the cost-ledger append. |
 | `run-hidden.vbs` | Launches a `.ps1` with no console window, so a scheduled run never flashes a window or steals focus from a fullscreen app. |
 
 Loop guard: every headless child runs with `VAULT_AUTOMATION=1`, which the hooks check to avoid re-queuing their own runs.
 
-Runtime state files these create — `queue.jsonl`, `queue.batch.jsonl`, `processed.jsonl`, `failed.jsonl`, `stop-state.json`, `last-audit-date.txt`, `*.log`, `.drain.lock` — are gitignored. Do not commit them.
+**Working directory.** Task Scheduler starts scripts in `C:\WINDOWS\system32`, and a headless `claude -p` sandboxes to its working directory — so both runners set the child's cwd to the vault and pass `--add-dir` for the transcript tree (drainer) or the `.claude` dir (audit). Without that, every scheduled child is denied every path under your profile, says so, exits 0, and looks like a success. Which leads to:
+
+**Success is verified, never assumed.** The drainer accepts a child run only if a vault note the child *named* in its last line changed after the child started, or the last line is an accepted no-op (`already captured in-session` for a live-captured session, `nothing recorded` on a transcript with fewer than 3 tool calls and under 1500 characters of assistant text). A `session limit` / `rate limit` line halts the batch without charging an attempt. The audit stamps its day only when the child ends with `audit complete: N notes scanned` (or a vault file changed) and never when the output says it was blocked.
+
+**Pause toggle.** `automation-state.json` (`{"paused":true,"scope":"afk"|"all","since":ISO}`) is written by the Agent Pulse plugin's orb click or command palette. Scope `afk` pauses the drainer and audit; `all` also silences the Stop-hook checkpoint. A missing or unreadable file means not paused. The queue keeps accumulating while paused, and since Claude Code deletes transcripts after 30 days the drainer logs a warning (and the orb tooltip shows one) once the oldest queued session is 20 days old.
+
+**Logs stay readable.** A deferral streak logs its first line, then one summary when a run finally proceeds (`deferred 14x since … (fullscreen x11, user active x3)`), with a daily "still deferred" line in between. Every child run appends a row (date, session, transcript KB, seconds, outcome, files written) to the `Automation Costs.md` ledger in the vault (`BRAIN_COST_LEDGER` overrides the path), so you can measure what the automation costs before changing its cadence.
+
+Runtime state files these create — `queue.jsonl`, `queue.batch.jsonl`, `processed.jsonl`, `failed.jsonl`, `stop-state.json`, `automation-state.json`, `deferral-*.json`, `last-audit-date.txt`, `*.log`, `.drain.lock` — are gitignored. Do not commit them.
 
 ## Install
 
