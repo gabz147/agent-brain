@@ -1,0 +1,66 @@
+{
+  "version": 2,
+  "required": [
+    "status",
+    "project",
+    "type",
+    "updated_by",
+    "updated"
+  ],
+  "optional": [
+    "aliases"
+  ],
+  "status": [
+    "active",
+    "completed",
+    "parked",
+    "idea",
+    "archived"
+  ],
+  "project": [
+    "example-project",
+    "personal",
+    "meta"
+  ],
+  "type": [
+    "index",
+    "reference",
+    "guide",
+    "plan",
+    "log"
+  ],
+  "signature_pattern": "^[a-z0-9][a-z0-9 ._-]{0,79}$",
+  "legacy_signatures": [
+    "claude",
+    "codex"
+  ],
+  "non_model_signatures": [
+    "human",
+    "automation",
+    "unknown-model"
+  ],
+  "model_labels": {
+    "gpt-6-astra": "astra",
+    "gpt-5.6-sol": "sol",
+    "gpt-5.6-terra": "terra",
+    "gpt-5.6-luna": "luna"
+  },
+  "exempt": [
+    "09 - Archive/Old Memory"
+  ],
+  "daily_sections": [
+    "What Got Done",
+    "What's Still In Progress",
+    "Decisions Made",
+    "Notes Touched",
+    "Profile Updates"
+  ],
+  "project_pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+  "project_allowlist": null,
+  "folder_projects": {
+    "01": "personal",
+    "02": "example-project",
+    "08": "personal",
+    "10": "meta"
+  }
+}

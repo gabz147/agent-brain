@@ -33,8 +33,7 @@ $script:IdleThresholdSec = 300      # 5 minutes
 $script:BusyProcessNames = @()
 
 # --- native input/window probes -------------------------------------------
-# If this fails to compile we degrade to the process list rather than silently
-# assuming the user is away.
+# If this fails to compile, scheduled work defers rather than assuming the user is away.
 $script:NativeProbesOk = $false
 try {
     if (-not ('VaultUserActivity' -as [type])) {
@@ -79,7 +78,7 @@ public static class VaultUserActivity
         if (h == IntPtr.Zero) { return false; }
         if (h == GetShellWindow()) { return false; }
         RECT r;
-        if (!GetWindowRect(h, out r)) { return false; }
+        if (!GetWindowRect(h, out r)) { throw new InvalidOperationException("Cannot inspect foreground window bounds"); }
         left = r.Left; top = r.Top; right = r.Right; bottom = r.Bottom;
         return true;
     }
@@ -113,7 +112,7 @@ function Test-ForegroundFullscreen {
         return (($l -le $bounds.Left + 2) -and ($t -le $bounds.Top + 2) -and
                 ($r -ge $bounds.Right - 2) -and ($b -ge $bounds.Bottom - 2))
     } catch {
-        return $false
+        return $null
     }
 }
 
@@ -121,13 +120,13 @@ function Get-UserBusyReason {
     # Returns a human-readable reason to defer, or $null if it is safe to run.
 
     if (-not $script:NativeProbesOk) {
-        # Degraded: cannot measure presence. Still honour the game list, and say so.
+        # Cannot establish an idle, non-fullscreen state; defer.
         foreach ($name in $script:BusyProcessNames) {
             if (Get-Process -Name $name -ErrorAction SilentlyContinue) {
                 return "$name is running (idle detection unavailable)"
             }
         }
-        return $null
+        return 'presence probes unavailable - deferring to be safe'
     }
 
     $idle = Get-IdleSeconds
@@ -138,7 +137,9 @@ function Get-UserBusyReason {
         return ('user active (' + [int]$idle + 's idle, need ' + $script:IdleThresholdSec + 's)')
     }
 
-    if (Test-ForegroundFullscreen) {
+    $fullscreen = Test-ForegroundFullscreen
+    if ($null -eq $fullscreen) { return 'cannot determine fullscreen state - deferring to be safe' }
+    if ($fullscreen) {
         return 'a fullscreen app is in the foreground'
     }
 
@@ -158,23 +159,12 @@ function Get-UserBusyReason {
 #                             written by the Obsidian Agent Pulse plugin)
 #   Update-DeferralStreak / Close-DeferralStreak
 #                           - one log line per deferral streak, not per hour
-#   Add-AutomationCostRow   - one table row per headless child run in the
-#                             vault's Automation Costs ledger
-# Every helper fails open: any error returns the "do nothing special" value.
+# Cost/outcome records are now written by the shared Python controller.
+# Interactive hooks fail open; uncertain scheduled presence/pause state defers.
 # =========================================================================
 $script:HelperDir = $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($script:HelperDir)) { $script:HelperDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
 $script:AutomationStatePath = Join-Path $script:HelperDir 'automation-state.json'
-$script:HelperVaultRoot = if ($env:BRAIN_VAULT_ROOT) { $env:BRAIN_VAULT_ROOT } else { Join-Path $env:USERPROFILE 'Documents\Brain' }
-# Ledger location: BRAIN_COST_LEDGER if set; else the note under the agent
-# tooling folder if that folder exists; else `Automation Costs.md` at the
-# vault root (the layout the public template ships with).
-$script:CostLedgerPath = $env:BRAIN_COST_LEDGER
-if ([string]::IsNullOrWhiteSpace($script:CostLedgerPath)) {
-    $inFolder = Join-Path $script:HelperVaultRoot '04 - Agent Orchestration & Tooling\Automation Costs.md'
-    if (Test-Path -LiteralPath (Split-Path -Parent $inFolder)) { $script:CostLedgerPath = $inFolder }
-    else { $script:CostLedgerPath = Join-Path $script:HelperVaultRoot 'Automation Costs.md' }
-}
 $script:HelperUtf8 = New-Object System.Text.UTF8Encoding($false)
 
 function Get-AutomationPause {
@@ -182,7 +172,7 @@ function Get-AutomationPause {
     # else $null. Scope 'afk' (drainer + audit) is paused by either
     # {"scope":"afk"} or {"scope":"all"}; scope 'all' (also the live Stop-hook
     # gate) only by {"scope":"all"}. A missing or unreadable file means NOT
-    # paused - a bug here may cost tokens, never a session.
+    # paused. An unreadable existing toggle defers scheduled work.
     param([string]$Scope = 'afk')
     try {
         if (-not (Test-Path -LiteralPath $script:AutomationStatePath)) { return $null }
@@ -195,7 +185,7 @@ function Get-AutomationPause {
         try { $since = ([datetime]::Parse([string]$st.since)).ToLocalTime().ToString('yyyy-MM-dd HH:mm') } catch { $since = [string]$st.since }
         return ('paused by user (scope ' + $sc + ') since ' + $since)
     } catch {
-        return $null
+        return 'pause state unreadable - deferring to be safe'
     }
 }
 
@@ -255,29 +245,5 @@ function Close-DeferralStreak {
         return ('deferred ' + $st.count + 'x since ' + $st.since + ' (' + ($parts -join ', ') + ') - proceeding now')
     } catch {
         return $null
-    }
-}
-
-function Add-AutomationCostRow {
-    # Appends one row to the Automation Costs ledger note. That note keeps its
-    # ledger table as the LAST section so a plain append lands inside the
-    # table; the frontmatter signature is restamped in the same write.
-    param([string]$Run, [string]$Session, [string]$TranscriptKB, [int]$Seconds, [string]$Outcome, [string]$Wrote, [string]$Notes)
-    try {
-        if (-not (Test-Path -LiteralPath $script:CostLedgerPath)) { return $false }
-        $cells = @($Run, $Session, $TranscriptKB, $Seconds, $Outcome, $Wrote, $Notes) | ForEach-Object {
-            $c = ([string]$_) -replace '[\r\n|]', ' '
-            if ([string]::IsNullOrWhiteSpace($c)) { '-' } else { $c.Trim() }
-        }
-        $row = '| ' + (Get-Date).ToString('yyyy-MM-dd') + ' | ' + ($cells -join ' | ') + ' |'
-        $text = [System.IO.File]::ReadAllText($script:CostLedgerPath)
-        $today = (Get-Date).ToString('yyyy-MM-dd')
-        $text = (New-Object System.Text.RegularExpressions.Regex('^updated: .*$', 'Multiline')).Replace($text, 'updated: ' + $today, 1)
-        $text = (New-Object System.Text.RegularExpressions.Regex('^updated_by: .*$', 'Multiline')).Replace($text, 'updated_by: claude', 1)
-        if (-not $text.EndsWith("`n")) { $text += "`n" }
-        [System.IO.File]::WriteAllText($script:CostLedgerPath, $text + $row + "`n", $script:HelperUtf8)
-        return $true
-    } catch {
-        return $false
     }
 }
