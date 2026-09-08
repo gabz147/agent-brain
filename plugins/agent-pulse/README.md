@@ -24,6 +24,8 @@ The orb watches the optional automation module's runtime files under `BRAIN_AUTO
 
 No configuration is required beyond the `BRAIN_AUTOMATION_DIR` env var that the rest of agent-brain already uses.
 
+The workflow v2 controller preserves these activity signals. The orb and queue count do not certify capture: verified completion lives in the controller's private source receipts. New source records may also be waiting in the durable spool before they appear in the compatible queue feed.
+
 ## Install
 
 Copy this folder to your vault's plugins dir:

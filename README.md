@@ -1,63 +1,67 @@
 # agent-brain
 
-A portable **memory system for AI coding agents** built on a plain Obsidian (Markdown) vault. It gives Claude Code — or any agent that can read/write files — a persistent, self-maintaining memory that survives context compaction, hands off cleanly between sessions and between different agents, and boots the same "colleague" every time.
+A shared Markdown memory system for Claude Code and Codex. Agents read the same Obsidian vault, keep decisions and project context there, and append verified daily checkpoints that survive sessions and context resets.
 
-This is the reusable, sanitized template extracted from a working personal setup. Clone it, run the install, fill in your specifics.
+This repository is a portable public template. It contains starter notes and reusable workflow code, with no personal vault contents, transcripts, credentials, or runtime history.
 
-## What it gives you
+## What it does
 
-- **One source of truth.** A Markdown vault the agent reads at the start of every session (`VAULT-INDEX.md` → `Active Priorities.md` → project notes → daily logs). No vector DB, no separate memory service — just files you can also open in Obsidian and read yourself.
-- **Identity that survives compaction.** A boot file (`CLAUDE.md`) the harness auto-loads and re-reads after compaction, holding who the agent is and the rules that can't lapse.
-- **Enforced structure.** A PostToolUse hook rejects any note whose frontmatter breaks the five-key schema, so the vault never rots into inconsistency.
-- **Automatic checkpointing.** A Stop hook notices when a turn did real work and prompts the agent to write it into the daily note before moving on.
-- **Multi-agent handoff.** Every entry is signed (`claude` / `codex` / `human`), so two agents can share one vault without stepping on each other.
-- **Two root ledgers.** `Decisions.md` (every deliberate choice, with a locked/active/superseded status, so an agent can check "does this contradict something we decided?") and `Dead Ends.md` (what was tried, why it failed, what to do instead — searched before inventing an approach).
-- **A daily note with one mutable line.** `**Open for tomorrow:**` under the date heading is rewritten by whichever session ends last; the next session reads it first. Everything else in a daily note is append-only.
-- **Optional self-population.** A Windows automation layer turns finished sessions into daily notes and runs a nightly audit that fixes drift — fully hands-off. It verifies that each headless run actually wrote something (exit 0 is never trusted), logs deferrals once per streak, and appends a row per run to an `Automation Costs.md` ledger so the token burn is measurable.
-- **Optional live indicator + kill switch.** A small Obsidian plugin (`plugins/agent-pulse`) shows a status orb for whether an agent is working in the vault, queue depth and last drain in its tooltip, a click-to-toggle that pauses the automation (AFK jobs only, or everything including the live checkpoint) when you don't want tokens spent, and a soft-refresh button that picks up agent edits without a jarring full reload.
+- Keeps Markdown canonical, with a root map, priorities, project indexes, decisions, and a dead-end ledger.
+- Gives both clients one writing contract and mirrored `obsidian-vault` and `handoff` skills.
+- Signs new work with its verified runtime model, such as `astra` or `opus 5`, while preserving historical signatures.
+- Uses a shared Python writer for schema validation, hash checks, file locking, private before/after snapshots, atomic writes, and read-back.
+- Preserves existing daily sessions and Index entries. Corrections become new sessions; only the Open line and frontmatter can be refreshed.
+- Binds capture receipts to actual transcript fragments and verified daily sections. A tool call, changed timestamp, or successful process exit cannot prove completion.
+- Optionally captures interrupted Claude/Codex sessions while the user is away. Nightly hygiene is deterministic and makes no model calls.
+- Offers an optional Obsidian status orb, pause toggle, and soft refresh through Agent Pulse.
 
-## Repo layout
+## Install or upgrade
 
-```
-boot/            CLAUDE.md (+ AGENTS.md) — the always-loaded boot config / identity / rules
-vault/           the starter vault: VAULT-INDEX.md, Active Priorities.md, Decisions.md, Dead Ends.md,
-                 Automation Costs.md, Machine Inventory.md, folder skeleton, daily-note + handoff templates
-templates/       DAILY-NOTE.md, FOLDER-INDEX.md, NOTE.md
-skills/          obsidian-vault/ — the retrieval + write procedure the agent invokes
-hooks/vault/     validate-vault-frontmatter.py, stop-vault-gate.js, session-end-enqueue.js
-settings/        vault-hooks.snippet.json — the hook wiring to merge into ~/.claude/settings.json
-automation/      OPTIONAL Windows self-population layer (drainer + nightly audit + scheduler wiring)
-plugins/         OPTIONAL Obsidian plugin (agent-pulse): a status orb + soft-refresh button
-INSTALL.md       step-by-step setup, written for an installing agent to execute
-```
+Follow [INSTALL.md](INSTALL.md). The shared controller in `automation/` is required for both live and scheduled writing. Registering scheduled jobs is optional.
 
-## Install
+For an existing installation, back up its workflow files, merge the new shared boot blocks and skills, copy the controller and hook adapters, and add the workflow/manual templates without replacing real notes. Regenerate the local runtime baseline only after reviewing the actual hook/task configuration. Old queues remain readable; keep all pending state and receipts.
 
-Point your agent at **[INSTALL.md](INSTALL.md)** and let it do the setup, or follow it yourself. In short:
+## Layout
 
-1. Copy `vault/` to your vault location; set `BRAIN_VAULT_ROOT`.
-2. Copy `boot/CLAUDE.md` → `~/.claude/CLAUDE.md`, `skills/obsidian-vault/` → `~/.claude/skills/`, `hooks/vault/` → `~/.claude/hooks/vault/`.
-3. Merge `settings/vault-hooks.snippet.json` into `~/.claude/settings.json`.
-4. Verify the hooks fire. (Optional) install the automation module per `automation/README.md`.
+| Path | Contents |
+|---|---|
+| `boot/` | Claude and Codex boot files with the same critical rules |
+| `vault/` | Generic starter vault, workflow contract, and model/manual daily templates |
+| `skills/` | Shared vault and durable handoff skills; optional Codex UI metadata |
+| `automation/` | Shared controller, schema, capture adapters, regression tests, and optional Windows runners |
+| `hooks/vault/` | Claude Stop, SessionEnd, and PostToolUse adapters |
+| `settings/` | Hook snippet and manual Obsidian daily-note settings |
+| `plugins/agent-pulse/` | Optional desktop Obsidian indicator and pause toggle |
+| `templates/` | Reusable model-authored note skeletons |
 
 ## Configuration
 
-Everything machine-specific is driven by two environment variables (with sensible fallbacks):
+Set these in the environment of the agent, hooks, Obsidian, and any scheduled tasks. Paths may contain spaces.
 
-| Variable | Meaning | Fallback |
-|---|---|---|
-| `BRAIN_VAULT_ROOT` | absolute path to the vault | `~/Documents/Brain` |
-| `BRAIN_AUTOMATION_DIR` | automation/queue dir (only if using automation) | `~/.claude/vault-automation` |
-| `BRAIN_COST_LEDGER` | path of the `Automation Costs.md` ledger the scripts append to (only if using automation) | `<vault>/Automation Costs.md` |
+| Variable | Default / meaning |
+|---|---|
+| `BRAIN_VAULT_ROOT` | `~/Documents/Brain` |
+| `BRAIN_AUTOMATION_DIR` | Installed controller directory, normally `~/.claude/vault-automation` |
+| `BRAIN_STATE_DIR` | `<automation>/state-v2`; private receipts and diagnostics |
+| `BRAIN_BACKUPS_DIR` | `<vault parent>/<vault name> Backups/versions`; private snapshots |
+| `BRAIN_PYTHON` | Python executable for the Node hook and Windows runner; otherwise `python` on Windows and `python3` for the Node hook elsewhere |
 
-The frontmatter validator accepts any kebab-case `project:` slug by default, so your notes are never rejected for a project name it hasn't heard of. Lock it to a fixed set via `PROJECT_ALLOWLIST` in `hooks/vault/validate-vault-frontmatter.py` if you want strictness.
+`VAULT_AUTOMATION_DIR` is accepted as a legacy alias when `BRAIN_AUTOMATION_DIR` is unset. `VAULT_AUTOMATION=1` prevents capture children from recursively queueing themselves. Set `BRAIN_AUTOMATION_DIR` consistently with the installed directory, especially when running from a checkout.
 
-## Notes
+The schema accepts any kebab-case project slug. Configure `project_allowlist` and `folder_projects` in `automation/vault-schema.json` if you need a fixed set and folder defaults. The human-readable contract contains a generated schema block checked by hygiene.
 
-- **Your vault is yours.** This template ships only the scaffolding — no personal notes. Keep your real vault private (a private git repo if you version it).
-- **Cross-platform core, Windows automation.** The vault, boot file, skill, and the three hooks work anywhere Node + Python run. The `automation/` self-population layer is Windows-only (PowerShell + Task Scheduler).
-- **No lock-in.** It's Markdown. Delete the hooks and you still have a readable Obsidian vault.
+`BRAIN_COST_LEDGER` and the old automatic Markdown cost-row appender are retired. `vaultctl.py costs` summarizes actual reported usage, cost, errors, and deferrals from private operational records. Missing values remain unknown.
 
-## License
+## Verification
+
+From the checkout:
+
+```powershell
+python -m unittest discover -s automation/tests -q
+```
+
+The tests use temporary vaults and stub model processes. They cover preservation, conflicts, restore, source attribution, checkpoint replay, durable queues, quota/timeout handling, and portable hooks without paid model calls or live-vault writes.
+
+The Python core and hook adapters support platforms with Python 3.10+ and Node.js. Scheduled runners and runtime task inspection require Windows, PowerShell, and Task Scheduler. The capture child requires an authenticated Claude CLI supporting the restricted flags listed in [automation/README.md](automation/README.md). Source formats and CLI behavior can change; run the installation smoke checks for your version.
 
 See [LICENSE](LICENSE).

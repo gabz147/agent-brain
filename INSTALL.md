@@ -1,117 +1,90 @@
-# INSTALL — for the installing agent
+# Install and upgrade
 
-You are an AI coding agent (Claude Code, Codex, or similar) setting up the **agent-brain** memory system on this machine for your human. Follow these steps in order. Do not skip verification. Where a step says "confirm with the user," stop and ask — do not guess.
+Use the user's existing authorization and preferences. Establish the vault location, participating clients, and whether scheduled model capture is wanted before changing the machine. Do not overwrite existing notes, boot files, skills, or settings wholesale.
 
-This repo is a **template**. Your job is to lay it down on the real machine, wire it to the agent harness, and fill in the human's specifics. Nothing here is destructive if you follow the merge steps for `settings.json`.
+## 1. Check prerequisites and preserve existing files
 
----
+Check `python --version`, `node --version`, and the installed agent clients. Python 3.10+ is required; the controller uses only the standard library. Obsidian is optional for agent work. Scheduling requires Windows PowerShell and Task Scheduler; retrospective capture additionally needs a logged-in Claude CLI with the required restricted-mode flags.
 
-## 0. Preconditions — check, then confirm
+For an upgrade, save copies of the installed boot files, skills, hooks, controller/schema, and relevant settings. Preserve pending queues, source receipts, and snapshot directories. Do not copy runtime state into this public repository. The old drainer must not run concurrently while its controller files are replaced; use the existing pause toggle or disable only the two vault tasks during the authorized upgrade, then restore their prior state.
 
-Run these and report results before doing anything else:
+## 2. Copy or merge the starter vault
 
-- OS and shell (`node --version`, `python --version`, `git --version`).
-- Whether Claude Code is installed and where its config dir is (`~/.claude` on most setups; `%USERPROFILE%\.claude` on Windows).
-- Whether Obsidian is installed (not required to run — the vault is plain Markdown — but the human usually wants it).
+For a new vault, copy `vault/` to the chosen location, default `~/Documents/Brain`. Fill `VAULT-INDEX.md`'s profile only from the user's confirmed information. Rename the example project and update its index/map as appropriate.
 
-Then **confirm with the user**:
-1. Where the **vault** should live (default: `~/Documents/Brain`). This becomes `BRAIN_VAULT_ROOT`.
-2. Whether they want the **optional automation module** (self-populating daily notes + nightly audit). Default: no. If unsure, install the core only; automation can be added later.
-3. Their **name/role and working preferences**, to fill the profile in `VAULT-INDEX.md` and `boot/CLAUDE.md`. If they'd rather do it themselves, leave the template placeholders.
+For an existing vault, add or merge the contract and guides under `10 - Resources/`, the model daily template, and the dedicated manual template. Reconcile rules in the existing root index without replacing the user's profile, projects, ledgers, priorities, or daily notes. Preserve historical signatures and all frozen archive bytes.
 
----
+## 3. Install the shared controller and environment
 
-## 1. Lay down the vault
+Copy the source files in `automation/` into `~/.claude/vault-automation`, or a chosen `BRAIN_AUTOMATION_DIR`. The controller is required even if scheduled jobs are disabled. Runtime queues, logs, state, and backups are private and must not be replaced during upgrades.
 
-Create the vault at `BRAIN_VAULT_ROOT` and copy the contents of this repo's `vault/` into it:
+On Windows, set the chosen paths for this process and future user processes:
 
-```
-<BRAIN_VAULT_ROOT>/
-  VAULT-INDEX.md
-  Active Priorities.md
-  Decisions.md                 ← decision ledger (locked / active / superseded rows)
-  Dead Ends.md                 ← what failed and what to do instead; search it first
-  Automation Costs.md          ← per-run ledger the automation scripts append to (optional module)
-  Machine Inventory.md         ← tasks, hooks, ports, versions on this machine (fill in)
-  00 - Inbox/
-  01 - Daily Notes/Daily Note Template.md
-  02 - Example Project/02 - Example Project.md
-  09 - Archive/
-  10 - Resources/Handoff Template.md
-```
-
-- Delete the `.gitkeep` files once real notes exist.
-- Rename/duplicate `02 - Example Project` per the human's real projects, and update the **Vault Structure** map and project mapping in `VAULT-INDEX.md` to match.
-- Fill in **Who I Am** and **My Preferences** in `VAULT-INDEX.md` from what the user told you (or leave placeholders if they declined).
-
-## 2. Set environment variables
-
-Set these as **user** environment variables so every tool agrees:
-
-- `BRAIN_VAULT_ROOT` = the vault path from step 0.
-- `BRAIN_AUTOMATION_DIR` = the automation dir (only if installing automation; default `~/.claude/vault-automation`).
-
-Windows (PowerShell, per-user, persists):
 ```powershell
-setx BRAIN_VAULT_ROOT "C:\Users\<you>\Documents\Brain"
-# if using automation:
-setx BRAIN_AUTOMATION_DIR "C:\Users\<you>\.claude\vault-automation"
+$env:BRAIN_VAULT_ROOT = Join-Path $env:USERPROFILE 'Documents\Brain'
+$env:BRAIN_AUTOMATION_DIR = Join-Path $env:USERPROFILE '.claude\vault-automation'
+[Environment]::SetEnvironmentVariable('BRAIN_VAULT_ROOT', $env:BRAIN_VAULT_ROOT, 'User')
+[Environment]::SetEnvironmentVariable('BRAIN_AUTOMATION_DIR', $env:BRAIN_AUTOMATION_DIR, 'User')
+$vaultCtl = Join-Path $env:BRAIN_AUTOMATION_DIR 'vaultctl.py'
 ```
-macOS/Linux: add `export BRAIN_VAULT_ROOT=...` to `~/.zshrc` / `~/.bashrc`.
 
-> The hooks fall back to `~/Documents/Brain` and `~/.claude/vault-automation` if these are unset, but setting them explicitly is strongly recommended — it is the single source of truth for the vault location.
+Use the confirmed custom paths instead of these defaults when needed. On macOS/Linux, export the same variables in the agent's environment. Existing apps/tasks may need a later restart to see new environment values; do not restart active user work without authorization.
 
-## 3. Install the boot file
+Optional `BRAIN_STATE_DIR` and `BRAIN_BACKUPS_DIR` override private storage. Keep both outside the Markdown vault and any public checkout. Set `BRAIN_PYTHON` if the hook/runner needs an explicit executable. The PostToolUse hook command in the settings snippet must also use the correct interpreter.
 
-Copy `boot/CLAUDE.md` to where Claude Code auto-loads it:
-- Global: `~/.claude/CLAUDE.md`, **or**
-- Per working directory: `<your working dir>/CLAUDE.md`.
+Customize `vault-schema.json`'s `folder_projects` for the user's actual folders; an optional `project_allowlist` restricts otherwise valid kebab-case slugs. Keep the shared human schema block synchronized through reviewed hygiene repairs.
 
-If one already exists, **merge** — do not clobber. Fill in the identity/welcome-line and the "Make it yours" section from the user's preferences.
+## 4. Merge boot rules and install both skills
 
-If a second agent (e.g. Codex) shares the vault, copy `boot/AGENTS.md` to its config dir (`~/.codex/AGENTS.md`).
+Merge `boot/CLAUDE.md` into `~/.claude/CLAUDE.md` and, for Codex, `boot/AGENTS.md` into `~/.codex/AGENTS.md`. Boot files stay outside the vault. Their `SHARED VAULT RULES` blocks must be identical.
 
-## 4. Install the skill
+Copy `skills/obsidian-vault/` and `skills/handoff/` into each participating client's skills directory. Both copies of each `SKILL.md` must be byte-identical. Codex's `agents/openai.yaml` is optional UI metadata. Angle-bracket paths in the skills/contract mean resolved environment paths, not literal folder names.
 
-Copy `skills/obsidian-vault/` to `~/.claude/skills/obsidian-vault/`. (For Codex, mirror to `~/.codex/skills/obsidian-vault/`.) This is the retrieval/write procedure the agent invokes for vault work.
+## 5. Install Claude hook adapters
 
-## 5. Install the hooks
+Copy `hooks/vault/` to `~/.claude/hooks/vault/`. Merge the three arrays in `settings/vault-hooks.snippet.json` into the existing `hooks` object in `~/.claude/settings.json`. Replace `{{CLAUDE_DIR}}` with the absolute directory, using forward slashes and keeping path quotes. Preserve unrelated hooks/settings, then parse the JSON to verify it.
 
-Copy `hooks/vault/` to `~/.claude/hooks/vault/`:
-- `validate-vault-frontmatter.py` — PostToolUse: blocks any vault `.md` write whose frontmatter breaks the five-key schema.
-- `stop-vault-gate.js` — Stop: after a substantive turn, wakes the model with a checkpoint instruction (the same "Vault checkpoint due" prompt you may have seen).
-- `session-end-enqueue.js` — SessionEnd: only relevant with the automation module; harmless otherwise.
+- PostToolUse reports an invalid completed Markdown write with exit 2. It cannot undo the write; the shared controller prevents invalid writes before they happen.
+- Stop requests a source-bound checkpoint after substantive work. The request is not evidence that capture happened.
+- SessionEnd writes a durable spool record for optional later draining.
 
-## 6. Wire the hooks into settings.json
+Internal hook failures fail open and are logged. Codex does not use these Claude hooks; it checkpoints directly through the shared writer. Optional discovery handles Codex interruptions.
 
-Open `~/.claude/settings.json`. **Merge** the three hook blocks from `settings/vault-hooks.snippet.json` into the existing `hooks` object — append to each array (`PostToolUse`, `Stop`, `SessionEnd`); never overwrite the whole file if it already has hooks.
+## 6. Verify the core in an isolated fixture
 
-Substitute `{{CLAUDE_DIR}}` with the absolute path to the `.claude` dir (forward slashes, e.g. `C:/Users/you/.claude`). Ensure `node` and `python` resolve on PATH; if not, replace them with absolute exe paths.
+Run the regression suite from the checkout:
 
-Validate the JSON after editing (`python -c "import json,sys;json.load(open(sys.argv[1]))" ~/.claude/settings.json`). A broken settings.json disables the harness.
+```powershell
+python -m unittest discover -s automation/tests -q
+```
 
-## 7. Verify the core (do not skip)
+It invokes the actual hook adapters with temporary paths, tests invalid/valid metadata, and verifies replay and daily preservation. Do not deliberately put invalid notes into the real vault for a smoke test.
 
-1. **Frontmatter hook fires:** in a Claude Code session, write a `.md` file under the vault with a bad frontmatter (e.g. missing `updated`). The write must be blocked with a "Vault frontmatter violation" message. Then write a valid note — it must succeed.
-2. **Daily note flow:** create today's daily note from `01 - Daily Notes/Daily Note Template.md`; confirm it passes the hook (`status: active`, `project: personal`, `type: log`).
-3. **Stop gate:** do a small substantive task, end the turn, and confirm the "Vault checkpoint due" wake fires (it is asyncRewake, so it appears as a follow-up). If it never fires, check that `node` runs the hook without error: `echo '{}' | node ~/.claude/hooks/vault/stop-vault-gate.js; echo $?` should print `0`.
-4. Report exactly what you tested and the result.
+Validate the installed vault:
 
-## 8. Optional — automation module
+```powershell
+python $vaultCtl validate
+python $vaultCtl hygiene
+```
 
-Only if the user opted in at step 0. Follow `automation/README.md` end to end: copy the folder, dry-run both scripts, register the two scheduled tasks, tune the presence guard. Verify via `drain.log` / `audit.log`. This is Windows-only.
+Inspect any issues. `hygiene --fix` applies only mechanical repairs but still requires the installation/repair authorization. A schema issue does not authorize rewriting historic daily sessions. For a fixture with no installed boot files, use `hygiene --no-parity`; keep parity enabled for normal installed checks.
 
-## 8.5. Optional — Agent Pulse Obsidian plugin
+Exercise a real live checkpoint using an actual session transcript, first calling `checkpoint-context`. Prepare the five-section summary and hash-checked topic/index changes, then use `checkpoint`. Read back its daily section and receipt. Replaying the identical input must preserve the section rather than append a duplicate. A real CLI checkpoint is a separate acceptance check from the stubbed regression suite.
 
-Only if the user wants the in-Obsidian indicator. Copy `plugins/agent-pulse/` to `<BRAIN_VAULT_ROOT>/.obsidian/plugins/agent-pulse/` (all three files: `manifest.json`, `main.js`, `styles.css`). Then, in Obsidian: Settings → Community plugins → turn **Restricted Mode off** → enable **Agent Pulse**.
+## 7. Configure manual daily notes in Obsidian
 
-It's an unsigned local plugin, so it will not appear in the community directory — that's expected. It reads the automation module's runtime files under `BRAIN_AUTOMATION_DIR`; with automation not installed those files are simply absent and the orb stays idle (the refresh button still works). Clicking the orb writes `automation-state.json` in that dir — the pause toggle the automation scripts and the Stop gate honour. Desktop only. See `plugins/agent-pulse/README.md` for details.
+Merge `settings/obsidian-daily-notes.json` into `.obsidian/daily-notes.json` and `settings/obsidian-templates.json` into `.obsidian/templates.json`. Enable the built-in Daily Notes and Templates plugins if wanted. Preserve unrelated Obsidian settings.
 
-## 9. Optional — git + Obsidian
+Daily Notes should use `01 - Daily Notes`, format `MM - MMMM YYYY/YYYY-MM-DD`, and `10 - Resources/Templates/Manual Daily Note Template.md`. Agent-created notes use the separate model template through the controller.
 
-- If the user wants the vault version-controlled, `git init` inside `BRAIN_VAULT_ROOT` and commit. (Keep private notes private — a vault repo should usually be a **private** GitHub repo.)
-- Open `BRAIN_VAULT_ROOT` as an Obsidian vault so `[[wikilinks]]` and the graph work, and so renames auto-repair links.
+Test creation in a temporary vault: the date/time tokens expand, the five sections and `human` signatures appear, and repeating the command opens the existing note without changing its bytes. Do not infer real UI acceptance from Python tests.
 
-## 10. Finish
+## 8. Optional scheduled capture and Agent Pulse
 
-Summarize: vault path, which pieces installed (core / automation), what you filled in vs. left as placeholders, and the verification results. Tell the user the one thing they still need to do by hand (usually: fill the profile, or open the vault in Obsidian).
+For approved Windows scheduling, follow [automation/README.md](automation/README.md). Its dry runs do not invoke a model or write the vault. Register tasks with hidden launchers, an Interactive user identity, and the five-minute idle/fullscreen/pause guards intact. Record the local runtime baseline only after inspecting the installed task/hook definitions.
+
+For the optional status indicator, install the three runtime files in `plugins/agent-pulse/` into `<vault>/.obsidian/plugins/agent-pulse/`, then enable it in Obsidian. Its activity indicators are not capture receipts.
+
+## 9. Verify and record the result
+
+Report the resolved paths, installed clients/components, automated checks, real smoke-test results, and outstanding acceptance separately. Checkpoint the installation through the shared writer. Keep the real vault private if the user elects to version it; this repository remains the shareable template.

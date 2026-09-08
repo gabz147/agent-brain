@@ -2,19 +2,19 @@
 status: active
 project: personal
 type: log
-updated_by: astra
-updated: 2026-09-07
+updated_by: human
+updated: "{{date:YYYY-MM-DD}}"
 ---
 
 # {{date:dddd, MMMM D, YYYY}}
 
-**Open for tomorrow:** See Active Priorities.
+**Open for tomorrow:** Add the next action here.
 
 ## Index
 
-- **Session topic** — Recorded the verified outcome. `({{model}})`
+- **Manual entry** — Created the day's manual entry. `(human)`
 
-## Session 1 — {{time:h:mm A}}: Session topic — `{{model}}`
+## Session 1 — {{time:h:mm A}}: Manual entry — `human`
 
 ### What Got Done
 - None

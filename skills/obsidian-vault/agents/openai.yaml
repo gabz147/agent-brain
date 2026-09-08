@@ -1,0 +1,4 @@
+interface:
+  display_name: "Obsidian Vault"
+  short_description: "Search and maintain the shared Obsidian vault"
+  default_prompt: "Use $obsidian-vault to retrieve verified context from my vault and cite the source notes."

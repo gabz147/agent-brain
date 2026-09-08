@@ -2,52 +2,45 @@
 status: active
 project: meta
 type: reference
-updated_by: human
-updated: 2026-01-01
+updated_by: astra
+updated: 2026-09-07
 ---
 
 # Handoff Template
 
-Reusable format + procedure for when the user says **"hand off"** (or "make a handoff", "hand off for later", "pausing this"). Goal: a fresh session — this AI after a reset, another agent, a different tool — can resume the work cold without re-deriving anything.
+Use when the user asks to hand off or pause work. The handoff is durable instructions for a fresh agent, stored at the top of the existing tracking note. Both handoff skills point directly here. Follow [[Vault Workflow Contract]] for model attribution, shared commits and daily receipts.
 
-## Procedure (what the agent does on "hand off")
+## Procedure
 
-1. **Find or create the project's tracking note.** One note per project/task is the single source of truth. If none exists, create it in the right folder with full frontmatter.
-2. **Put a `## Handoff — resume here` block at the TOP of that note**, filled from the skeleton below. Top = first thing a resumer sees.
-3. **Point, don't duplicate.** The block references the full note's own sections (and any brief/PRD/plan by path). Don't restate the body — link to it.
-4. **Sync the map.** Make sure `Active Priorities.md` has the item and today's daily note logs the handoff. A resumer reads those at startup.
-5. **Redact secrets.** Never write passwords/keys/card numbers/tokens. Reference where they live.
-6. **State the ONE next action** concretely enough to execute without asking.
-7. **Write the `Resume:` line as something a fresh session runs first**, not a description: the working directory to start in, the note to read, the skill to load. It removes the first five minutes of every resumed session.
-8. Keep it current: on later work, refresh the block's date + state rather than stacking stale copies.
+1. Read the tracking note and current evidence. Prefer its existing logical home over a new document.
+2. Keep one `## Handoff — resume here` block at the top, after frontmatter/title. Replace stale handoff state instead of stacking copies.
+3. Point to existing plans, source files, decisions and artifacts; do not duplicate them.
+4. Give one runnable Resume line: cwd, note/heading, skill, first action. The next action must be concrete.
+5. Include only real open decisions, required inputs and constraints. Never copy secrets; reference secure storage.
+6. Reconcile the folder index and [[Active Priorities]], then append a signed daily checkpoint with a verified receipt.
+7. Sign with the actual runtime model and actual write date. Event times in daily notes still use the event's local time.
 
-## The block skeleton
+## Skeleton
 
 ```markdown
 ## Handoff — resume here
-_Last updated: YYYY-MM-DD by claude_
+_Last updated: <actual YYYY-MM-DD> by <verified model>_
 
-**Resume:** `cd <working dir>` · read [[<this note>]]#Handoff · skill `<name or none>` · then: <first command or action>
+**Resume:** `cd <working directory>` · read this note's Handoff section · skill `<name or none>` · then: <first command or action>
 
-**State:** <one paragraph — where this stands right now, what's done, what's live.>
+**State:** <current verified state; distinguish tested from user-confirmed>
 
-**Next action:** <the single concrete first thing to do on resume.>
+**Next action:** <one concrete action>
 
-**Open decisions (need the user):**
-- <decision> — options: A) … B) …
+**Open decisions:** <only unresolved choices, or None>
 
-**Waiting on the user (inputs needed):**
-- <info/credential/confirmation still owed, and when it's needed by.>
+**Required inputs:** <only missing information, or None>
 
-**Do NOT:** <irreversible/outward-facing actions to avoid without explicit go — submit payment, send, publish, delete, etc.>
+**Constraints:** <applicable scope, locked choices, external-action boundaries>
 
-**Key artifacts (read these, don't re-derive):**
-- <this note's own sections> · <brief/plan path> · <repo/url> · <related [[notes]]>
+**Key artifacts:** <source sections, project files, plans and related notes by path/link>
 
-**Suggested skills to invoke on resume:** <skill names, or "none">
+**Suggested skills:** <names, or none>
 ```
 
-## Notes
-
-- Handoffs are durable and live in the vault, never in an OS temp dir (temp gets wiped; the vault is the memory).
-- A handoff is not a status report to the user; it's instructions to the next agent. Write it to be *executed*, not read.
+Store the handoff in the vault, never OS temp. Keep deliverables in the user's project folders. Daily history stays append-only; this current-state block is intentionally refreshed as work advances.

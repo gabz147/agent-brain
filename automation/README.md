@@ -1,76 +1,92 @@
-# Automation module (OPTIONAL, ADVANCED)
+# Shared controller and optional Windows scheduling
 
-This turns the vault **self-populating**: finished Claude Code sessions get written up as daily notes automatically, and a nightly pass audits the vault for drift. **You do not need this for the brain to work** — the core hooks (frontmatter validation + the Stop-gate checkpoint prompt) already keep the vault healthy when you drive it interactively. Skip this whole folder if you just want the memory system.
+The Python controller is required for live vault writes and checkpoints. The PowerShell runners and Task Scheduler jobs are optional. Installing these files alone does not start jobs or make model calls.
 
-It is Windows-only (PowerShell 5.1 + Task Scheduler + a VBS launcher) and depends on the `claude` CLI being on PATH and logged in.
+## Components
 
-## Pieces
-
-| File | Role |
+| Files | Purpose |
 |---|---|
-| `session-end-enqueue.js` (in `hooks/vault/`) | SessionEnd hook: appends each finished session to `queue.jsonl`. |
-| `drain-queue.ps1` | Consumes `queue.jsonl`, runs headless `claude -p` per session against `capture-prompt.md` to write daily notes. Lock + batch + retry/poison handling. |
-| `nightly-audit.ps1` | Once/day: runs headless `claude -p` against `audit-prompt.md` to fix frontmatter drift, age Active Priorities, sync folder indexes, backfill missing daily notes. |
-| `capture-prompt.md` / `audit-prompt.md` | The headless prompts. `{{VAULT_ROOT}}` / `{{AUTOMATION_DIR}}` / `{{TRANSCRIPT_PATH}}` / `{{SESSION_CWD}}` are substituted by the scripts at runtime. |
-| `user-busy.ps1` | Shared presence guard plus helpers, dot-sourced by both runners. Defers work while you are at the machine (input idle < 5 min, or a fullscreen app is foreground) or while you have paused automation from Obsidian (`automation-state.json`). Also holds the deferral-streak logger and the cost-ledger append. |
-| `run-hidden.vbs` | Launches a `.ps1` with no console window, so a scheduled run never flashes a window or steals focus from a fullscreen app. |
+| `vaultctl.py`, `vault_core.py`, `vault-schema.json` | Shared CLI, schema, containment, locks, snapshots, atomic commits, and exact-byte restore |
+| `vault_sources.py` | Claude/Codex transcript fragments, real model attribution, and source-bound coverage |
+| `vault_capture.py`, `capture-prompt.md` | Restricted read-only model proposals; controller alone writes |
+| `vault_queue.py` | Durable intake, failure recovery, incremental capture, and idle Codex discovery |
+| `vault_hooks.py` | Live Stop decision logic; a request never claims capture |
+| `vault_hygiene.py`, `vault_runtime.py` | Deterministic schema/index/priority checks, boot/skill parity, and approved runtime drift checks |
+| `invoke-vault-job.ps1`, `drain-queue.ps1`, `nightly-audit.ps1` | Guarded scheduled entry points; only verified audit results advance the day stamp |
+| `user-busy.ps1`, `run-hidden.vbs` | Interactive idle/fullscreen/pause guards and a windowless launcher |
+| `tests/` | Temporary-vault regression tests; no paid model calls |
 
-Loop guard: every headless child runs with `VAULT_AUTOMATION=1`, which the hooks check to avoid re-queuing their own runs.
+## Live commands
 
-**Working directory.** Task Scheduler starts scripts in `C:\WINDOWS\system32`, and a headless `claude -p` sandboxes to its working directory — so both runners set the child's cwd to the vault and pass `--add-dir` for the transcript tree (drainer) or the `.claude` dir (audit). Without that, every scheduled child is denied every path under your profile, says so, exits 0, and looks like a success. Which leads to:
-
-**Success is verified, never assumed.** The drainer accepts a child run only if a vault note the child *named* in its last line changed after the child started, or the last line is an accepted no-op (`already captured in-session` for a live-captured session, `nothing recorded` on a transcript with fewer than 3 tool calls and under 1500 characters of assistant text). A `session limit` / `rate limit` line halts the batch without charging an attempt. The audit stamps its day only when the child ends with `audit complete: N notes scanned` (or a vault file changed) and never when the output says it was blocked.
-
-**Pause toggle.** `automation-state.json` (`{"paused":true,"scope":"afk"|"all","since":ISO}`) is written by the Agent Pulse plugin's orb click or command palette. Scope `afk` pauses the drainer and audit; `all` also silences the Stop-hook checkpoint. A missing or unreadable file means not paused. The queue keeps accumulating while paused, and since Claude Code deletes transcripts after 30 days the drainer logs a warning (and the orb tooltip shows one) once the oldest queued session is 20 days old.
-
-**Logs stay readable.** A deferral streak logs its first line, then one summary when a run finally proceeds (`deferred 14x since … (fullscreen x11, user active x3)`), with a daily "still deferred" line in between. Every child run appends a row (date, session, transcript KB, seconds, outcome, files written) to the `Automation Costs.md` ledger in the vault (`BRAIN_COST_LEDGER` overrides the path), so you can measure what the automation costs before changing its cadence.
-
-Runtime state files these create — `queue.jsonl`, `queue.batch.jsonl`, `processed.jsonl`, `failed.jsonl`, `stop-state.json`, `automation-state.json`, `deferral-*.json`, `last-audit-date.txt`, `*.log`, `.drain.lock` — are gitignored. Do not commit them.
-
-## Install
-
-1. Copy this `automation/` folder to your automation dir, e.g. `C:\Users\<you>\.claude\vault-automation\`.
-2. Make sure `BRAIN_VAULT_ROOT` (and optionally `BRAIN_AUTOMATION_DIR`) are set as user environment variables so the scripts and hooks agree on paths.
-3. Confirm `claude` runs from a plain PowerShell prompt and is logged in.
-4. Smoke-test without touching anything:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File "C:\Users\<you>\.claude\vault-automation\drain-queue.ps1" -DryRun
-   powershell -ExecutionPolicy Bypass -File "C:\Users\<you>\.claude\vault-automation\nightly-audit.ps1" -DryRun
-   ```
-   Check `drain.log` / `audit.log`.
-5. Register the scheduled tasks (adjust the paths). Run from an elevated PowerShell:
-
-   ```powershell
-   $auto = "C:\Users\<you>\.claude\vault-automation"
-
-   # Drainer: every 15 min, hidden, only when you are away (the script self-defers).
-   $drainAction  = New-ScheduledTaskAction -Execute "wscript.exe" `
-     -Argument "`"$auto\run-hidden.vbs`" `"$auto\drain-queue.ps1`""
-   $drainTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-     -RepetitionInterval (New-TimeSpan -Minutes 15)
-   Register-ScheduledTask -TaskName "VaultDrainQueue" -Action $drainAction `
-     -Trigger $drainTrigger -RunLevel Limited -Description "Drain Claude session queue into the vault"
-
-   # Nightly audit: 03:30 daily + at logon, catch-up if missed.
-   $auditAction   = New-ScheduledTaskAction -Execute "wscript.exe" `
-     -Argument "`"$auto\run-hidden.vbs`" `"$auto\nightly-audit.ps1`""
-   $auditTrigger1 = New-ScheduledTaskTrigger -Daily -At 3:30am
-   $auditTrigger2 = New-ScheduledTaskTrigger -AtLogOn
-   $settings      = New-ScheduledTaskSettingsSet -StartWhenAvailable
-   Register-ScheduledTask -TaskName "VaultNightlyAudit" -Action $auditAction `
-     -Trigger $auditTrigger1,$auditTrigger2 -Settings $settings -RunLevel Limited `
-     -Description "Nightly Obsidian vault audit"
-   ```
-
-   Tasks must run as your interactive user (LogonType Interactive), NOT as SYSTEM / S4U — the presence guard reads input-idle time, which only works in your own session.
-
-6. Tune `user-busy.ps1` (`$IdleThresholdSec`, `$BusyProcessNames`) if jobs fire while you are working, or never get a window.
-
-## Uninstall
+Run with the configured environment, or provide `--vault`, `--state`, and `--backups` **before** the subcommand for an isolated fixture.
 
 ```powershell
-Unregister-ScheduledTask -TaskName "VaultDrainQueue"  -Confirm:$false
-Unregister-ScheduledTask -TaskName "VaultNightlyAudit" -Confirm:$false
+python vaultctl.py inspect '02 - Example Project/Example.md'
+python vaultctl.py commit --model '<verified-runtime-id>' --reason '<actual change>' --input '<operations.json>'
+python vaultctl.py checkpoint-context --source codex --session '<id>' --transcript '<actual.jsonl>'
+python vaultctl.py checkpoint --source codex --session '<id>' --transcript '<actual.jsonl>' --input '<checkpoint.json>'
+python vaultctl.py validate
+python vaultctl.py hygiene
+python vaultctl.py costs
 ```
 
-Then remove the SessionEnd hook from `settings.json` if you no longer want sessions queued.
+Use `--source claude` for Claude sessions. See the vault's `Vault Workflow Contract.md` for JSON formats and restore. A concurrent hash mismatch requires fresh reads and a rebuilt operation; never overwrite the other writer's edit. Existing daily sessions are immutable.
+
+## Capture and costs
+
+Live capture is primary. Optional draining consumes SessionEnd requests and discovers changed Codex transcripts from the previous seven days after five minutes without transcript changes. Subagent copies and empty sources receive an explicit exclusion record, not a false capture claim. Large sessions remain incremental; unread fragments stay pending.
+
+Retrospective capture needs a logged-in `claude` executable on PATH and a configured `model` in `~/.claude/settings.json`. The command uses `--safe-mode --restricted --permission-mode dontAsk`, read-only `Read,Glob,Grep` tools, `--strict-mcp-config`, `--no-chrome`, `--disable-slash-commands`, `--no-session-persistence`, and structured stream JSON. Check `claude --help` on the target machine for these flags. An unsupported version leaves work pending; do not weaken the restrictions to bypass a failure.
+
+The child receives source evidence over stdin, runs with the vault as its working directory, and has a 15-minute timeout. Its actual returned model supplies attribution. Reported input/output/cache usage and estimated cost enter `state-v2/outcomes.jsonl`; unknown values remain null. Known quota resets delay later launches. `vaultctl.py costs` summarizes these records; it is not a subscription bill.
+
+`already_covered` needs a matching complete daily section; `trivial` needs source evidence and an honest reason. Exit 0, note names, timestamps, unrelated edits, and prose claims cannot certify success. Queue read/journal/replace failures retain pending work.
+
+## Private runtime files
+
+Keep `spool/`, `state-v2/`, queue/batch/incoming JSONL, processed/failed/excluded journals, logs, toggles, lock files, and snapshots out of public source control. The repository ignores the default in-checkout state locations. Custom directories must also be private.
+
+`automation-state.json` with `paused: true` and scope `afk` pauses scheduled jobs; scope `all` also silences live Stop requests. Agent Pulse controls this toggle. Missing means unpaused; unreadable existing state defers scheduled work. It never discards pending requests.
+
+## Optional Windows tasks
+
+Install the controller first and confirm the environment matches its directory. Dry-run both wrappers:
+
+```powershell
+$auto = $env:BRAIN_AUTOMATION_DIR
+if (-not $auto) { $auto = Join-Path $env:USERPROFILE '.claude\vault-automation' }
+powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\drain-queue.ps1" -DryRun
+powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\nightly-audit.ps1" -DryRun
+```
+
+The dry run reports the controller and intended operation. It does not test a live model, actual writes, or user-idle eligibility.
+
+For a new installation, register the following only within the user's approved scheduling scope. If tasks already exist, inspect and merge their definitions rather than replacing them blindly. The drainer runs hourly; audit runs daily with a logon catch-up. Adjust cadence deliberately, then record the actual baseline.
+
+```powershell
+$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
+$taskSettings = New-ScheduledTaskSettingsSet -Hidden -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 1) -MultipleInstances IgnoreNew
+
+$drainAction = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument "`"$auto\run-hidden.vbs`" `"$auto\drain-queue.ps1`""
+$drainTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Hours 1)
+Register-ScheduledTask -TaskName 'VaultQueueDrain' -Action $drainAction -Trigger $drainTrigger -Principal $principal -Settings $taskSettings
+
+$auditAction = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument "`"$auto\run-hidden.vbs`" `"$auto\nightly-audit.ps1`""
+$auditDaily = New-ScheduledTaskTrigger -Daily -At '03:30'
+$auditLogon = New-ScheduledTaskTrigger -AtLogOn -User $user
+$auditLogon.Delay = 'PT10M'
+Register-ScheduledTask -TaskName 'VaultNightlyAudit' -Action $auditAction -Trigger $auditDaily,$auditLogon -Principal $principal -Settings $taskSettings
+
+# Inspect the installed definitions and hook wiring first, then record that approved state.
+python "$auto\vaultctl.py" snapshot-runtime
+python "$auto\vaultctl.py" hygiene
+```
+
+The baseline is private at `<BRAIN_STATE_DIR>/runtime-contract.json`. Core-only installations do not require a scheduled-task baseline. Runtime checks compare the actual hooks and these two tasks without repairing them. Do not re-record a baseline just to hide unexplained drift.
+
+Both jobs defer with input less than five minutes ago, fullscreen foreground, an unavailable presence probe, or a pause toggle. `-Force` skips only the daily audit stamp. Keep Interactive identity; SYSTEM/S4U cannot observe the user's input session correctly. Keep the VBS launcher to avoid console flashes.
+
+Observe an eligible real run and its receipt/report before claiming scheduled capture works. A deferred run is not a successful capture. Nightly hygiene makes zero model calls and stamps the day only on a verified report. Review `drain.log`, `audit.log`, and `state-v2/hygiene-latest.json`; no process exit alone proves capture.
+
+To disable scheduling, disable only `VaultQueueDrain` and `VaultNightlyAudit` within the user's requested scope. Preserve their definitions and all pending data for a later resume.

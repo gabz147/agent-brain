@@ -2,8 +2,8 @@
 status: active
 project: meta
 type: index
-updated_by: claude
-updated: 2026-01-01
+updated_by: astra
+updated: 2026-09-07
 ---
 
 # {{Folder Name}}
@@ -14,4 +14,6 @@ One-line description of what this folder holds.
 
 ## Notes
 
-- [[Example Note]] — one-line description of what it is. `(claude)`
+- [[Example Note]] — one-line description of what it is. `({{model}})`
+
+<!-- Before creating a note, use the actual write date and verified runtime model. Commit through the shared writer; preserve historical signatures. -->

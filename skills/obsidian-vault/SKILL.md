@@ -1,65 +1,48 @@
 ---
 name: obsidian-vault
-description: 'Search, recall, continue, audit, or change notes in the shared Obsidian vault — the cross-agent handoff memory. Use for prior decisions, current priorities, project history, related notes, daily notes, or any vault edit.'
+description: "Search, recall, continue, audit or update the user's shared Obsidian vault. Use for prior decisions, priorities, project history, related notes, daily checkpoints and handoffs."
 ---
 
 # Shared Obsidian Vault
 
-Vault-specific procedure for the Obsidian vault at your configured vault root (`BRAIN_VAULT_ROOT`, e.g. `~/Documents/Brain`). The always-loaded boot file (`CLAUDE.md`) and `VAULT-INDEX.md` are the authorities; this skill does not restate their rules. On conflict, follow the authority. If `VAULT-INDEX.md` was not read this session, or context was compacted, read it in full before continuing.
+Resolve `<BRAIN_VAULT_ROOT>` and `<BRAIN_AUTOMATION_DIR>` from environment variables, defaulting to `~/Documents/Brain` and `~/.claude/vault-automation`. `<HOME>` means the current user home. These are placeholders, not literal paths.
 
-The Markdown vault is the sole shared memory and handoff source for every agent that works here. Do not build a parallel memory store or replace source notes with generated summaries.
+Vault: `<BRAIN_VAULT_ROOT>`. Read `VAULT-INDEX.md` and `10 - Resources/Vault Workflow Contract.md` in full at startup and after compaction. The contract is the single source for schema, model signatures, coordinated writes and capture receipts; the boot files retain critical rules.
 
-## Route the request
+## Route and retrieve
 
-Classify before searching. A request to find, explain, review, report, or audit does not authorize a vault edit — keep read-only requests read-only.
+Classify recall, status, continue, relate, or write. Recall/review/audit authorizes findings and the required checkpoint, not applying source/config fixes. Authorization already supplied for a concrete change persists.
 
-- **Recall** — a fact, decision, rationale, prior failure, or working method.
-- **Status** — what is open, done, blocked, or stale; verify the underlying note or real system state before calling it current.
-- **Continue** — restore the smallest sufficient project context; name the next concrete action.
-- **Relate** — backlinks, dependencies, contradictions, notes to reconcile.
-- **Write** — create, update, move, rename, archive, or checkpoint, within authorized scope only.
-
-## Retrieval workflow
-
-Start high (identity, rules, system map → `VAULT-INDEX.md` + boot file), descend to project context (`Active Priorities.md`, the folder index, the main project note), then to specific facts (headings, linked notes), then to chronology (daily notes). Descend only as far as the request needs; return to the source note before asserting a fact.
-
-1. Start at `VAULT-INDEX.md`; use its folder map to pick the likely project. For status or continuation, read `Active Priorities.md`, then verify the project's actual state. Two root ledgers short-circuit common questions: "is X allowed / why was this chosen" → `Decisions.md`; "X is not working / has this been tried" → `Dead Ends.md` (search it before inventing an approach). Machine facts (tasks, hooks, ports, versions) → `Machine Inventory.md`.
-2. Search filenames first (`rg --files`), then exact note names and `[[wikilinks]]`, then headings and body. Exclude `.obsidian/` and non-Markdown. Exclude the Archive folder unless the request is historical, names archived work, or the active-note search misses.
-3. Rank: exact filename → exact wikilink/backlink → heading → body → recency (tiebreaker only, never over a stronger match).
-4. Fully read each selected note before relying on it — start with the best 3–5, expand through direct wikilinks as needed.
-5. On conflicting evidence, use daily notes for chronology; if it still conflicts, preserve both claims with their dates and sources — do not silently merge.
+1. Start with the root index, then the project index/main note. For status/continuation, read Active Priorities and verify real state. Decisions answers allowed/why questions; Dead Ends comes before recurring troubleshooting; Machine Inventory holds machine facts.
+2. Search filenames first, then exact wikilinks/backlinks, headings and body. Exclude application internals and Archive unless history is requested or active retrieval misses.
+3. Rank exact filename, exact link, heading, body, then recency as a tiebreaker.
+4. Fully read selected notes before relying on them. Start with the best few and follow relevant links; do not silently sample a requested full read.
+5. Use daily notes for chronology. Preserve dated conflicting claims until evidence resolves them.
 
 ```powershell
-$vaultRoot = $env:BRAIN_VAULT_ROOT   # e.g. 'C:\Users\<you>\Documents\Brain'
-rg --files $vaultRoot -g '*.md' -g '!.obsidian/**' -g '!09 - Archive/**'
-rg -n -i --glob '*.md' --glob '!.obsidian/**' --glob '!09 - Archive/**' -- 'search terms' $vaultRoot
-rg -n -F --glob '*.md' --glob '!.obsidian/**' --glob '!09 - Archive/**' -- '[[Exact Note Name]]' $vaultRoot
+$vaultRoot = '<BRAIN_VAULT_ROOT>'
+rg --files $vaultRoot -g '*.md' -g '!**/.obsidian/**' -g '!**/09 - Archive/**'
+rg -n -i -g '*.md' -g '!**/.obsidian/**' -g '!**/09 - Archive/**' -- 'search terms' $vaultRoot
+rg -n -F -g '*.md' -g '!**/.obsidian/**' -g '!**/09 - Archive/**' -- '[[Exact Note Name]]' $vaultRoot
 ```
 
-## Answer from evidence
+Lead with the result, cite the exact note/heading or absolute link, and distinguish recorded fact, current verification and inference. Continuation needs current state, locked decisions, remaining work and the next action.
 
-- Lead with the result, not the search process.
-- Cite the exact note and heading, or a clickable absolute file link.
-- Distinguish recorded fact, verified current state, and inference.
-- If the vault does not establish an answer, say so — do not fill gaps from memory.
-- For continuation: current state, locked decisions, unresolved work, next action.
+## Write and checkpoint
 
-## Write workflow
+1. Read the full target, index, relevant linked notes and today's daily note immediately before editing. Consolidate an existing logical home; preserve unrelated changes.
+2. Verify the current runtime model. Sign new work as its model label, such as astra or opus 5; never use a client name as a new model signature or infer the actual model from a configured default. Preserve historical signatures.
+3. Use `python "<BRAIN_AUTOMATION_DIR>/vaultctl.py" inspect <paths>` for baseline text/hashes. Prepare JSON operations using the native editor, then use `commit --model <verified-runtime-id> --reason <change> --input <json>`. The shared writer validates schema, snapshots, checks concurrent hashes and reads back. Re-read/rebuild on conflict.
+4. Update the canonical topic note, stable folder-index entry, and directly affected priorities/ledgers in the same checkpoint. Decisions append; only supersession status/reference may change in an old row. Do not rewrite prior wording.
+5. Use `checkpoint-context --source claude|codex --session <actual-id> --transcript <actual-jsonl>`, then `checkpoint` with those arguments and `--input <json>`. Follow the contract's input example. A successful receipt binds the daily append to source evidence and actual model.
+6. Existing daily sections and Index entries are immutable. Only insert a new signed Index bullet, append a complete five-section session, update Open for tomorrow, and restamp frontmatter. Correct gaps in a new section. Event-local date/time chooses the note/session; actual write date stamps updated. No whole-file daily replacements.
+7. Run `vaultctl.py validate` and verify intended content exactly once. Do not count a hook request, tool call, exit zero or unrelated vault write as a checkpoint.
+8. Handoffs use `10 - Resources\Handoff Template.md`, with one current block at the top of the tracking note and a runnable Resume line. Never use OS temp.
 
-1. Read the full target note, its folder index, directly relevant cross-referenced notes, and today's daily note immediately before editing.
-2. Append to an existing logical home before creating a note. Preserve unrelated user and agent changes.
-3. Edit with the current agent's native targeted mechanism (Codex `apply_patch`; Claude Edit/Write). Never rewrite an existing daily note wholesale.
-4. Apply the live frontmatter, wikilink, signature, folder-index, daily-note, rename, move, archive, and profile rules from `VAULT-INDEX.md` and the boot file.
-5. When a decision or status changes, update the canonical project note and reconcile `Active Priorities.md` in the same pass — following the lifecycle defined inside `Active Priorities.md`. A deliberate cross-session decision also gets one row appended to `Decisions.md` (never edit an existing row; supersede it). An approach abandoned for one that works gets one line in `Dead Ends.md`.
-6. Update the touched folder's index for a created, renamed, moved, or materially changed note; scan direct backlinks for drift.
-7. Append a new signed daily session and Index line; never edit another agent's existing daily session. `Session N` is a label (take max+1, never renumber a collision); the heading's local time is the order. If yours is the last session of the day, rewrite the note's `**Open for tomorrow:**` line in place — the only mutable line in a daily note. On a handoff, the `Resume:` line of the handoff block is a runnable first step (cwd, note, skill), not a description.
-8. Self-check the five-key frontmatter schema, links, and signatures; confirm the intended text landed exactly once.
+A useful audit, decision, or unresolved implementation can warrant capture without code changes. A truly trivial disposition needs a reason and actual source evidence. The unattended backstop handles interruptions but does not replace live checkpoints.
 
-## Boundaries
+## Boundaries and mirrors
 
-- Do not upload or index vault content in an external service without explicit approval for that content and service.
-- Do not add vector search, embeddings, an LLM proxy, or a second database until measured retrieval failures justify it and the user approves the architecture.
+Markdown is canonical. No external upload/index, embeddings, vector store or second knowledge database without explicit approval for that content and design. Operational receipts and private local snapshots are recovery bookkeeping.
 
-## Mirror (multi-agent setups)
-
-If more than one agent CLI writes to this vault (e.g. Claude Code and Codex), each keeps its own copy of this skill under its own config dir. When authorized to change this skill, edit every copy in one pass, compare SHA-256, and record the change in the shared vault and the day's daily note so the other agent recovers the reason.
+Keep this file byte-identical at `<HOME>\.claude\skills\obsidian-vault\SKILL.md` and `<HOME>\.codex\skills\obsidian-vault\SKILL.md`. Compare hashes after authorized changes and record the reason in the shared guide and daily note. Codex's agents/openai.yaml is UI metadata, not a Claude mirror.

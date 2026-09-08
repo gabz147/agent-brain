@@ -2,8 +2,8 @@
 status: active
 project: meta
 type: reference
-updated_by: human
-updated: 2026-01-01
+updated_by: astra
+updated: 2026-09-07
 ---
 
 # Decisions
@@ -26,6 +26,9 @@ The decision ledger. Every deliberate, cross-session choice lives here in one ta
 | (setup) | Boot files (`CLAUDE.md`, `AGENTS.md`) live outside the vault. | They survive compaction and keep the vault pure memory. | boot files | locked |
 | (setup) | Every automation component fails open: a bug must never block a real session. | A broken guard that blocks is worse than no guard. | `hooks/vault/` | locked |
 | (setup) | Never archive a note on the agent's own initiative. | Archiving is the user's call. | `VAULT-INDEX.md` Archiving | locked |
-| (setup) | Double-confirm before any source-code, running-config, commit, push, or deploy change. Vault notes are exempt. | Code is read-only by default. | boot files | locked |
+| (setup) | Double-confirm before any source-code, running-config, commit, push, or deploy change. Vault notes are exempt. | Code is read-only by default. | boot files | superseded by workflow v2 authorization row below |
 | (setup) | Existing daily-note session sections are immutable; append only. `Session N` is a label, never renumbered; the heading's time is the order. The `Open for tomorrow` line is the one mutable line. | Bounds any bad append to one extra section; concurrent writers cannot race on N. | `VAULT-INDEX.md` Daily Notes, `automation/capture-prompt.md` | locked |
 | (setup) | Automation success means a verified write or an accepted no-op; a headless child's exit 0 is never trusted on its own. | Sandbox-blocked and rate-limited children exit 0. | `automation/drain-queue.ps1`, `automation/nightly-audit.ps1` | locked |
+| (workflow v2) | Existing in-session authorization persists; ask only for an action not already authorized. Vault checkpoints need no extra confirmation. | Keep the source/config approval boundary without repeated approval loops. | [[Vault Workflow Contract]]; boot files | active |
+| (workflow v2) | New work signs the verified runtime model; preserve historical client signatures. | Actual authorship remains distinguishable across clients and retrospective capture. | Shared schema/writer and skills | active |
+| (workflow v2) | Daily capture requires verified source receipts; old Index/session bytes remain immutable, with separate frontmatter restamping. | Requests, process exits and unrelated edits do not prove capture. | [[Vault Workflow Contract]]; shared controller | active |
