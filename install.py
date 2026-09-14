@@ -277,7 +277,9 @@ def install_client(name):
             raise ValueError("Unexpectedly large client installer")
         script.write_bytes(data)
         command = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)] if windows else ["bash" if name == "claude" else "sh", str(script)]
-        subprocess.run(command, check=True)
+        # A Python child of PowerShell 7 otherwise passes incompatible PS7 modules to 5.1.
+        env = {k: v for k, v in os.environ.items() if not (windows and k.upper() == "PSMODULEPATH")}
+        subprocess.run(command, check=True, env=env)
 
 
 def configured_vault(home, client):
