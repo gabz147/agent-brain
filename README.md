@@ -1,70 +1,103 @@
-# agent-brain
+# Agent Brain
 
-A shared Markdown memory system for Claude Code and Codex. Agents read the same Obsidian vault, keep decisions and project context there, and append verified daily checkpoints that survive sessions and context resets.
+![Agent Brain: your notes, your agent, your memory.](docs/graphics/brain-cover.png)
 
-This repository is a portable public template. It contains starter notes and reusable workflow code, with no personal vault contents, transcripts, credentials, or runtime history.
+Give **Claude Code, Codex, or both** a private Obsidian vault they can maintain
+and recall across sessions. One public setup with only the skills and tools
+needed for the Brain workflow. Your notes stay on your computer.
 
-## What it does
+## Install
 
-- Keeps Markdown canonical, with a root map, priorities, project indexes, decisions, and a dead-end ledger.
-- Gives both clients one writing contract and mirrored `obsidian-vault`, `handoff`, and `source-to-vault` skills.
-- Signs new work with its verified runtime model, such as `astra` or `opus 5`, while preserving historical signatures.
-- Uses a shared Python writer for schema validation, hash checks, file locking, private before/after snapshots, atomic writes, and read-back.
-- Preserves existing daily sessions and Index entries. Corrections become new sessions; only the Open line and frontmatter can be refreshed.
-- Binds capture receipts to actual transcript fragments and verified daily sections. A tool call, changed timestamp, or successful process exit cannot prove completion.
-- Optionally captures interrupted Claude/Codex sessions while the user is away. Nightly hygiene is deterministic and makes no model calls.
-- Offers an optional Obsidian status orb, pause toggle, and soft refresh through Agent Pulse.
+Have **Obsidian** and **Python 3.11+** installed. Claude's hooks also need
+**Node.js 22+**. Guided setup checks these, lets you choose a CLI and vault
+folder, and offers the official installer if your chosen CLI is missing.
+You do not need Git, a GitHub account, or another repository.
 
-## Install or upgrade
+**macOS / Linux** (Terminal with Bash or Zsh):
 
-Start with the [laptop setup guide](LAPTOP-SETUP.md), or use [INSTALL.md](INSTALL.md) for manual installation and upgrades. `python install.py` previews a fresh installation; `python install.py --apply --persist-env` installs it on Windows. The shared controller in `automation/` is required for both live and scheduled writing. Registering scheduled jobs is optional.
-
-For an existing installation, back up its workflow files, merge the new shared boot blocks and skills, copy the controller and hook adapters, and add the workflow/manual templates without replacing real notes. Regenerate the local runtime baseline only after reviewing the actual hook/task configuration. Old queues remain readable; keep all pending state and receipts.
-
-## Layout
-
-| Path | Contents |
-|---|---|
-| `boot/` | Claude and Codex boot files with the same critical rules |
-| `vault/` | Generic starter vault, workflow contract, and model/manual daily templates |
-| `skills/` | Shared vault, durable handoff, source-cited document workflow; optional Codex UI metadata |
-| `install.py` | Preview-first installer with settings merge, backups, and optional Windows environment setup |
-| `automation/` | Shared controller, schema, capture adapters, regression tests, and optional Windows runners |
-| `hooks/vault/` | Claude Stop, SessionEnd, and PostToolUse adapters |
-| `settings/` | Hook snippet and manual Obsidian daily-note settings |
-| `plugins/agent-pulse/` | Optional desktop Obsidian indicator and pause toggle |
-| `templates/` | Reusable model-authored note skeletons |
-
-## Configuration
-
-Set these in the environment of the agent, hooks, Obsidian, and any scheduled tasks. Paths may contain spaces.
-
-| Variable | Default / meaning |
-|---|---|
-| `BRAIN_VAULT_ROOT` | `~/Documents/Brain` |
-| `BRAIN_AUTOMATION_DIR` | Installed controller directory, normally `~/.claude/vault-automation` |
-| `BRAIN_STATE_DIR` | `<automation>/state-v2`; private receipts and diagnostics |
-| `BRAIN_BACKUPS_DIR` | `<vault parent>/<vault name> Backups/versions`; private snapshots |
-| `BRAIN_PYTHON` | Python executable for the Node hook and Windows runner; otherwise `python` on Windows and `python3` for the Node hook elsewhere |
-
-`VAULT_AUTOMATION_DIR` is accepted as a legacy alias when `BRAIN_AUTOMATION_DIR` is unset. `VAULT_AUTOMATION=1` prevents capture children from recursively queueing themselves. Set `BRAIN_AUTOMATION_DIR` consistently with the installed directory, especially when running from a checkout.
-
-The schema accepts any kebab-case project slug. Configure `project_allowlist` and `folder_projects` in `automation/vault-schema.json` if you need a fixed set and folder defaults. The human-readable contract contains a generated schema block checked by hygiene.
-
-`BRAIN_COST_LEDGER` and the old automatic Markdown cost-row appender are retired. `vaultctl.py costs` summarizes actual reported usage, cost, errors, and deferrals from private operational records. Missing values remain unknown.
-
-## Verification
-
-From the checkout:
-
-```powershell
-python -m unittest discover -s automation/tests -q
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/gabz147/agent-brain/main/bootstrap.sh)
 ```
 
-The tests use temporary vaults and stub model processes. They cover preservation, conflicts, restore, source attribution, checkpoint replay, durable queues, quota/timeout handling, and portable hooks without paid model calls or live-vault writes.
+**Windows** (PowerShell):
 
-The September 13 release also exercises a real installer subprocess in a different home with spaces: preview, repeat installation, settings preservation, explicit workflow replacement, untouched notes, skill parity, source-packet replay and tamper detection. A fresh physical laptop and interactive agent/Obsidian acceptance still need the guide's smoke checks.
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/gabz147/agent-brain/main/bootstrap.ps1)))
+```
 
-The Python core and hook adapters support platforms with Python 3.10+ and Node.js. Scheduled runners and runtime task inspection require Windows, PowerShell, and Task Scheduler. The capture child requires an authenticated Claude CLI supporting the restricted flags listed in [automation/README.md](automation/README.md). Source formats and CLI behavior can change; run the installation smoke checks for your version.
+Setup previews its changes and asks before applying them. It configures Brain
+paths for your chosen clients, creates the vault, and checks the installed
+workflow. Then open the printed folder in Obsidian, restart/sign into your CLI,
+and follow [your first checkpoint](FIRST-CHECKPOINT.md).
 
-See [LICENSE](LICENSE).
+Missing Python or Node? See [prerequisites and troubleshooting](LAPTOP-SETUP.md).
+Prefer to inspect the download first? Use the
+[download-and-inspect method](LAPTOP-SETUP.md#download-and-inspect).
+
+## What you get
+
+| Component | Purpose |
+|---|---|
+| Starter vault | A blank profile, priorities, decisions, project index and daily notes |
+| Obsidian templates | Configured Daily Notes and Templates on a fresh vault |
+| `obsidian-vault` | Retrieve context and maintain notes using shared writing rules |
+| `handoff` | Leave a usable continuation point for the next session |
+| `source-to-vault` | Turn reviewed source material into traceable notes |
+| Startup instructions | Read Brain when starting; checkpoint substantive work and decisions |
+| Shared writer | Validate notes, preserve old entries, back up changes and verify writes |
+| Claude hooks, if selected | Remind Claude to checkpoint and validate completed Markdown writes |
+
+No personal skill bundle, unrelated plugins, credentials or prewritten personal
+notes are installed. Existing notes and unrelated client settings are preserved.
+Client accounts and usage costs remain your own.
+
+## How it works
+
+![Work in your agent, checkpoint verified findings into Markdown, and recall them in a future session.](docs/graphics/brain-workflow.png)
+
+The agent reads your vault's index, priorities and relevant notes before working.
+It saves substantial findings, decisions and handoffs through a shared writer,
+then appends a verified daily checkpoint. Future sessions retrieve that context
+from the same Markdown files you see in Obsidian.
+
+Claude has a Stop-hook reminder. Codex checkpoints through startup instructions
+and skills. This guides agent behavior; the [first-checkpoint check](FIRST-CHECKPOINT.md)
+confirms it works with your account, permissions and installed client version.
+Brief replies need not become notes.
+
+## Platforms and optional features
+
+The core installer, vault writer and live checkpoints support **Windows, macOS
+and Linux**, with Claude-only, Codex-only and combined installations. Your chosen
+CLI must also support your OS/version. WSL is a separate Linux installation.
+
+Background retrospective capture is **optional, Windows-only, and not enabled
+by setup**. It requires Claude authentication even when capturing Codex sessions,
+uses model tokens, and retains idle/fullscreen/pause guards. Live Codex-only use
+does not require Claude. See [optional scheduling](automation/README.md).
+[Agent Pulse](plugins/agent-pulse/README.md) is an optional Obsidian indicator.
+
+This installs a template, not a cloud sync service. Keep actual notes and runtime
+state outside this public repository. Configure your own private backup or
+Obsidian Sync separately if wanted.
+
+## Updates and maintenance
+
+Rerun the same setup command to review an update. Differing workflow files need
+explicit replacement and get local backups. Existing notes, vault settings,
+custom schema, queues and receipts remain intact. Selected clients retain their
+configured vault unless you choose a different path.
+
+- [Setup and troubleshooting](LAPTOP-SETUP.md)
+- [Advanced installation and upgrades](INSTALL.md)
+- [First checkpoint and recall](FIRST-CHECKPOINT.md)
+- [Automation reference](automation/README.md)
+- [Graphics and prompts](docs/graphics/README.md)
+
+From a reviewed checkout, run `python3 -m unittest discover -s automation/tests -q`
+(`python` on Windows). [CI](https://github.com/gabz147/agent-brain/actions) checks
+all three OS families using isolated homes, preservation/upgrade tests and
+source-bound checkpoint fixtures. Tests do not write your real vault or make
+paid model calls. GUI/account acceptance is a separate first-checkpoint step.
+
+[MIT license](LICENSE).

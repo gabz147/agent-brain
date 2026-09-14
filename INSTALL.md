@@ -2,13 +2,13 @@
 
 Use the user's existing authorization and preferences. Establish the vault location, participating clients, and whether scheduled model capture is wanted before changing the machine. Do not overwrite existing notes, boot files, skills, or settings wholesale.
 
-For a fresh two-client laptop installation, start with [LAPTOP-SETUP.md](LAPTOP-SETUP.md). The included `install.py` implements the file-copy and settings-merge steps below. Preview with `python install.py`; apply on Windows with `python install.py --apply --persist-env`. It does not download clients, log in, enable community plugins, or register scheduled tasks. Use the remaining checks below after installation.
+For guided installation with client selection, start with [LAPTOP-SETUP.md](LAPTOP-SETUP.md). The included `install.py` implements the file-copy and settings-merge steps below. Preview with `python install.py --client claude|codex|both`; apply with the same selection and `--apply`. Use `python3` on macOS/Linux. `--wizard` offers the official installer for a missing CLI. Brain paths are merged into selected-client settings automatically; `--persist-env` is a legacy Windows option. Setup does not log in, enable community plugins or register tasks. Use the remaining checks below after installation.
 
 Existing differing workflow files cause an error before writes. After reviewing the differences, `--replace-workflow` backs up replaced files outside the vault, updates package files, and merges the shared boot block while retaining client-specific text. Existing vault notes/templates/app settings, custom schema, queues and receipts remain untouched. Conflicting hook definitions require a manual merge. Backups and their target manifest are under `~/Documents/Brain Install Backups/`. This is a per-file atomic installer, not a multi-file transaction: after an interrupted install, rerun it with the same options.
 
 ## 1. Check prerequisites and preserve existing files
 
-Check `python --version`, `node --version`, and the installed agent clients. Python 3.10+ is required; the controller uses only the standard library. Obsidian is optional for agent work. Scheduling requires Windows PowerShell and Task Scheduler; retrospective capture additionally needs a logged-in Claude CLI with the required restricted-mode flags.
+Use `install.py --doctor --client claude|codex|both` to check the chosen clients. Claude hooks need Node.js 22+. Python 3.11+ is required; the controller uses only the standard library. Obsidian is optional for agent work. Scheduling requires Windows PowerShell and Task Scheduler; retrospective capture additionally needs a logged-in Claude CLI with the required restricted-mode flags.
 
 For an upgrade, save copies of the installed boot files, skills, hooks, controller/schema, and relevant settings. Preserve pending queues, source receipts, and snapshot directories. Do not copy runtime state into this public repository. The old drainer must not run concurrently while its controller files are replaced; use the existing pause toggle or disable only the two vault tasks during the authorized upgrade, then restore their prior state.
 
@@ -48,7 +48,7 @@ Copy `skills/obsidian-vault/`, `skills/handoff/` and `skills/source-to-vault/` i
 
 ## 5. Install Claude hook adapters
 
-Copy `hooks/vault/` to `~/.claude/hooks/vault/`. Merge the three arrays in `settings/vault-hooks.snippet.json` into the existing `hooks` object in `~/.claude/settings.json`. Replace `{{CLAUDE_DIR}}` with the absolute directory, using forward slashes and keeping path quotes. Preserve unrelated hooks/settings, then parse the JSON to verify it.
+Copy `hooks/vault/` to `~/.claude/hooks/vault/`. Merge the three arrays in `settings/vault-hooks.snippet.json` into the existing `hooks` object in `~/.claude/settings.json`. Replace `{{CLAUDE_DIR}}` inside each `args` entry with the absolute directory. Set `command` to the actual Python or Node executable. The direct-execution form needs no shell quoting and supports Windows without Git Bash. Claude Code 2.1.270+ is the tested minimum. Preserve unrelated hooks/settings, then parse the JSON to verify it.
 
 - PostToolUse reports an invalid completed Markdown write with exit 2. It cannot undo the write; the shared controller prevents invalid writes before they happen.
 - Stop requests a source-bound checkpoint after substantive work. The request is not evidence that capture happened.

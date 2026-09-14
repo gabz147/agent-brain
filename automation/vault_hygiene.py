@@ -103,7 +103,9 @@ def parity(home):
     clients = [(home / ".codex", "AGENTS.md"), (home / ".claude", "CLAUDE.md")]
     # A client participates when its boot file is installed. A single-client
     # installation still checks its skills without demanding another client.
-    clients = [(root, boot) for root, boot in clients if (root / boot).exists()]
+    clients = [(root, boot) for root, boot in clients
+               if (root / "skills/obsidian-vault/SKILL.md").exists()
+               or ((root / boot).exists() and "<!-- SHARED VAULT RULES START -->" in read_text(root / boot))]
     if not clients:
         return ["No installed client boot files"]
     for skill in ("obsidian-vault", "handoff", "source-to-vault"):
@@ -119,6 +121,9 @@ def parity(home):
     blocks = []
     for root, boot in clients:
         path = root / boot
+        if not path.is_file():
+            issues.append("Missing shared-rule block: " + str(path))
+            continue
         match = re.search(r"<!-- SHARED VAULT RULES START -->\s*(.*?)\s*<!-- SHARED VAULT RULES END -->", read_text(path), re.S)
         if not match:
             issues.append("Missing shared-rule block: " + str(path))

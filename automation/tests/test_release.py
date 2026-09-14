@@ -118,6 +118,9 @@ class ReleaseTests(Fixture):
 
     def test_codex_discovery_advances_only_after_enqueue(self):
         path = self.transcript()
+        # Filesystem mtime and the wall clock can differ slightly on Windows.
+        stamp = time.time() - 1
+        os.utime(path, (stamp, stamp))
         with patch.object(queue, 'enqueue', side_effect=OSError('disk failed')):
             with self.assertRaises(OSError):
                 queue.discover_codex(self.vault, self.directory, self.base, minimum_idle_seconds=0)
@@ -128,10 +131,14 @@ class ReleaseTests(Fixture):
 
     def test_changed_codex_source_is_rediscovered_and_active_skipped(self):
         path = self.transcript()
+        stamp = time.time() - 1
+        os.utime(path, (stamp, stamp))
         self.assertEqual(queue.discover_codex(self.vault, self.directory, self.base), 0)
         self.assertEqual(queue.discover_codex(self.vault, self.directory, self.base, minimum_idle_seconds=0), 1)
         with path.open('a') as out:
             out.write('\n')
+        stamp = time.time() - 1
+        os.utime(path, (stamp, stamp))
         self.assertEqual(queue.discover_codex(self.vault, self.directory, self.base, minimum_idle_seconds=0), 1)
 
     def test_concurrent_capture_conflict_rebuilds_once(self):

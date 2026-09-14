@@ -1,110 +1,158 @@
-# Set up the shared agent workflow on a laptop
+# Set up Agent Brain
 
-This installs the same Brain writing rules, daily checkpoints, durable handoffs and document-to-note workflow for Claude Code and Codex. It creates a generic starter vault. Personal notes, credentials, conversations, model subscriptions, third-party plugins, project tools and the workstation's Obsidian theme/companion are not in this public repository. Git pull updates the template; it does not sync personal vault edits between machines.
+Agent Brain is a standalone public vault workflow. You need this repository only.
+It installs a generic Obsidian vault and three related skills for Claude Code,
+Codex, or both, without anyone's personal notes or unrelated skills.
 
-## 1. Install and sign in to the clients
+## Prerequisites
 
-Use a normal Windows user account and PowerShell. Install Git, Python 3.10 or later, Node.js and the two clients using their official setup instructions: [Codex CLI](https://developers.openai.com/codex/cli/), [Claude Code](https://code.claude.com/docs/en/setup). Install [Obsidian](https://obsidian.md/download) if you want its UI. Git and Python must be on PATH; Node is required by the Claude hook adapters. Install ripgrep (`rg`) for the skills' search examples.
+- **Obsidian**, already installed: [official download](https://obsidian.md/download).
+- **Python 3.11+**, on PATH: [official downloads](https://www.python.org/downloads/).
+  On Windows select Add Python to PATH. On Linux use your distribution's Python
+  package if it is new enough. Reopen the terminal afterward.
+- **Node.js 22+** for Claude's hooks: [official LTS download](https://nodejs.org/en/download).
+  Codex-only setup does not need Node unless your Codex installation does.
+- An account for your chosen CLI. Setup offers a missing CLI's official native
+  installer with your approval. Alternatively install
+  [Claude Code](https://code.claude.com/docs/en/setup) or
+  [Codex](https://github.com/openai/codex#installing-and-running-codex-cli) yourself.
 
-Check the tools in a newly opened terminal:
+Claude Code **2.1.270+** is the tested minimum for these direct-execution hooks.
+They do not require Git Bash. An older installed CLI needs an update before
+guided setup can finish.
 
-```powershell
-git --version
-python --version
-node --version
-rg --version
-codex --version
-claude --version
-codex login
-claude auth login
+The bootstrap needs HTTPS access to GitHub and curl on macOS/Linux. Python
+downloads one immutable repository revision; Git and GitHub login are unnecessary.
+Brain setup requests no administrator permission, permanent execution-policy
+change or model call. Vendor installers have their own platform requirements.
+
+## Guided installation
+
+Copy the command for your system from the [README](README.md#install).
+
+1. Choose Claude Code, Codex, or both.
+2. Accept the default vault folder (`~/Documents/Brain`) or choose another.
+3. Resolve missing prerequisites. If offered, approve the official CLI installer.
+   Sign-in happens separately when you start the client.
+4. Review the planned files. Differing workflow files require a replacement
+   choice and are backed up. Confirm application of the plan.
+5. Open the printed folder in Obsidian. Start a fresh CLI session and follow
+   [FIRST-CHECKPOINT.md](FIRST-CHECKPOINT.md). A copy is saved beside the controller.
+
+Startup rules ask agents to checkpoint substantive work, findings, decisions and
+handoffs. Claude also gets a Stop-hook reminder. Codex uses the instructions and
+shared writer directly. Test writing and next-session recall with the guide;
+copied files alone do not prove agent behavior.
+
+## Download and inspect
+
+Download the [public ZIP](https://github.com/gabz147/agent-brain/archive/refs/heads/main.zip),
+extract it, read `install.py` and this guide, and open a terminal in that folder.
+You can also clone this public repo normally with Git.
+
+macOS/Linux:
+
+```bash
+python3 install.py --wizard
 ```
 
-Authenticate on the destination laptop. Do not copy token files from another computer. Select a model available to your account in each client; the workflow records the model that actually runs and does not require a specific paid tier. Scheduled retrospective capture additionally needs a `model` setting in Claude's settings and the CLI flags described in [automation/README.md](automation/README.md).
-
-Release validation used Python 3.11.9, Node 22.15.0, Codex CLI 0.154.0 and Claude Code 2.1.270 on Windows. These are observed versions, not minimum client versions or a promise of account/model availability.
-
-## 2. Clone, preview and install
+Windows PowerShell:
 
 ```powershell
-New-Item -ItemType Directory -Force "$env:USERPROFILE\Developer" | Out-Null
-Set-Location "$env:USERPROFILE\Developer"
-git clone https://github.com/gabz147/agent-brain.git
-Set-Location agent-brain
-python install.py
-python install.py --apply --persist-env
+python install.py --wizard
 ```
 
-The preview lists every planned file. On a fresh account, installation creates:
+For explicit noninteractive setup, preview then apply. Substitute `claude` or
+`both` for `codex`, and use `python` on Windows:
 
-| Location | Installed content |
+```bash
+python3 install.py --doctor --client codex
+python3 install.py --client codex
+python3 install.py --client codex --apply
+python3 install.py --client codex --verify
+```
+
+`--apply` installs and validates workflow files; it does not download a CLI.
+Use `--doctor` to check the actual CLI, or the wizard to offer installation.
+Provide `--vault "/path/to/Brain"` for a custom vault. Use
+`--home "/path/to/test home"` only for an isolated fixture. Native client downloads
+are disabled for another home so tests cannot install software into your account.
+
+## Installed locations
+
+| Location | Content |
 |---|---|
-| `~/Documents/Brain` | Generic notes, workflow contract, model/manual daily templates and core Obsidian daily settings |
-| `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` | Global startup and writing rules |
-| Both clients' `skills/` directories | `obsidian-vault`, `handoff`, `source-to-vault` |
-| `~/.claude/vault-automation` | Shared controller, schema and optional scheduled runners |
-| `~/.claude/hooks/vault` | Claude live checkpoint, validation and queue adapters |
-| `~/.claude/settings.json` | Three merged hook entries; unrelated settings retained |
+| Chosen vault | Generic notes, contracts, indexes and Obsidian daily templates/settings |
+| `~/.claude/CLAUDE.md`, if selected | Claude Brain startup/writing rules |
+| `~/.codex/AGENTS.md`, if selected | Codex Brain startup/writing rules |
+| Selected clients' `skills/` folders | `obsidian-vault`, `handoff`, `source-to-vault` only |
+| `~/.claude/vault-automation` | Shared writer/schema and first-checkpoint guide; used by either client |
+| `~/.claude/hooks/vault`, if selected | Claude reminder, validation and interruption queue adapters |
+| Selected clients' configuration | Brain paths/interpreter merged with existing settings |
 
-For another vault path, give the same `--vault 'D:\Notes\Brain'` argument to preview and apply. If existing workflow files differ, inspect them before rerunning with `--replace-workflow`. Replaced files get backups; real vault notes are never replaced. Existing hook conflicts and incomplete existing vaults require the manual merge in [INSTALL.md](INSTALL.md). Keep scheduled runners paused while upgrading their files, preserving their previous pause/task state.
+The shared controller retains its established `.claude/vault-automation` location
+for compatibility. Codex-only setup uses that folder but does not install Claude,
+its boot file, its skills or its hooks.
 
-The installer sets three Windows user environment variables with `--persist-env`. Also set them in this shell, using your custom vault path if applicable:
+Brain paths are stored in Claude's `settings.json.env` and Codex's
+`shell_environment_policy.set`. Shell-profile editing and `--persist-env` are
+unnecessary for normal agent use. Restart your CLI to load its settings.
+For manual commands outside a client, explicitly supply your vault:
 
-```powershell
-$env:BRAIN_VAULT_ROOT = Join-Path $env:USERPROFILE 'Documents\Brain'
-$env:BRAIN_AUTOMATION_DIR = Join-Path $env:USERPROFILE '.claude\vault-automation'
-$env:BRAIN_PYTHON = (Get-Command python).Source
-$vaultCtl = Join-Path $env:BRAIN_AUTOMATION_DIR 'vaultctl.py'
+```bash
+python3 "$HOME/.claude/vault-automation/vaultctl.py" --vault "$HOME/Documents/Brain" validate
 ```
 
-Restart the terminal application and Obsidian before using the new environment in fresh sessions. If they still inherit old values, sign out and back in to Windows. Do not close another active agent's work as part of setup. Custom `BRAIN_STATE_DIR` or `BRAIN_BACKUPS_DIR` values must name this laptop's private storage; clear stale inherited values deliberately.
-
-On macOS/Linux, `python3 install.py --apply` performs the file installation; omit `--persist-env` and export the three printed variables in your shell profile. Windows Task Scheduler and presence detection are Windows-only. Native Windows is the tested laptop path; WSL is a separate environment with different home/path and scheduling behavior.
-
-## 3. Verify the installation
+Windows:
 
 ```powershell
-python -m unittest discover -s automation/tests -q
-python $vaultCtl validate
-python $vaultCtl hygiene
-codex login status
-claude auth status
+python "$env:USERPROFILE/.claude/vault-automation/vaultctl.py" --vault "$env:USERPROFILE/Documents/Brain" validate
 ```
 
-Expected: tests pass, validation reports `valid`, hygiene reports `verified` with no issues. Investigate issues before claiming success. These checks make no paid model calls. The installer preserves an existing customized schema, so an upgrade may need a reviewed schema/contract merge.
+Use your actual custom vault path. Model choices, account tokens, trust approvals
+and unrelated settings are preserved. Nonstandard `CODEX_HOME` or
+`CLAUDE_CONFIG_DIR` need the manual steps in [INSTALL.md](INSTALL.md); guided setup
+uses the standard directories beneath the selected home.
 
-Open `~/Documents/Brain` as a vault in Obsidian. On a fresh vault, Daily Notes and Templates are enabled and configured. Use **Open today's daily note** and confirm the date expands, the note has the five sections and `human` signatures, and opening it a second time leaves it unchanged. Existing vault settings are preserved and may need the manual settings step in INSTALL.md.
+## Updates and recovery
 
-## 4. Make both terminal agents demonstrate the workflow
+Rerun the entry command or download a fresh ZIP. Review the preview, then approve
+workflow replacement if needed. With explicit commands, use
+`--replace-workflow` for both preview and apply.
 
-Start `claude` in your home or a project directory. Then start a separate `codex` session. Give each this prompt, one at a time:
+Replaced files have before-images and a `manifest.jsonl` mapping their original
+paths under `~/Documents/Brain Install Backups/<timestamp>/`. Stop the relevant
+agent before restoring a selected backup to its recorded path; preserve later
+changes. There is no automatic destructive reset.
 
-> Read your global boot file and the Brain startup notes in full. Resolve the vault and controller paths from the environment. Verify your actual runtime model. Use the shared writer to record a short installation verification in the existing Vault Autonomy Pipeline note and its index, then create a source-bound daily checkpoint from this actual session. Read back the note, daily section and receipt. State any failed check explicitly.
+Existing notes, templates, Obsidian settings, custom schema, queues, receipts and
+local-only files are preserved. Repeated file installation is idempotent;
+verification may append private diagnostics. A failed install is reported
+explicitly. Correct the cause and rerun with the same options. This is a per-file
+atomic installer, not a multi-file transaction. Combined/conflicting hook groups
+need a reviewed manual merge. Pause existing scheduled jobs during upgrades and
+restore their previous state afterward; setup does not schedule new jobs.
 
-Confirm each agent uses the installed `vaultctl.py`, signs its actual model, and appends a new session without editing the other's old session. Ask the second agent to retrieve the first agent's checkpoint and cite the note. This verifies shared memory across clients. Account permissions and client sandbox rules still apply; grant access to the chosen Brain/controller directories through each client's normal controls if needed. Do not globally disable safeguards to make a smoke test pass.
+## Troubleshooting
 
-Claude's Stop hook requests a checkpoint and SessionEnd queues interruptions; a request is not proof of capture. Codex follows its global boot instructions and checkpoints directly. If a transcript format is unsupported, preserve the error/source and leave capture pending instead of inventing a receipt.
+- **Python missing:** install Python 3.11+, enable PATH on Windows, reopen the
+  terminal and rerun. `py -3` can also launch a downloaded installer on Windows.
+- **Node missing:** install Node LTS and reopen the terminal. It is needed for
+  Claude hooks, not the Python writer.
+- **CLI missing after installation:** reopen the terminal for the vendor's PATH
+  change and run its `--version` command.
+- **Folder lacks a Brain index/contract:** choose an empty folder or deliberately
+  migrate your vault with INSTALL.md. Setup will not guess how to merge it.
+- **Permission denied or symlink escape:** choose owned, separate directories.
+  Do not use broad permission resets or disable client safeguards.
+- **Unsupported transcript/failed checkpoint:** keep the error and session.
+  An unsupported format cannot produce verified capture.
+- **GitHub download/rate limit:** retry later or use the public ZIP method.
 
-## 5. Match the optional background behavior
+PDF extraction optionally needs PyMuPDF in the interpreter used for extraction,
+preferably in a project virtual environment. Text and DOCX use the standard library.
 
-The workstation uses the optional background components too. To reproduce that behavior, install both scheduled tasks using the exact commands in [automation/README.md, Optional Windows tasks](automation/README.md#optional-windows-tasks), then review definitions, record the runtime baseline, and observe an eligible run. Keep the hidden VBS launcher, Interactive user identity, five-minute idle/fullscreen checks and pause toggle. The installer itself does not register tasks or spend model tokens. An idle deferral is expected while you are actively using the laptop.
-
-For the status orb, copy `plugins/agent-pulse` to `<vault>/.obsidian/plugins/agent-pulse` and enable **Agent Pulse** in Obsidian's community plugins settings. See its [README](plugins/agent-pulse/README.md). Test pause/resume and refresh. The orb displays activity, not verified capture completion.
-
-## 6. Additional skills and ongoing updates
-
-This public template installs only the three Brain skills. If you have a separate private skills backup, install it without overwriting these portable copies; adjust machine-specific paths and install its third-party dependencies separately. Native client plugins and MCP servers need their own installation and authentication. A skill folder alone cannot recreate Blender, browser, video or other project runtimes.
-
-For a template update:
-
-```powershell
-Set-Location "$env:USERPROFILE\Developer\agent-brain"
-git pull --ff-only
-python install.py --replace-workflow
-python install.py --apply --replace-workflow --persist-env
-```
-
-Use the same custom `--vault` path every time. Review any hook conflict manually. Existing notes/templates and the custom schema are intentionally preserved, so merge relevant guide/schema changes with the shared writer after reviewing them. Re-run the affected smoke checks and checkpoint the result. Keep personal Brain notes outside the public checkout.
-
-## Prompt for the installing CLI agent
-
-> Install this repository's shared Brain workflow for Claude Code and Codex on this laptop. Read LAPTOP-SETUP.md and INSTALL.md completely, inspect existing files, preview install.py and perform the authorized installation. Preserve real notes, client-specific rules, unrelated settings, queues and receipts. Resolve paths for this user. Test the installed controller and hooks, then verify a real checkpoint in each client. If full background behavior is requested, install and verify the documented optional tasks and Agent Pulse. Record actual outcomes and any outstanding UI/login acceptance in Brain; do not claim another machine's tests establish this laptop's runtime behavior.
+Optional Windows background capture and Agent Pulse are documented in
+[automation/README.md](automation/README.md) and
+[the plugin guide](plugins/agent-pulse/README.md). Background capture needs Claude
+and may consume model tokens; live Codex-only use does not.

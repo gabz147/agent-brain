@@ -1,0 +1,10 @@
+[
+  {
+    "file": "brain-cover.png",
+    "prompt": "Use case: stylized-concept. Create a wide 3:1 GitHub README header graphic. Premium flat editorial geometric design on warm ivory paper, charcoal type, restrained forest-green and muted orange accents. Exact large title: \"AGENT BRAIN\". Exact subtitle: \"Your notes. Your agent. Your memory.\" Graphic: two minimal terminal prompt frames flank a central open folder of Markdown document cards, thin connecting lines. Documents represent durable decisions and notes; terminal frames have only simple >_ glyphs, no extra words. Crisp purposeful typography, ample whitespace, subtle fine grid and clean flat vector-like shapes. No photograph, no robot, no anatomical brain, no 3D render, no third party logos, no watermark. This is a public Obsidian vault workflow cover, not a general skills pack."
+  },
+  {
+    "file": "brain-workflow.png",
+    "prompt": "Use case: infographic-diagram. Create a landscape 3:2 GitHub documentation graphic matching an ivory-paper, charcoal-text, forest-green and muted orange flat editorial visual identity. Exact heading: \"MEMORY THAT STAYS WITH YOU\". Three large connected stages left to right with simple refined icons. Left label exact \"WORK\" with terminal prompt icon. Middle label exact \"CHECKPOINT\" with document plus checkmark icon. Right label exact \"RECALL\" with open folder of linked notes icon. Arrows connect work to checkpoint to recall; a thin return arrow below connects recall back to work, indicating future sessions. Footer exact: \"Claude Code / Codex + Obsidian\". Generous spacing and margins, precise legible text, premium technical graphic, simple 2D geometric forms. No extra text, no photographs, no 3D, no fake screenshots, no logos, no robots, no brains, no watermarks."
+  }
+]

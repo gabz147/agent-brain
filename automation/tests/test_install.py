@@ -38,7 +38,7 @@ class InstallTests(unittest.TestCase):
 
     def test_install_repeat_upgrade_and_source_packet(self):
         with tempfile.TemporaryDirectory(prefix="brain laptop ") as tmp:
-            home = Path(tmp) / "Different User"
+            home = Path(tmp).resolve() / "Different User"
             vault = home / "Custom Vault"
             args = [sys.executable, str(REPO / "install.py"), "--home", str(home), "--vault", str(vault)]
 
@@ -66,9 +66,10 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(data["model"], "existing-model")
             self.assertEqual(data["hooks"]["Stop"][0]["hooks"][0]["command"], "unrelated-hook")
             self.assertEqual(len(data["hooks"]["Stop"]), 2)
-            before = {p: p.read_bytes() for p in home.rglob("*") if p.is_file()}
+            # Verification appends private diagnostics; installed files and notes stay idempotent.
+            before = {p: p.read_bytes() for p in home.rglob("*") if p.is_file() and "state-v2" not in p.parts}
             run(args + ["--apply"])
-            self.assertEqual(before, {p: p.read_bytes() for p in home.rglob("*") if p.is_file()})
+            self.assertEqual(before, {p: p.read_bytes() for p in home.rglob("*") if p.is_file() and "state-v2" not in p.parts})
             for skill in ("obsidian-vault", "handoff", "source-to-vault"):
                 self.assertEqual((home / f".claude/skills/{skill}/SKILL.md").read_bytes(),
                                  (home / f".codex/skills/{skill}/SKILL.md").read_bytes())

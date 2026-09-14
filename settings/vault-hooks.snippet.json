@@ -8,7 +8,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"{{CLAUDE_DIR}}/hooks/vault/validate-vault-frontmatter.py\"",
+            "command": "python",
+            "args": ["{{CLAUDE_DIR}}/hooks/vault/validate-vault-frontmatter.py"],
             "timeout": 5
           }
         ]
@@ -19,7 +20,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"{{CLAUDE_DIR}}/hooks/vault/stop-vault-gate.js\"",
+            "command": "node",
+            "args": ["{{CLAUDE_DIR}}/hooks/vault/stop-vault-gate.js"],
             "timeout": 30,
             "asyncRewake": true,
             "rewakeSummary": "Vault checkpoint"
@@ -32,7 +34,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"{{CLAUDE_DIR}}/hooks/vault/session-end-enqueue.js\""
+            "command": "node",
+            "args": ["{{CLAUDE_DIR}}/hooks/vault/session-end-enqueue.js"]
           }
         ]
       }

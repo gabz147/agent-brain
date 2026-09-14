@@ -25,7 +25,7 @@ SECTIONS["What Got Done"] = ["Verified the tested change."]
 class Fixture(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.base = Path(self.temp.name)
+        self.base = Path(self.temp.name).resolve()
         self.vault = core.Vault(self.base / "Brain", self.base / "state", self.base / "backups")
         self.vault.root.mkdir()
         self.directory = self.base / "automation"

@@ -35,7 +35,7 @@ Every live note has exactly `status`, `project`, `type`, `updated_by`, `updated`
 
 Sign frontmatter with the last writing model, new folder-index descriptions and daily Index bullets with `` `(model)` ``, and new session headings with `` `model` ``. Never re-sign another writer's existing entry.
 
-Agent writers use `python "<BRAIN_AUTOMATION_DIR>/vaultctl.py"`. `inspect` returns the current text/hash; `commit` applies checked note edits; `checkpoint-context` and `checkpoint` bind a daily append to the actual transcript and model. Re-read and rebuild after a conflict; never replace another writer's work.
+Agent writers run `"<BRAIN_AUTOMATION_DIR>/vaultctl.py"` with the interpreter from `BRAIN_PYTHON`, otherwise `python3` on macOS/Linux or `python` on Windows. `inspect` returns the current text/hash; `commit` applies checked note edits; `checkpoint-context` and `checkpoint` bind a daily append to the actual transcript and model. Re-read and rebuild after a conflict; never replace another writer's work.
 
 Interactive hooks fail open on internal errors and log them. Scheduled captures defer while the user is active, fullscreen, or paused; keep hidden launchers and Interactive task identity. A failure leaves work pending. Neither an exit-zero result nor another writer's edit establishes capture.
 <!-- SHARED VAULT RULES END -->
