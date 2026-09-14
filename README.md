@@ -7,7 +7,7 @@ This repository is a portable public template. It contains starter notes and reu
 ## What it does
 
 - Keeps Markdown canonical, with a root map, priorities, project indexes, decisions, and a dead-end ledger.
-- Gives both clients one writing contract and mirrored `obsidian-vault` and `handoff` skills.
+- Gives both clients one writing contract and mirrored `obsidian-vault`, `handoff`, and `source-to-vault` skills.
 - Signs new work with its verified runtime model, such as `astra` or `opus 5`, while preserving historical signatures.
 - Uses a shared Python writer for schema validation, hash checks, file locking, private before/after snapshots, atomic writes, and read-back.
 - Preserves existing daily sessions and Index entries. Corrections become new sessions; only the Open line and frontmatter can be refreshed.
@@ -17,7 +17,7 @@ This repository is a portable public template. It contains starter notes and reu
 
 ## Install or upgrade
 
-Follow [INSTALL.md](INSTALL.md). The shared controller in `automation/` is required for both live and scheduled writing. Registering scheduled jobs is optional.
+Start with the [laptop setup guide](LAPTOP-SETUP.md), or use [INSTALL.md](INSTALL.md) for manual installation and upgrades. `python install.py` previews a fresh installation; `python install.py --apply --persist-env` installs it on Windows. The shared controller in `automation/` is required for both live and scheduled writing. Registering scheduled jobs is optional.
 
 For an existing installation, back up its workflow files, merge the new shared boot blocks and skills, copy the controller and hook adapters, and add the workflow/manual templates without replacing real notes. Regenerate the local runtime baseline only after reviewing the actual hook/task configuration. Old queues remain readable; keep all pending state and receipts.
 
@@ -27,7 +27,8 @@ For an existing installation, back up its workflow files, merge the new shared b
 |---|---|
 | `boot/` | Claude and Codex boot files with the same critical rules |
 | `vault/` | Generic starter vault, workflow contract, and model/manual daily templates |
-| `skills/` | Shared vault and durable handoff skills; optional Codex UI metadata |
+| `skills/` | Shared vault, durable handoff, source-cited document workflow; optional Codex UI metadata |
+| `install.py` | Preview-first installer with settings merge, backups, and optional Windows environment setup |
 | `automation/` | Shared controller, schema, capture adapters, regression tests, and optional Windows runners |
 | `hooks/vault/` | Claude Stop, SessionEnd, and PostToolUse adapters |
 | `settings/` | Hook snippet and manual Obsidian daily-note settings |
@@ -61,6 +62,8 @@ python -m unittest discover -s automation/tests -q
 ```
 
 The tests use temporary vaults and stub model processes. They cover preservation, conflicts, restore, source attribution, checkpoint replay, durable queues, quota/timeout handling, and portable hooks without paid model calls or live-vault writes.
+
+The September 13 release also exercises a real installer subprocess in a different home with spaces: preview, repeat installation, settings preservation, explicit workflow replacement, untouched notes, skill parity, source-packet replay and tamper detection. A fresh physical laptop and interactive agent/Obsidian acceptance still need the guide's smoke checks.
 
 The Python core and hook adapters support platforms with Python 3.10+ and Node.js. Scheduled runners and runtime task inspection require Windows, PowerShell, and Task Scheduler. The capture child requires an authenticated Claude CLI supporting the restricted flags listed in [automation/README.md](automation/README.md). Source formats and CLI behavior can change; run the installation smoke checks for your version.
 

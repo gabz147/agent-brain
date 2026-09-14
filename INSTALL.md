@@ -2,6 +2,10 @@
 
 Use the user's existing authorization and preferences. Establish the vault location, participating clients, and whether scheduled model capture is wanted before changing the machine. Do not overwrite existing notes, boot files, skills, or settings wholesale.
 
+For a fresh two-client laptop installation, start with [LAPTOP-SETUP.md](LAPTOP-SETUP.md). The included `install.py` implements the file-copy and settings-merge steps below. Preview with `python install.py`; apply on Windows with `python install.py --apply --persist-env`. It does not download clients, log in, enable community plugins, or register scheduled tasks. Use the remaining checks below after installation.
+
+Existing differing workflow files cause an error before writes. After reviewing the differences, `--replace-workflow` backs up replaced files outside the vault, updates package files, and merges the shared boot block while retaining client-specific text. Existing vault notes/templates/app settings, custom schema, queues and receipts remain untouched. Conflicting hook definitions require a manual merge. Backups and their target manifest are under `~/Documents/Brain Install Backups/`. This is a per-file atomic installer, not a multi-file transaction: after an interrupted install, rerun it with the same options.
+
 ## 1. Check prerequisites and preserve existing files
 
 Check `python --version`, `node --version`, and the installed agent clients. Python 3.10+ is required; the controller uses only the standard library. Obsidian is optional for agent work. Scheduling requires Windows PowerShell and Task Scheduler; retrospective capture additionally needs a logged-in Claude CLI with the required restricted-mode flags.
@@ -34,11 +38,13 @@ Optional `BRAIN_STATE_DIR` and `BRAIN_BACKUPS_DIR` override private storage. Kee
 
 Customize `vault-schema.json`'s `folder_projects` for the user's actual folders; an optional `project_allowlist` restricts otherwise valid kebab-case slugs. Keep the shared human schema block synchronized through reviewed hygiene repairs.
 
-## 4. Merge boot rules and install both skills
+## 4. Merge boot rules and install the three skills
 
 Merge `boot/CLAUDE.md` into `~/.claude/CLAUDE.md` and, for Codex, `boot/AGENTS.md` into `~/.codex/AGENTS.md`. Boot files stay outside the vault. Their `SHARED VAULT RULES` blocks must be identical.
 
-Copy `skills/obsidian-vault/` and `skills/handoff/` into each participating client's skills directory. Both copies of each `SKILL.md` must be byte-identical. Codex's `agents/openai.yaml` is optional UI metadata. Angle-bracket paths in the skills/contract mean resolved environment paths, not literal folder names.
+Copy `skills/obsidian-vault/`, `skills/handoff/` and `skills/source-to-vault/` into each participating client's skills directory. Both copies of each `SKILL.md` must be byte-identical. Codex's `agents/openai.yaml` is optional UI metadata. Angle-bracket paths in the skills/contract mean resolved environment paths, not literal folder names.
+
+`source-to-vault` preserves original documents and extracts source packets in project folders outside Brain. Text and DOCX need only Python; PDF extraction additionally uses PyMuPDF. Install that dependency only if needed. Extraction does not replace full source review, OCR, or checking citations against the original.
 
 ## 5. Install Claude hook adapters
 

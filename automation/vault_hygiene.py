@@ -106,7 +106,7 @@ def parity(home):
     clients = [(root, boot) for root, boot in clients if (root / boot).exists()]
     if not clients:
         return ["No installed client boot files"]
-    for skill in ("obsidian-vault", "handoff"):
+    for skill in ("obsidian-vault", "handoff", "source-to-vault"):
         copies = []
         for root, _ in clients:
             path = root / "skills" / skill / "SKILL.md"
