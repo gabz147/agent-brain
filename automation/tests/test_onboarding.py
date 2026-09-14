@@ -21,6 +21,19 @@ import install
 
 
 class OnboardingTests(unittest.TestCase):
+    def test_native_codex_is_found_before_path_refresh(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp).resolve()
+            local = home / "AppData/Local"
+            default = local / "Programs/OpenAI/Codex/bin" if os.name == "nt" else home / ".local/bin"
+            for directory in (default, home / "Chosen bin"):
+                target = directory / ("codex.exe" if os.name == "nt" else "codex")
+                target.parent.mkdir(parents=True)
+                target.write_bytes(b"fixture")
+                env = {"LOCALAPPDATA": str(local), "CODEX_INSTALL_DIR": "" if directory == default else str(directory)}
+                with patch.object(install.shutil, "which", return_value=None), patch.object(Path, "home", return_value=home), patch.dict(os.environ, env):
+                    self.assertEqual(install.executable("codex"), [str(target)])
+
     def test_each_client_then_add_other_preserves_notes_and_settings(self):
         for client in ("claude", "codex", "both"):
             with self.subTest(client=client), tempfile.TemporaryDirectory(prefix="brain choose ") as tmp:

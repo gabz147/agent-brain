@@ -218,7 +218,12 @@ def executable(name):
     found = shutil.which(name)
     if not found:
         # Native vendor installers may have just added this directory to future shells.
-        candidate = Path.home() / ".local/bin" / (name + (".exe" if os.name == "nt" else ""))
+        directory = Path.home() / ".local/bin"
+        if name == "codex":
+            if os.name == "nt":
+                directory = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "Programs/OpenAI/Codex/bin"
+            directory = Path(os.environ.get("CODEX_INSTALL_DIR") or directory)
+        candidate = directory / (name + (".exe" if os.name == "nt" else ""))
         if candidate.is_file():
             found = str(candidate)
     if not found:
