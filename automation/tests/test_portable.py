@@ -20,7 +20,7 @@ class PortableTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="brain-export-")
         self.addCleanup(self.temp.cleanup)
-        self.base = Path(self.temp.name)
+        self.base = Path(self.temp.name).resolve()
         self.vault = self.base / "Vault with spaces"
         self.auto = self.base / "Controller with spaces"
         self.auto.mkdir()

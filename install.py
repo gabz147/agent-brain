@@ -270,7 +270,8 @@ def install_client(name):
     print(f"Running the official {name} installer from {url}")
     with tempfile.TemporaryDirectory(prefix="brain-cli-") as temporary:
         script = Path(temporary) / ("install.ps1" if windows else "install.sh")
-        with urllib.request.urlopen(url, timeout=60) as response:
+        request = urllib.request.Request(url, headers={"User-Agent": "agent-brain-setup"})
+        with urllib.request.urlopen(request, timeout=60) as response:
             data = response.read(2_000_001)
         if len(data) > 2_000_000:
             raise ValueError("Unexpectedly large client installer")
