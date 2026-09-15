@@ -3,12 +3,12 @@ status: active
 project: meta
 type: index
 updated_by: astra
-updated: 2026-09-07
+updated: 2026-09-15
 ---
 
 # VAULT INDEX
 
-Read this map and [[Vault Workflow Contract]] fully at startup and after a context reset. At startup, also read yesterday's daily note (Open line first) and [[Active Priorities]]. Only backfill evidence actually available; do not invent empty days.
+Read this map once when substantive work needs vault context. The boot file defines when to load context; priorities, daily history and workflow details are retrieved only for the current task.
 
 ## Vault location
 
@@ -33,7 +33,7 @@ Use `BRAIN_VAULT_ROOT`, default `~/Documents/Brain`. The boot files stay outside
     Templates
 ```
 
-Project folders carry a same-named index. Resources maps the shared guides and its Templates subfolder. Add the folder index, parent entry, and this map in the same change when creating a folder.
+Project folders carry a same-named index. Start there, then read relevant notes. Resources maps the writing and recovery guides.
 
 ## Root notes
 
@@ -48,11 +48,9 @@ Project folders carry a same-named index. Resources maps the shared guides and i
 
 [Add the user's confirmed communication and working preferences here.]
 
-## Vault Rules for AI
+## Writing
 
-[[Vault Workflow Contract]] is the detailed authority for schema, verified model signatures, shared writes, immutable daily sessions, source receipts, indexes, and recovery. The machine schema is `vault-schema.json` beside the shared controller. Both boot files retain the same critical rules; both clients share identical vault/handoff skills.
-
-Markdown is canonical. No separate memory database, embeddings, external index, or personal-vault publication without explicit approval. Read selected evidence fully and verify files/commands before claiming current state or completion. Use the shared writer for note mutations and live checkpoints.
+[[Vault Workflow Contract]] holds the shared writer and checkpoint formats. Load its applicable sections before writing; never mutate notes directly. Boot rules remain in force.
 
 ## Living Profile
 

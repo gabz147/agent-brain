@@ -3,7 +3,7 @@ status: active
 project: meta
 type: guide
 updated_by: astra
-updated: 2026-09-07
+updated: 2026-09-15
 ---
 
 # Vault Workflow Contract
@@ -54,7 +54,11 @@ Code is exempt. Frozen `09 - Archive/Old Memory/` is exempt and read-only. One o
 
 ## Read and reconcile
 
-Read the full target, its index, directly relevant linked notes and today's daily note immediately before writing. Search filenames first, then exact wikilinks, headings and body. Current claims require source evidence; chronology alone is not proof of current state. Default retrieval excludes application internals and Archive:
+This is an on-demand reference, not a startup read. Boot files define the loading policy. Before a vault write, read this section plus Authorship, Schema, Shared writer and Related notes and ledgers; add Daily checkpoints and coverage for a checkpoint, Handoffs and manual use for a handoff, and Maintenance and acceptance for automation work. Reuse sections already in context. Read the full contract when auditing or changing the workflow itself.
+
+Read the full target topic note, its index and directly relevant linked notes immediately before writing. For a daily append, inspect the day's Open line and Index, then relevant sessions to reconcile coverage; the controller reads the whole file, chooses max+1 and preserves historical bytes. Read the whole daily note only for a full-day review or when relevant coverage is unclear. Never claim an excerpt is a full review.
+
+Search filenames first, then exact wikilinks, headings and body. Current claims require source evidence; chronology alone is not proof of current state. Default retrieval excludes application internals and Archive:
 
 ```powershell
 $vaultRoot = '<BRAIN_VAULT_ROOT>'
@@ -134,6 +138,8 @@ Live capture remains primary. The idle-window backstop reads Claude's queue and 
 ## Related notes and ledgers
 
 Use wikilinks for named businesses/platforms and directly referenced notes; not generic words, duplicate links or self-links. Folders 02–07 have named indexes covering their notes with stable one-line descriptions and author tags. Update indexes for new, renamed, moved or materially changed notes. Scan direct backlinks for drift.
+
+New folders require their index, parent entry and vault map update together. Rename in Obsidian, or repair every incoming wikilink in the same change; update both indexes for moves. Never archive on your own initiative. Keep deliverables in project folders and handoffs in the vault; scratch files are intermediates only.
 
 Keep one current-state block per project. Update Active Priorities only when work or its state changes: at most five Active Now items, one touched date per actionable bullet, older-than-14-day items move to Review, no automatic deletion or archiving. Parked/Watch is non-actionable reference.
 

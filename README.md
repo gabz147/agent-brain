@@ -43,7 +43,7 @@ Prefer to inspect the download first? Use the
 | `obsidian-vault` | Retrieve context and maintain notes using shared writing rules |
 | `handoff` | Leave a usable continuation point for the next session |
 | `source-to-vault` | Turn reviewed source material into traceable notes |
-| Startup instructions | Read Brain when starting; checkpoint substantive work and decisions |
+| Startup instructions | Load relevant context on demand; checkpoint substantive work and decisions |
 | Shared writer | Validate notes, preserve old entries, back up changes and verify writes |
 | Claude hooks, if selected | Remind Claude to checkpoint and validate completed Markdown writes |
 
@@ -55,8 +55,13 @@ Client accounts and usage costs remain your own.
 
 ![Work in your agent, checkpoint verified findings into Markdown, and recall them in a future session.](docs/graphics/brain-workflow.png)
 
-The agent reads your vault's index, priorities and relevant notes before working.
-It saves substantial findings, decisions and handoffs through a shared writer,
+The agent starts with a compact boot policy. Greetings and self-contained
+questions need no vault reads. For substantive project work, it reads the map
+and relevant notes. Priorities are for status/continuation, daily history starts
+with Open/Index and relevant sessions, and workflow sections load before writing.
+Compaction reloads only missing context for the current task.
+
+It saves substantial findings, decisions and handoffs through the shared writer,
 then appends a verified daily checkpoint. Future sessions retrieve that context
 from the same Markdown files you see in Obsidian.
 
@@ -87,6 +92,12 @@ Rerun the same setup command to review an update. Differing workflow files need
 explicit replacement and get local backups. Existing notes, vault settings,
 custom schema, queues and receipts remain intact. Selected clients retain their
 configured vault unless you choose a different path.
+
+The updated shared boot block replaces older blanket startup reads, including
+those retained in existing vault notes. User-specific instructions outside that
+block are preserved; reconcile any separate full-startup requirement manually.
+See [context loading and measurement](docs/context-loading.md) for the budget,
+upgrade behavior and a reproducible size check.
 
 - [Setup and troubleshooting](LAPTOP-SETUP.md)
 - [Advanced installation and upgrades](INSTALL.md)

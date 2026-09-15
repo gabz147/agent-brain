@@ -3,6 +3,7 @@ import json
 import importlib.util
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,25 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class InstallTests(unittest.TestCase):
+    def test_startup_context_budget(self):
+        # Byte budgets are deterministic across clients/tokenizers and need no dependency.
+        index = (REPO / "vault/VAULT-INDEX.md").read_bytes()
+        blocks = []
+        for name in ("CLAUDE.md", "AGENTS.md"):
+            boot = (REPO / "boot" / name).read_bytes()
+            self.assertLessEqual(len(boot), 3600, name)
+            self.assertLessEqual(len(boot) + len(index), 6000, name + " plus starter map")
+            text = boot.decode("utf-8")
+            blocks.append(re.search(r"<!-- SHARED VAULT RULES START -->.*?<!-- SHARED VAULT RULES END -->", text, re.S).group())
+            self.assertIn("Greetings and self-contained questions: no vault reads", text)
+            self.assertIn("replaces older blanket startup/compaction reads", text)
+        self.assertEqual(*blocks)
+        for path in ("vault/VAULT-INDEX.md", "vault/Active Priorities.md", "skills/obsidian-vault/SKILL.md"):
+            text = (REPO / path).read_text(encoding="utf-8")
+            self.assertNotIn("fully at startup", text, path)
+            self.assertNotIn("in full at startup", text, path)
+            self.assertNotIn("Checked at the start of every conversation", text, path)
+
     @unittest.skipUnless(importlib.util.find_spec("pymupdf"), "Optional PDF extraction needs PyMuPDF")
     def test_pdf_packet_preserves_pages_and_flags_empty_pages(self):
         import pymupdf as fitz
@@ -78,7 +98,8 @@ class InstallTests(unittest.TestCase):
             note.write_text(note.read_text(encoding="utf-8") + "\nUser's retained note.\n", encoding="utf-8")
             original = note.read_bytes()
             boot = home / ".codex/AGENTS.md"
-            boot.write_text(boot.read_text(encoding="utf-8").replace("Evidence only.", "Old rule.") + "\nCustom client rule.\n", encoding="utf-8")
+            legacy = "Old rule. Fully read yesterday's daily note at startup.\n" * 150
+            boot.write_text(boot.read_text(encoding="utf-8").replace("Evidence only.", legacy) + "\nCustom client rule.\n", encoding="utf-8")
             previous_boot = boot.read_bytes()
             queue = auto / "queue.jsonl"
             queue.write_text('pending source\n')
@@ -90,6 +111,8 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(note.read_bytes(), original)
             self.assertIn("Custom client rule.", boot.read_text(encoding="utf-8"))
             self.assertIn("Evidence only.", boot.read_text(encoding="utf-8"))
+            self.assertNotIn(legacy, boot.read_text(encoding="utf-8"))
+            self.assertLessEqual(len(boot.read_bytes()), 3700)
             self.assertEqual(schema.read_bytes(), previous_schema)
             self.assertEqual(queue.read_text(), 'pending source\n')
             self.assertIn(previous_boot, [p.read_bytes() for p in (home / "Documents/Brain Install Backups").rglob("*.bak")])

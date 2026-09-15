@@ -7,17 +7,17 @@ description: "Search, recall, continue, audit or update the user's shared Obsidi
 
 Resolve `<BRAIN_VAULT_ROOT>` and `<BRAIN_AUTOMATION_DIR>` from environment variables, defaulting to `~/Documents/Brain` and `~/.claude/vault-automation`. `<HOME>` means the current user home. These are placeholders, not literal paths.
 
-Vault: `<BRAIN_VAULT_ROOT>`. Read `VAULT-INDEX.md` and `10 - Resources/Vault Workflow Contract.md` in full at startup and after compaction. The contract is the single source for schema, model signatures, coordinated writes and capture receipts; the boot files retain critical rules.
+Vault: `<BRAIN_VAULT_ROOT>`. Follow the boot file's on-demand loading policy. Read `VAULT-INDEX.md` once when vault context is needed; do not load the contract, priorities or daily history just because a session started or compacted. The contract is a reference for writing, not a retrieval prerequisite.
 
 ## Route and retrieve
 
 Classify recall, status, continue, relate, or write. Recall/review/audit authorizes findings and the required checkpoint, not applying source/config fixes. Authorization already supplied for a concrete change persists.
 
-1. Start with the root index, then the project index/main note. For status/continuation, read Active Priorities and verify real state. Decisions answers allowed/why questions; Dead Ends comes before recurring troubleshooting; Machine Inventory holds machine facts.
+1. Use the root map already in context, then the relevant project index/main note. For status/continuation, read the relevant Active Priorities section and current project handoff, then verify real state. Decisions answers allowed/why questions; Dead Ends comes before recurring troubleshooting; Machine Inventory holds machine facts.
 2. Search filenames first, then exact wikilinks/backlinks, headings and body. Exclude application internals and Archive unless history is requested or active retrieval misses.
 3. Rank exact filename, exact link, heading, body, then recency as a tiebreaker.
 4. Fully read selected notes before relying on them. Start with the best few and follow relevant links; do not silently sample a requested full read.
-5. Use daily notes for chronology. Preserve dated conflicting claims until evidence resolves them.
+5. Use daily notes only for needed chronology: Open line and Index first, then relevant sessions. Read a whole day when explicitly requested or coverage is unclear. Preserve dated conflicting claims until evidence resolves them. After compaction, reload only missing context for the current task.
 
 ```powershell
 $vaultRoot = '<BRAIN_VAULT_ROOT>'
@@ -30,7 +30,7 @@ Lead with the result, cite the exact note/heading or absolute link, and distingu
 
 ## Write and checkpoint
 
-1. Read the full target, index, relevant linked notes and today's daily note immediately before editing. Consolidate an existing logical home; preserve unrelated changes.
+1. Load the contract's Read and reconcile section and the writing sections it names, once per context. Read the full target, index and relevant linked notes immediately before editing. For daily appends, inspect Open/Index and relevant sessions; the controller preserves the complete historical file. Consolidate an existing logical home; preserve unrelated changes.
 2. Verify the current runtime model. Sign new work as its model label, such as astra or opus 5; never use a client name as a new model signature or infer the actual model from a configured default. Preserve historical signatures.
 3. Use `python "<BRAIN_AUTOMATION_DIR>/vaultctl.py" inspect <paths>` for baseline text/hashes. Prepare JSON operations using the native editor, then use `commit --model <verified-runtime-id> --reason <change> --input <json>`. The shared writer validates schema, snapshots, checks concurrent hashes and reads back. Re-read/rebuild on conflict.
 4. Update the canonical topic note, stable folder-index entry, and directly affected priorities/ledgers in the same checkpoint. Decisions append; only supersession status/reference may change in an old row. Do not rewrite prior wording.

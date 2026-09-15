@@ -4,9 +4,9 @@ Open the installed Brain folder as a vault in Obsidian. In a **new session** of
 your selected CLI (`claude` or `codex`), sign in and review its normal hook/access
 prompts. Paste this:
 
-> Read your global boot instructions, the Brain VAULT-INDEX.md and Vault Workflow
-> Contract in full. Resolve the installed BRAIN paths and verify your actual
-> runtime model from this session. Use the shared vaultctl.py writer to add a
+> Follow your global boot instructions. Read the Brain VAULT-INDEX.md and the
+> contract's applicable writing/checkpoint sections. Resolve BRAIN paths and
+> verify your actual runtime model from this session. Use the shared vaultctl.py writer to add a
 > short installation verification to the existing Vault Autonomy Pipeline note.
 > Then use checkpoint-context and checkpoint with this actual session transcript
 > to append a five-section daily session. Read back the updated note, daily entry
@@ -15,10 +15,15 @@ prompts. Paste this:
 
 Watch the note appear in Obsidian. Start another session and ask:
 
-> Read the Brain startup notes, find the last installation verification, and
+> Find the last Brain installation verification using the map and relevant note, and
 > tell me what was checked with a link to the note.
 
 If both clients are installed, use the other client for that second prompt.
+
+Also try a greeting in a fresh session. It should not trigger vault reads or a
+checkpoint. A project task should load the map and relevant notes; priorities,
+daily history and contract sections should appear only when needed. Inspect the
+tool reads to check this; file installation alone cannot prove model compliance.
 
 Agents checkpoint **substantive work**, decisions and useful findings. They do
 not need to log every short reply. Claude also has a Stop-hook reminder. Codex

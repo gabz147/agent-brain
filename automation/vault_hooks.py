@@ -124,7 +124,7 @@ def stop_gate(payload, vault=None, directory=DEFAULT_AUTOMATION, current_ms=None
         feed = {k: v for k, v in feed.items() if isinstance(v, dict) and current_ms - v.get("lastFiredMs", 0) < 7 * 86400000}
         atomic_json(feed_path, feed)
     instruction = f"""Vault checkpoint requested for session {session_id}. Successful work or substantial findings need a durable checkpoint.
-Read "{vault.root / '10 - Resources/Vault Workflow Contract.md'}".
+Use the Read and reconcile section of "{vault.root / '10 - Resources/Vault Workflow Contract.md'}" and the applicable writing/checkpoint sections it names. Reuse sections already in context; do not reload the startup bundle.
 Use python "{HERE / 'vaultctl.py'}" checkpoint-context --source claude --session {session_id} --transcript \"{transcript}\" to get the verified model, event date/time and source boundary.
 Prepare the daily five-section summary and any targeted topic/index/priority changes, then use vaultctl.py checkpoint with the same source arguments and --input <JSON file>. The controller verifies source evidence, appends a new daily section, snapshots changes and records completion only after read-back. It signs with the actual runtime model (for example opus 5).
 Preserve all existing session bytes and old signatures. Use event-local dates for daily paths and actual write date for frontmatter. Update the relevant note/index and ledgers only when the evidence warrants it. No code changes are authorized by this checkpoint request.

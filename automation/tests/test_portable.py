@@ -113,6 +113,7 @@ class PortableTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stderr + result.stdout)
         self.assertIn(str(self.vault / "10 - Resources/Vault Workflow Contract.md"), result.stdout)
         self.assertIn(str(self.auto / "vaultctl.py"), result.stdout)
+        self.assertIn("Reuse sections already in context", result.stdout)
         self.assertTrue(list((self.state / "requested").glob("*.json")))
 
     def test_one_client_and_two_client_parity(self):
