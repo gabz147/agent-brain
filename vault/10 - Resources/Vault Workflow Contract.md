@@ -3,7 +3,7 @@ status: active
 project: meta
 type: guide
 updated_by: astra
-updated: 2026-09-15
+updated: 2026-09-16
 ---
 
 # Vault Workflow Contract
@@ -56,7 +56,7 @@ Code is exempt. Frozen `09 - Archive/Old Memory/` is exempt and read-only. One o
 
 This is an on-demand reference, not a startup read. Boot files define the loading policy. Before a vault write, read this section plus Authorship, Schema, Shared writer and Related notes and ledgers; add Daily checkpoints and coverage for a checkpoint, Handoffs and manual use for a handoff, and Maintenance and acceptance for automation work. Reuse sections already in context. Read the full contract when auditing or changing the workflow itself.
 
-Read the full target topic note, its index and directly relevant linked notes immediately before writing. For a daily append, inspect the day's Open line and Index, then relevant sessions to reconcile coverage; the controller reads the whole file, chooses max+1 and preserves historical bytes. Read the whole daily note only for a full-day review or when relevant coverage is unclear. Never claim an excerpt is a full review.
+Read the full target topic note, its index and directly relevant linked notes immediately before writing. For a daily append, use `vaultctl.py daily-context <daily-path>` for the Open line and session headings, then read relevant complete sessions to reconcile coverage; the controller reads the whole file, chooses max+1 and preserves historical bytes. Read the whole daily note only for a full-day review or when relevant coverage is unclear. Never claim an excerpt is a full review.
 
 Search filenames first, then exact wikilinks, headings and body. Current claims require source evidence; chronology alone is not proof of current state. Default retrieval excludes application internals and Archive:
 
@@ -104,7 +104,7 @@ For a live checkpoint:
 
 ```powershell
 python $vaultCtl checkpoint-context --source codex --session '<actual-id>' --transcript '<actual-jsonl-path>'
-python $vaultCtl checkpoint --source codex --session '<actual-id>' --transcript '<actual-jsonl-path>' --input '<checkpoint-json>'
+python $vaultCtl checkpoint --summary --source codex --session '<actual-id>' --transcript '<actual-jsonl-path>' --input '<checkpoint-json>'
 ```
 
 Use `--source claude` for Claude. Context returns the verified model and source-local event day/time. Input fields:
@@ -130,6 +130,8 @@ Use `--source claude` for Claude. Context returns the verified model and source-
 ```
 
 Operations use the shared writer format. If substantive work is already recorded, use `disposition: already_covered`, no days/operations, and `anchors:[{"path":"<daily path>","text":"<exact complete existing session fragment>"}]`. For a truly trivial turn, use `disposition: trivial`, a substantive reason, and no writes. Context can supply source evidence; the controller verifies it. Do not classify a useful audit, decision or unresolved implementation as trivial merely because no code changed.
+
+`daily-context` is read-only navigation; it explicitly omits Index bullets/session bodies, not evidence for a full review. `checkpoint --summary` prints verified receipt identity, signer and anchor path/heading/hash. Full source ranges and anchor text remain in state-v2/coverage; omit the flag when diagnosing those details. Verification and receipt storage are unchanged.
 
 Receipt states distinguish requested, captured, already_covered, trivial, deferred and failed. Only a verified daily anchor or a reasoned, evidence-backed trivial disposition advances coverage. Source line hashes, byte ranges and fragment numbers bind each receipt to actual evidence. No mtime, exit code, gate flag or unrelated write can certify completion. Large records are split into fragments; unread fragments remain pending. Hidden model reasoning and binary attachments are excluded from capture evidence.
 

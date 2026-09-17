@@ -28,13 +28,15 @@ rg -n -F -g '*.md' -g '!**/.obsidian/**' -g '!**/09 - Archive/**' -- '[[Exact No
 
 Lead with the result, cite the exact note/heading or absolute link, and distinguish recorded fact, current verification and inference. Continuation needs current state, locked decisions, remaining work and the next action.
 
+For link audits, inbox triage, next-action selection and evidence freshness, load `10 - Resources/Vault Actions.md` on demand. Existing vaults without that note can use this skill's `references/vault-actions.md`. No automatic or weekly reviews.
+
 ## Write and checkpoint
 
-1. Load the contract's Read and reconcile section and the writing sections it names, once per context. Read the full target, index and relevant linked notes immediately before editing. For daily appends, inspect Open/Index and relevant sessions; the controller preserves the complete historical file. Consolidate an existing logical home; preserve unrelated changes.
+1. Load the contract's Read and reconcile section and the writing sections it names, once per context. Read the full target, index and relevant linked notes immediately before editing. For daily appends, use `daily-context <daily-path>` for Open/session headings, then read relevant complete sessions; the controller preserves the complete historical file. Consolidate an existing logical home; preserve unrelated changes.
 2. Verify the current runtime model. Sign new work as its model label, such as astra or opus 5; never use a client name as a new model signature or infer the actual model from a configured default. Preserve historical signatures.
 3. Use `python "<BRAIN_AUTOMATION_DIR>/vaultctl.py" inspect <paths>` for baseline text/hashes. Prepare JSON operations using the native editor, then use `commit --model <verified-runtime-id> --reason <change> --input <json>`. The shared writer validates schema, snapshots, checks concurrent hashes and reads back. Re-read/rebuild on conflict.
 4. Update the canonical topic note, stable folder-index entry, and directly affected priorities/ledgers in the same checkpoint. Decisions append; only supersession status/reference may change in an old row. Do not rewrite prior wording.
-5. Use `checkpoint-context --source claude|codex --session <actual-id> --transcript <actual-jsonl>`, then `checkpoint` with those arguments and `--input <json>`. Follow the contract's input example. A successful receipt binds the daily append to source evidence and actual model.
+5. Use `checkpoint-context --source claude|codex --session <actual-id> --transcript <actual-jsonl>`, then `checkpoint --summary` with those arguments and `--input <json>`. Follow the contract's input example. A successful receipt binds the daily append to source evidence and actual model.
 6. Existing daily sections and Index entries are immutable. Only insert a new signed Index bullet, append a complete five-section session, update Open for tomorrow, and restamp frontmatter. Correct gaps in a new section. Event-local date/time chooses the note/session; actual write date stamps updated. No whole-file daily replacements.
 7. Run `vaultctl.py validate` and verify intended content exactly once. Do not count a hook request, tool call, exit zero or unrelated vault write as a checkpoint.
 8. Handoffs use `10 - Resources\Handoff Template.md`, with one current block at the top of the tracking note and a runnable Resume line. Never use OS temp.

@@ -98,10 +98,10 @@ def installation(home, vault, replace=False, client="both"):
         for source, name in (("obsidian-daily-notes.json", "daily-notes.json"),
                              ("obsidian-templates.json", "templates.json")):
             add(vault / ".obsidian" / name, (REPO / "settings" / source).read_bytes())
-        add(vault / ".obsidian/core-plugins.json", b'["file-explorer", "global-search", "backlink", "daily-notes", "templates"]\n')
+        add(vault / ".obsidian/core-plugins.json", b'["file-explorer", "global-search", "backlink", "daily-notes", "templates", "bases"]\n')
 
     for path in (REPO / "automation").iterdir():
-        if path.is_file() and (path.suffix in {".py", ".ps1", ".vbs", ".md"} or path.name == "vault-schema.json"):
+        if path.is_file() and (path.suffix in {".py", ".ps1", ".vbs", ".md", ".mjs"} or path.name == "vault-schema.json"):
             # Preserve an existing customized schema, including folder/project mappings.
             if path.name == "vault-schema.json" and (auto / path.name).exists():
                 continue

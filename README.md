@@ -38,13 +38,14 @@ Prefer to inspect the download first? Use the
 
 | Component | Purpose |
 |---|---|
-| Starter vault | A blank profile, priorities, decisions, project index and daily notes |
+| Starter vault | A blank profile, priorities, decisions, project index, daily notes and native Home dashboard |
 | Obsidian templates | Configured Daily Notes and Templates on a fresh vault |
 | `obsidian-vault` | Retrieve context and maintain notes using shared writing rules |
 | `handoff` | Leave a usable continuation point for the next session |
 | `source-to-vault` | Turn reviewed source material into traceable notes |
 | Startup instructions | Load relevant context on demand; checkpoint substantive work and decisions |
-| Shared writer | Validate notes, preserve old entries, back up changes and verify writes |
+| Shared writer | Validate notes, preserve history, back up changes and return compact verified receipts |
+| On-demand actions | Read-only link checks, inbox triage, next actions and evidence freshness |
 | Claude hooks, if selected | Remind Claude to checkpoint and validate completed Markdown writes |
 
 No personal skill bundle, unrelated plugins, credentials or prewritten personal
@@ -58,7 +59,7 @@ Client accounts and usage costs remain your own.
 The agent starts with a compact boot policy. Greetings and self-contained
 questions need no vault reads. For substantive project work, it reads the map
 and relevant notes. Priorities are for status/continuation, daily history starts
-with Open/Index and relevant sessions, and workflow sections load before writing.
+with compact Open/session navigation and relevant complete sessions, and workflow sections load before writing.
 Compaction reloads only missing context for the current task.
 
 It saves substantial findings, decisions and handoffs through the shared writer,

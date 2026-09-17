@@ -3,7 +3,7 @@ status: active
 project: meta
 type: index
 updated_by: astra
-updated: 2026-09-15
+updated: 2026-09-16
 ---
 
 # VAULT INDEX
@@ -36,6 +36,8 @@ Use `BRAIN_VAULT_ROOT`, default `~/Documents/Brain`. The boot files stay outside
 Project folders carry a same-named index. Start there, then read relevant notes. Resources maps the writing and recovery guides.
 
 ## Root notes
+
+- [[Home]] displays priorities and native topic views; [[Vault Actions]] provides on-demand workflows.
 
 - [[Active Priorities]] holds the current work queue; verify real state before acting.
 - [[Decisions]] records deliberate choices. Read it before a potentially conflicting action; preserve original decision wording.

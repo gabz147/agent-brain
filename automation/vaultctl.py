@@ -4,10 +4,11 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 import sys
 
 from vault_core import (DEFAULT_AUTOMATION, DEFAULT_BACKUPS, DEFAULT_STATE, DEFAULT_VAULT, HERE, Conflict, Vault, VaultError,
-                        append_jsonl, atomic_json, file_lock, model_label, now, read_text, sha, validate)
+                        append_jsonl, atomic_json, file_lock, is_daily, model_label, now, read_text, sha, validate)
 from vault_sources import source_key, stream_units, uncovered, verified_receipts
 from vault_capture import Deferred, apply_proposal, capture
 from vault_hygiene import hygiene
@@ -16,6 +17,55 @@ from vault_queue import discover_codex, drain, enqueue
 
 def load_input(path):
     return json.loads(read_text(path) if path else sys.stdin.read())
+
+
+def daily_context(vault, path):
+    """Navigation only, never a substitute for reading requested history.
+
+    The writer independently reads and protects all existing daily bytes.
+    Return every session heading, with line numbers, without repeating bodies.
+    """
+    resolved = vault.path(path)
+    if not is_daily(resolved):
+        raise VaultError("daily-context requires a dated daily-note path")
+    entry = vault.inspect(path)
+    text = entry.pop("text")
+    entry.update(scope="Navigation only; session bodies and Index bullets omitted",
+                 exists=text is not None, open_next=None, sessions=[])
+    if text is None:
+        return entry
+    problems = validate(text, resolved)
+    if problems:
+        raise VaultError("Invalid daily note: " + "; ".join(problems))
+    # Fenced examples are not actual session headings.
+    fence = None
+    for number, line in enumerate(text.splitlines(), 1):
+        marker = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+        if marker:
+            token = marker.group(1)
+            if fence is None:
+                fence = token
+            elif token[0] == fence[0] and len(token) >= len(fence) and not line.strip()[len(token):].strip():
+                fence = None
+            continue
+        if fence:
+            continue
+        if line.startswith("**Open for tomorrow:**"):
+            entry["open_next"] = line
+        match = re.match(r"^## Session (\d+)\b", line)
+        if match:
+            entry["sessions"].append({"line": number, "heading": line})
+    return entry
+
+
+def receipt_summary(receipt):
+    """Only presentation changes; checkpoint persists and verifies full receipts."""
+    return {**{key: receipt.get(key) for key in
+               ("id", "disposition", "writer_model", "transaction_id")},
+            "source_units": len(receipt.get("units", [])),
+            "anchors": [{"path": a["path"], "sha256": a["sha256"],
+                         "heading": a["text"].splitlines()[0]}
+                        for a in receipt.get("anchors", [])]}
 
 
 def live_units(args):
@@ -58,6 +108,8 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     inspect = sub.add_parser("inspect")
     inspect.add_argument("paths", nargs="+")
+    daily = sub.add_parser("daily-context", help="Daily navigation without session bodies")
+    daily.add_argument("path")
     commit = sub.add_parser("commit")
     commit.add_argument("--input")
     commit.add_argument("--model", required=True, help="Verified runtime model id, not client name")
@@ -74,6 +126,7 @@ def main(argv=None):
         command.add_argument("--transcript", required=True)
         if name == "checkpoint":
             command.add_argument("--input")
+            command.add_argument("--summary", action="store_true", help="Print compact verified receipt; retain full receipt on disk")
     queue = sub.add_parser("drain")
     queue.add_argument("--directory", default=str(DEFAULT_AUTOMATION))
     queue.add_argument("--max-attempts", type=int, default=8)
@@ -96,6 +149,8 @@ def main(argv=None):
     vault = Vault(args.vault, args.state, args.backups)
     if args.command == "inspect":
         return [vault.inspect(path) for path in args.paths]
+    if args.command == "daily-context":
+        return daily_context(vault, args.path)
     if args.command == "commit":
         payload = load_input(args.input)
         return vault.commit(payload["operations"], model_label(args.model), args.reason, payload.get("transaction_id"))
@@ -116,7 +171,8 @@ def main(argv=None):
                 "days": sorted({u["day"] for u in units}), "latest_event": {k: units[-1][k] for k in ("day", "time", "end")},
                 "units": len(units), "first_evidence": {"unit_id": units[0]["id"], "quote": units[0]["text"][:120]}}
     if args.command == "checkpoint":
-        return checkpoint(vault, args, load_input(args.input))
+        receipt = checkpoint(vault, args, load_input(args.input))
+        return receipt_summary(receipt) if args.summary else receipt
     if args.command == "drain":
         return drain(vault, args.directory, discover=not args.no_discover, max_attempts=args.max_attempts)
     if args.command == "discover-codex":

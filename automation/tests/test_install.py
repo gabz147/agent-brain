@@ -74,6 +74,10 @@ class InstallTests(unittest.TestCase):
             settings.write_text(json.dumps({"model": "existing-model", "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "unrelated-hook"}]}]}}))
             run(args + ["--apply"])
             auto = home / ".claude/vault-automation"
+            self.assertTrue((auto / "vault_links.mjs").is_file())
+            self.assertTrue((vault / "Home.md").is_file())
+            self.assertTrue((vault / "10 - Resources/Vault Actions.md").is_file())
+            self.assertIn("bases", json.loads((vault / ".obsidian/core-plugins.json").read_text()))
             env = dict(os.environ, BRAIN_VAULT_ROOT=str(vault), BRAIN_AUTOMATION_DIR=str(auto),
                        BRAIN_STATE_DIR=str(home / "private-state"), BRAIN_BACKUPS_DIR=str(home / "private-backups"))
             report = run([sys.executable, str(auto / "vaultctl.py"), "validate"], env=env)

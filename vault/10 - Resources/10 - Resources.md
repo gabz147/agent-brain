@@ -3,10 +3,12 @@ status: active
 project: meta
 type: index
 updated_by: astra
-updated: 2026-09-15
+updated: 2026-09-16
 ---
 
 # Resources
+
+- [[Vault Actions]]: on-demand link audit, inbox triage, next action and evidence freshness. `(astra)`
 
 - [[Vault Workflow Contract]]: on-demand writing sections, shared schema, authorship, immutable daily sessions and source receipts. `(astra)`
 - [[Shared Obsidian Vault Skill]]: task-based context loading, retrieval order, mirrored skills and source-cited documents. `(astra)`
