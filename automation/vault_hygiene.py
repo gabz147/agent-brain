@@ -22,7 +22,7 @@ def schema_block():
         "- Project: any kebab-case slug; optional project_allowlist in vault-schema.json. Starter values: " + quote(SCHEMA["project"]) + ".",
         "- Type: " + quote(SCHEMA["type"]) + ".",
         "- Signature: lowercase model label/ID, `human`, `automation`, or `unknown-model`; legacy tags remain valid in history.",
-        "- Updated: an actual calendar date in `YYYY-MM-DD`, taken from the system clock at the write.",
+        "- Updated: actual local write time in `YYYY-MM-DDTHH:mm:ss+/-HH:mm`; legacy `YYYY-MM-DD` dates remain valid. The writer uses the system clock and timezone.",
         "<!-- VAULT SCHEMA END -->"
     ])
 
@@ -42,7 +42,7 @@ def missing_metadata(text, path):
         return None  # archive/inbox project cannot reliably be inferred
     inferred_type = "log" if is_daily(path) else "index" if path.stem == path.parent.name else "reference"
     defaults = {"status": "active", "project": default_project, "type": inferred_type,
-                "updated_by": "automation", "updated": now().date().isoformat()}
+                "updated_by": "automation", "updated": now().isoformat(timespec="seconds")}
     missing = [k for k in SCHEMA["required"] if k not in fields]
     if not missing:
         return None

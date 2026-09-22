@@ -161,12 +161,14 @@ def validate(text, path="note.md"):
             manual_template = str(path).replace("\\", "/").endswith("10 - Resources/Templates/Manual Daily Note Template.md")
             if manual_template and fields["updated"] == "{{date:YYYY-MM-DD}}":
                 pass  # The single output template is expanded by Obsidian.
-            elif not re.fullmatch(r"\d{4}-\d{2}-\d{2}", fields["updated"]):
-                raise ValueError()
-            else:
+            elif re.fullmatch(r"\d{4}-\d{2}-\d{2}", fields["updated"]):
                 dt.date.fromisoformat(fields["updated"])
+            elif re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)", fields["updated"]):
+                dt.datetime.fromisoformat(fields["updated"].replace("Z", "+00:00"))
+            else:
+                raise ValueError()
         except ValueError:
-            issues.append("updated must be an actual YYYY-MM-DD calendar date")
+            issues.append("updated must be an actual YYYY-MM-DD date or ISO 8601 timestamp with seconds and timezone")
     if is_daily(path):
         for key, value in (("status", "active"), ("project", "personal"), ("type", "log")):
             if fields.get(key) != value:
@@ -184,7 +186,7 @@ def restamp(text, signer, date=None):
     lines = text.splitlines(keepends=True)
     fence = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
     header = "".join(lines[:fence + 1])
-    for key, value in (("updated_by", signer), ("updated", date or now().date().isoformat())):
+    for key, value in (("updated_by", signer), ("updated", date or now().isoformat(timespec="seconds"))):
         pattern = re.compile(r"^" + key + r":[^\r\n]*", re.M)
         if key in fields:
             header = pattern.sub(key + ": " + value, header, count=1)
@@ -401,6 +403,9 @@ class Vault:
                         new += op.get("append", "")
                     if not restore:
                         if rel != "10 - Resources/Templates/Manual Daily Note Template.md":
+                            # A repeated identical write is not a new change.
+                            if new == old and frontmatter(old)[0].get("updated_by") == signer:
+                                continue
                             new = restamp(new, signer)
                         else:
                             template_fields, _ = frontmatter(new)

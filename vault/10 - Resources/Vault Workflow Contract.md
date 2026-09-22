@@ -3,7 +3,7 @@ status: active
 project: meta
 type: guide
 updated_by: astra
-updated: 2026-09-16
+updated: 2026-09-22T17:54:31-06:00
 ---
 
 # Vault Workflow Contract
@@ -43,7 +43,7 @@ Four locations carry attribution: frontmatter `updated_by` records the last writ
 - Project: any kebab-case slug; optional project_allowlist in vault-schema.json. Starter values: `example-project`, `personal`, `meta`.
 - Type: `index`, `reference`, `guide`, `plan`, `log`.
 - Signature: lowercase model label/ID, `human`, `automation`, or `unknown-model`; legacy tags remain valid in history.
-- Updated: an actual calendar date in `YYYY-MM-DD`, taken from the system clock at the write.
+- Updated: actual local write time in `YYYY-MM-DDTHH:mm:ss+/-HH:mm`; legacy `YYYY-MM-DD` dates remain valid. The writer uses the system clock and timezone.
 <!-- VAULT SCHEMA END -->
 
 Infer values from evidence. Starter folder defaults: 02 example-project; 01/08 personal; root/10 meta. Configure folder_projects in the machine schema for actual project folders. Project slugs accept kebab-case unless project_allowlist restricts them. Inbox defaults to personal unless content establishes a project; archive retains its original project. Content wins over folder defaults. Use active for ongoing work, completed only for finished work, idea for a proposal, parked for deliberately quiet work, archived only after authorized archiving.
@@ -92,9 +92,11 @@ python $vaultCtl restore '<snapshot-id>' '<note-path>' --expected-sha256 '<curre
 
 Restore verifies the old snapshot, checks the current hash, and snapshots the current version before restoring exact prior bytes. It does not delete newly created notes or touch frozen memory. Confirm the intended note/version before a restore.
 
+The writer sets `updated` automatically, for example `2026-09-22T18:04:05-06:00`. It records the current write time, including seconds and UTC offset, even for a backfill. Existing date-only metadata remains valid; do not invent historical times or bulk-restamp untouched notes. Exact snapshot restores preserve the original bytes. The manual output template retains its date token.
+
 ## Daily checkpoints and coverage
 
-Use [[Daily Note Template]] for model-created daily notes. Location: `01 - Daily Notes/<MM - Month YYYY>/<YYYY-MM-DD>.md`. Event-local dates/times choose the filename, date heading and session timestamp; the actual write date stamps frontmatter. Split multi-day transcripts by event day. Backfills do not replace a later event's Open line.
+Use [[Daily Note Template]] for model-created daily notes. Location: `01 - Daily Notes/<MM - Month YYYY>/<YYYY-MM-DD>.md`. Event-local dates/times choose the filename, date heading and session timestamp; the actual local write time with timezone stamps frontmatter. Split multi-day transcripts by event day. Backfills do not replace a later event's Open line.
 
 The body starts with `# Saturday, September 5, 2026`, then `**Open for tomorrow:**`, then `## Index`. Insert one bold-topic, past-tense outcome bullet per new session. Append `## Session N — 3:42 PM: Topic — model-signature`; choose max+1 at write time, never renumber existing labels. All five `###` sections appear in this order: What Got Done; What's Still In Progress; Decisions Made; Notes Touched; Profile Updates. Use `- None` for an empty section.
 

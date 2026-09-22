@@ -3,7 +3,7 @@ status: active
 project: meta
 type: reference
 updated_by: astra
-updated: 2026-09-07
+updated: 2026-09-22T17:54:31-06:00
 ---
 
 # Handoff Template
@@ -18,13 +18,13 @@ Use when the user asks to hand off or pause work. The handoff is durable instruc
 4. Give one runnable Resume line: cwd, note/heading, skill, first action. The next action must be concrete.
 5. Include only real open decisions, required inputs and constraints. Never copy secrets; reference secure storage.
 6. Reconcile the folder index and [[Active Priorities]], then append a signed daily checkpoint with a verified receipt.
-7. Sign with the actual runtime model and actual write date. Event times in daily notes still use the event's local time.
+7. Sign with the actual runtime model and actual local write time with timezone. Event times in daily notes still use the event's local time.
 
 ## Skeleton
 
 ```markdown
 ## Handoff — resume here
-_Last updated: <actual YYYY-MM-DD> by <verified model>_
+_Last updated: <actual ISO 8601 local time with timezone> by <verified model>_
 
 **Resume:** `cd <working directory>` · read this note's Handoff section · skill `<name or none>` · then: <first command or action>
 

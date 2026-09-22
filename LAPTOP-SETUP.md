@@ -4,6 +4,11 @@ Agent Brain is a standalone public vault workflow. You need this repository only
 It installs a generic Obsidian vault and three related skills for Claude Code,
 Codex, or both, without anyone's personal notes or unrelated skills.
 
+`gabz147/skills` is a separate personal backup and is not needed. For setup
+through an agent, open this checkout and ask it to follow [SKILL.md](SKILL.md).
+The root `agent-brain` skill handles setup; the three skills under `skills/`
+handle everyday vault work after installation.
+
 ## Prerequisites
 
 - **Obsidian**, already installed: [official download](https://obsidian.md/download).

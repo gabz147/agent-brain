@@ -1,6 +1,7 @@
 """Set up a private Obsidian Brain for Claude Code, Codex, or both."""
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -184,6 +185,9 @@ def merge_claude(home, env, add, replace):
 
 def install(home, vault, apply=False, replace=False, client="both"):
     files = installation(home, vault, replace, client)
+    migration = timestamp_migration(vault)
+    if migration:
+        print("PLAN  Update the contract's date-only schema rule through the shared writer: " + migration["path"])
     before = {target: target.read_bytes() if target.exists() else None for target in files}
     backup = home / "Documents/Brain Install Backups" / dt.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     for target, data in files.items():
@@ -211,7 +215,41 @@ def install(home, vault, apply=False, replace=False, client="both"):
             raise OSError(f"Read-back failed: {target}")
     if backup.exists():
         print("Backups: " + str(backup))
+    if apply and migration:
+        auto = home / ".claude/vault-automation"
+        with tempfile.TemporaryDirectory(prefix="brain-migration-") as tmp:
+            payload = Path(tmp) / "migration.json"
+            payload.write_text(json.dumps({"operations": [migration]}), encoding="utf-8")
+            result = subprocess.run([sys.executable, str(auto / "vaultctl.py"),
+                                     "--vault", str(vault), "--state", str(auto / "state-v2"),
+                                     "--backups", str(vault.parent / (vault.name + " Backups") / "versions"),
+                                     "commit", "--model", "automation", "--reason", "Upgrade the write timestamp schema rule",
+                                     "--input", str(payload)], capture_output=True, text=True, encoding="utf-8", timeout=60)
+            if result.returncode:
+                raise ValueError("Timestamp schema migration needs review: " + result.stdout + result.stderr)
+            report = json.loads(result.stdout)
+            if report.get("status") != "committed" or not report.get("files"):
+                raise ValueError("Timestamp schema migration did not verify a write")
+            print("OK contract timestamp rule migrated; snapshot: " + report["transaction_id"])
     return files
+
+
+def timestamp_migration(vault):
+    relative = "10 - Resources/Vault Workflow Contract.md"
+    path = vault / relative
+    if not path.exists():
+        return None
+    if not path.resolve().is_relative_to(vault.resolve()):
+        raise ValueError("Contract escapes the vault through a link")
+    raw = path.read_bytes()
+    text = raw.decode("utf-8-sig")
+    old = "- Updated: an actual calendar date in `YYYY-MM-DD`, taken from the system clock at the write."
+    block = re.search(r"<!-- VAULT SCHEMA START -->.*?<!-- VAULT SCHEMA END -->", text, re.S)
+    if not block or old not in block.group() or text.count(old) != 1:
+        return None  # Custom wording requires review, not a guessed rewrite.
+    new = "- Updated: actual local write time in `YYYY-MM-DDTHH:mm:ss+/-HH:mm`; legacy `YYYY-MM-DD` dates remain valid. The writer uses the system clock and timezone."
+    return {"path": relative, "expected_sha256": hashlib.sha256(raw).hexdigest(),
+            "edits": [{"old": old, "new": new}]}
 
 
 def executable(name):

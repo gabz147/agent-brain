@@ -8,6 +8,11 @@ Existing differing workflow files cause an error before writes. After reviewing 
 
 ## 1. Check prerequisites and preserve existing files
 
+Timestamp upgrades preview and migrate the known date-only `Updated` rule in
+the existing contract through the shared writer, with a checked hash and private
+snapshot. Custom wording is left for review. Other note content and historical
+date-only metadata stay intact; new writes receive local time and UTC offset.
+
 Use `install.py --doctor --client claude|codex|both` to check the chosen clients. Claude hooks need Node.js 22+. Python 3.11+ is required; the controller uses only the standard library. Obsidian is optional for agent work. Scheduling requires Windows PowerShell and Task Scheduler; retrospective capture additionally needs a logged-in Claude CLI with the required restricted-mode flags.
 
 For an upgrade, save copies of the installed boot files, skills, hooks, controller/schema, and relevant settings. Preserve pending queues, source receipts, and snapshot directories. Do not copy runtime state into this public repository. The old drainer must not run concurrently while its controller files are replaced; use the existing pause toggle or disable only the two vault tasks during the authorized upgrade, then restore their prior state.

@@ -4,6 +4,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import stat
 import subprocess
@@ -21,6 +22,34 @@ import install
 
 
 class OnboardingTests(unittest.TestCase):
+    def test_upgrade_migrates_only_known_timestamp_rule_with_snapshot(self):
+        with tempfile.TemporaryDirectory(prefix="brain legacy ") as tmp:
+            home = Path(tmp).resolve() / "Home"
+            vault = home / "Brain"
+            with contextlib.redirect_stdout(io.StringIO()):
+                install.install(home, vault, apply=True, client="codex")
+            contract = vault / "10 - Resources/Vault Workflow Contract.md"
+            current = contract.read_text(encoding="utf-8")
+            legacy = re.sub(r"^- Updated:.*$", "- Updated: an actual calendar date in `YYYY-MM-DD`, taken from the system clock at the write.", current, flags=re.M)
+            legacy += "\nUser-specific instructions must survive.\n"
+            contract.write_text(legacy, encoding="utf-8")
+            before = contract.read_bytes()
+            note = vault / "VAULT-INDEX.md"
+            note_before = note.read_bytes()
+            with contextlib.redirect_stdout(io.StringIO()):
+                install.install(home, vault, client="codex")
+                self.assertEqual(contract.read_bytes(), before)
+                install.install(home, vault, apply=True, replace=True, client="codex")
+                install.verify(home, vault)
+                after = contract.read_bytes()
+                install.install(home, vault, apply=True, replace=True, client="codex")
+            self.assertEqual(contract.read_bytes(), after)
+            self.assertEqual(note.read_bytes(), note_before)
+            self.assertIn(b"User-specific instructions must survive.", after)
+            self.assertIn(b"updated_by: automation", after)
+            snapshots = list((home / "Brain Backups/versions").glob("*/*.before"))
+            self.assertIn(before, [p.read_bytes() for p in snapshots])
+
     def test_native_codex_is_found_before_path_refresh(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp).resolve()

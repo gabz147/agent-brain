@@ -13,6 +13,10 @@ Have **Obsidian** and **Python 3.11+** installed. Claude's hooks also need
 folder, and offers the official installer if your chosen CLI is missing.
 You do not need Git, a GitHub account, or another repository.
 
+**`gabz147/skills` is not required.** All three Brain workflow skills and their
+supporting tools are included here. That separate repository is a personal
+setup backup, not an Agent Brain dependency.
+
 **macOS / Linux** (Terminal with Bash or Zsh):
 
 ```bash
@@ -33,6 +37,26 @@ and follow [your first checkpoint](FIRST-CHECKPOINT.md).
 Missing Python or Node? See [prerequisites and troubleshooting](LAPTOP-SETUP.md).
 Prefer to inspect the download first? Use the
 [download-and-inspect method](LAPTOP-SETUP.md#download-and-inspect).
+
+### Clone or ask your agent
+
+With Git installed, clone this repository and run its guided setup:
+
+```bash
+git clone https://github.com/gabz147/agent-brain.git
+cd agent-brain
+python3 install.py --wizard
+```
+
+Use `python` instead of `python3` on Windows. Or open the checkout in Claude
+Code or Codex and ask:
+
+> Read SKILL.md and set up Agent Brain for me. Use this repository for the
+> complete vault system and required skills.
+
+[The Agent Brain setup skill](SKILL.md) guides the agent through the same
+installer. Copying a skill file alone does not install the controller, vault or
+hooks; setup installs them together from this one repository.
 
 ## What you get
 
@@ -63,7 +87,9 @@ with compact Open/session navigation and relevant complete sessions, and workflo
 Compaction reloads only missing context for the current task.
 
 It saves substantial findings, decisions and handoffs through the shared writer,
-then appends a verified daily checkpoint. Future sessions retrieve that context
+then appends a verified daily checkpoint. Each changed note gets an automatic
+local write timestamp with seconds and timezone in `updated`, for example
+`2026-09-22T18:04:05-06:00`. Existing date-only notes remain valid. Future sessions retrieve that context
 from the same Markdown files you see in Obsidian.
 
 Claude has a Stop-hook reminder. Codex checkpoints through startup instructions
@@ -93,6 +119,10 @@ Rerun the same setup command to review an update. Differing workflow files need
 explicit replacement and get local backups. Existing notes, vault settings,
 custom schema, queues and receipts remain intact. Selected clients retain their
 configured vault unless you choose a different path.
+
+Timestamp upgrades also preview a checked migration of the contract's known
+date-only schema rule. The writer snapshots that change; custom wording is left
+for review. Historical note timestamps are not backfilled.
 
 The updated shared boot block replaces older blanket startup reads, including
 those retained in existing vault notes. User-specific instructions outside that

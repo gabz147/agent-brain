@@ -3,7 +3,7 @@ status: active
 project: meta
 type: index
 updated_by: astra
-updated: 2026-09-07
+updated: 2026-09-22T17:54:31-06:00
 ---
 
 # {{Folder Name}}
@@ -16,4 +16,4 @@ One-line description of what this folder holds.
 
 - [[Example Note]] — one-line description of what it is. `({{model}})`
 
-<!-- Before creating a note, use the actual write date and verified runtime model. Commit through the shared writer; preserve historical signatures. -->
+<!-- Before creating a note, use the actual local write time with timezone and verified runtime model. Commit through the shared writer; preserve historical signatures. -->

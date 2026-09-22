@@ -3,7 +3,7 @@ status: active
 project: meta
 type: guide
 updated_by: astra
-updated: 2026-09-16
+updated: 2026-09-22T17:54:31-06:00
 ---
 # Vault Actions
 
@@ -39,4 +39,4 @@ For volatile facts, use a body table only when needed:
 Claim | Source / exact location | Last verified | Assessment | Recheck when
 ```
 
-Use supported, provisional, contested or unsupported. Verification dates record actual checks; updated is only the note's writing date. Preserve dated contradictions and link originals. Name a meaningful recheck trigger, not a schedule. Keep the existing schema unchanged.
+Use supported, provisional, contested or unsupported. Verification dates record actual checks; updated is only the note's last write time, not the evidence verification time. Preserve dated contradictions and link originals. Name a meaningful recheck trigger, not a schedule. Keep the existing schema unchanged.
