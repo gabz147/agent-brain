@@ -49,6 +49,15 @@ class OnboardingTests(unittest.TestCase):
             self.assertIn(b"updated_by: automation", after)
             snapshots = list((home / "Brain Backups/versions").glob("*/*.before"))
             self.assertIn(before, [p.read_bytes() for p in snapshots])
+            # The immediately preceding release used an ISO timestamp rule.
+            iso_rule = "- Updated: actual local write time in `YYYY-MM-DDTHH:mm:ss+/-HH:mm`; legacy `YYYY-MM-DD` dates remain valid. The writer uses the system clock and timezone."
+            contract.write_text(re.sub(r"^- Updated:.*$", iso_rule,
+                                      contract.read_text(encoding="utf-8"), flags=re.M), encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                install.install(home, vault, apply=True, replace=True, client="codex")
+                install.verify(home, vault)
+            self.assertIn("User-specific instructions must survive.", contract.read_text(encoding="utf-8"))
+            self.assertIsNone(install.timestamp_migration(vault))
 
     def test_native_codex_is_found_before_path_refresh(self):
         with tempfile.TemporaryDirectory() as tmp:

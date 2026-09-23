@@ -36,6 +36,34 @@ def now():
     return dt.datetime.now().astimezone()
 
 
+MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August",
+          "September", "October", "November", "December")
+ISO_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)")
+READABLE_TIME = re.compile(r"([A-Za-z]+) ([1-9]\d?), (\d{4}) at (1[0-2]|[1-9]):([0-5]\d):([0-5]\d)(\.\d+)? (AM|PM) \(UTC([+-](?:[01]\d|2[0-3]):[0-5]\d)\)")
+
+
+def parse_note_time(value):
+    if ISO_TIME.fullmatch(value):
+        return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    match = READABLE_TIME.fullmatch(value)
+    if not match:
+        raise ValueError("Invalid note time")
+    month, day, year, hour, minute, second, fraction, period, offset = match.groups()
+    hour = int(hour) % 12 + (12 if period == "PM" else 0)
+    return dt.datetime.fromisoformat(f"{year}-{MONTHS.index(month) + 1:02}-{int(day):02}T{hour:02}:{minute}:{second}{fraction or ''}{offset}")
+
+
+def format_note_time(at=None):
+    at = now() if at is None else at
+    if at.utcoffset() is None:
+        raise ValueError("Note time requires a timezone")
+    offset = at.strftime("%z")
+    fraction = (f".{at.microsecond:06}".rstrip("0") if at.microsecond else "")
+    return (f"{MONTHS[at.month - 1]} {at.day}, {at.year:04} at {at.hour % 12 or 12}:"
+            f"{at.minute:02}:{at.second:02}{fraction} {'AM' if at.hour < 12 else 'PM'} "
+            f"(UTC{offset[:3]}:{offset[3:5]})")
+
+
 def sha(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -163,12 +191,10 @@ def validate(text, path="note.md"):
                 pass  # The single output template is expanded by Obsidian.
             elif re.fullmatch(r"\d{4}-\d{2}-\d{2}", fields["updated"]):
                 dt.date.fromisoformat(fields["updated"])
-            elif re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)", fields["updated"]):
-                dt.datetime.fromisoformat(fields["updated"].replace("Z", "+00:00"))
             else:
-                raise ValueError()
+                parse_note_time(fields["updated"])
         except ValueError:
-            issues.append("updated must be an actual YYYY-MM-DD date or ISO 8601 timestamp with seconds and timezone")
+            issues.append("updated must be a readable local timestamp with timezone, a legacy ISO timestamp, or a YYYY-MM-DD date")
     if is_daily(path):
         for key, value in (("status", "active"), ("project", "personal"), ("type", "log")):
             if fields.get(key) != value:
@@ -186,7 +212,7 @@ def restamp(text, signer, date=None):
     lines = text.splitlines(keepends=True)
     fence = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
     header = "".join(lines[:fence + 1])
-    for key, value in (("updated_by", signer), ("updated", date or now().isoformat(timespec="seconds"))):
+    for key, value in (("updated_by", signer), ("updated", date or format_note_time(now().replace(microsecond=0)))):
         pattern = re.compile(r"^" + key + r":[^\r\n]*", re.M)
         if key in fields:
             header = pattern.sub(key + ": " + value, header, count=1)
@@ -389,7 +415,13 @@ class Vault:
                     if expected != (sha(before) if before is not None else None):
                         raise Conflict("File changed before commit: " + rel)
                     old = before.decode("utf-8-sig") if before is not None else ""
-                    if "content" in op:
+                    formatting_time = op.get("format_updated") is True
+                    if formatting_time:
+                        if restore or before is None or set(op) != {"path", "expected_sha256", "format_updated"}:
+                            raise VaultError("Timestamp formatting requires only an existing path, hash and format_updated")
+                        fields, _ = frontmatter(old)
+                        new = restamp(old, fields["updated_by"], format_note_time(parse_note_time(fields["updated"])))
+                    elif "content" in op:
                         if before is not None and is_daily(path) and not restore:
                             raise VaultError("Existing daily notes require targeted edits/append")
                         new = op["content"]
@@ -402,7 +434,9 @@ class Vault:
                             new = new.replace(find, edit["new"], 1)
                         new += op.get("append", "")
                     if not restore:
-                        if rel != "10 - Resources/Templates/Manual Daily Note Template.md":
+                        if formatting_time:
+                            pass  # Preserve the original writer and instant; only format metadata.
+                        elif rel != "10 - Resources/Templates/Manual Daily Note Template.md":
                             # A repeated identical write is not a new change.
                             if new == old and frontmatter(old)[0].get("updated_by") == signer:
                                 continue

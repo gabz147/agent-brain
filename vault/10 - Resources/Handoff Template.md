@@ -3,7 +3,7 @@ status: active
 project: meta
 type: reference
 updated_by: astra
-updated: 2026-09-22T17:54:31-06:00
+updated: September 23, 2026 at 6:39:19 AM (UTC-06:00)
 ---
 
 # Handoff Template
@@ -24,7 +24,7 @@ Use when the user asks to hand off or pause work. The handoff is durable instruc
 
 ```markdown
 ## Handoff — resume here
-_Last updated: <actual ISO 8601 local time with timezone> by <verified model>_
+_Last updated: <readable local date and time with timezone> by <verified model>_
 
 **Resume:** `cd <working directory>` · read this note's Handoff section · skill `<name or none>` · then: <first command or action>
 

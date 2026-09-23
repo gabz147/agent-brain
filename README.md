@@ -88,8 +88,8 @@ Compaction reloads only missing context for the current task.
 
 It saves substantial findings, decisions and handoffs through the shared writer,
 then appends a verified daily checkpoint. Each changed note gets an automatic
-local write timestamp with seconds and timezone in `updated`, for example
-`2026-09-22T18:04:05-06:00`. Existing date-only notes remain valid. Future sessions retrieve that context
+readable local write timestamp with 12-hour time, seconds and timezone in `updated`, for example
+`September 23, 2026 at 6:20:14 AM (UTC-06:00)`. Existing date-only notes remain valid. Future sessions retrieve that context
 from the same Markdown files you see in Obsidian.
 
 Claude has a Stop-hook reminder. Codex checkpoints through startup instructions
@@ -121,7 +121,7 @@ custom schema, queues and receipts remain intact. Selected clients retain their
 configured vault unless you choose a different path.
 
 Timestamp upgrades also preview a checked migration of the contract's known
-date-only schema rule. The writer snapshots that change; custom wording is left
+legacy timestamp schema rule. The writer snapshots that change; custom wording is left
 for review. Historical note timestamps are not backfilled.
 
 The updated shared boot block replaces older blanket startup reads, including

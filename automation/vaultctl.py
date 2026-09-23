@@ -8,7 +8,8 @@ import re
 import sys
 
 from vault_core import (DEFAULT_AUTOMATION, DEFAULT_BACKUPS, DEFAULT_STATE, DEFAULT_VAULT, HERE, Conflict, Vault, VaultError,
-                        append_jsonl, atomic_json, file_lock, is_daily, model_label, now, read_text, sha, validate)
+                        ISO_TIME, append_jsonl, atomic_json, file_lock, format_note_time, frontmatter,
+                        is_daily, model_label, now, parse_note_time, read_text, sha, validate)
 from vault_sources import source_key, stream_units, uncovered, verified_receipts
 from vault_capture import Deferred, apply_proposal, capture
 from vault_hygiene import hygiene
@@ -17,6 +18,25 @@ from vault_queue import discover_codex, drain, enqueue
 
 def load_input(path):
     return json.loads(read_text(path) if path else sys.stdin.read())
+
+
+def format_times(vault, apply=False):
+    operations, changes = [], []
+    for path in vault.notes():
+        info = vault.inspect(path)
+        fields, _ = frontmatter(info["text"])
+        value = fields.get("updated", "")
+        if not ISO_TIME.fullmatch(value):
+            continue
+        changes.append({"path": info["path"], "before": value,
+                        "after": format_note_time(parse_note_time(value))})
+        operations.append({"path": info["path"], "expected_sha256": info["sha256"], "format_updated": True})
+    receipts = []
+    if apply:
+        for start in range(0, len(operations), 100):
+            receipts.append(vault.commit(operations[start:start + 100], "automation", "Format note timestamps without changing their instants or authors"))
+    return {"outcome": "formatted" if apply else "preview", "changes": changes,
+            "transactions": [r["transaction_id"] for r in receipts if r.get("transaction_id")]}
 
 
 def daily_context(vault, path):
@@ -110,6 +130,8 @@ def main(argv=None):
     inspect.add_argument("paths", nargs="+")
     daily = sub.add_parser("daily-context", help="Daily navigation without session bodies")
     daily.add_argument("path")
+    formatting = sub.add_parser("format-times", help="Preview readable timestamps while preserving original times/authors")
+    formatting.add_argument("--apply", action="store_true")
     commit = sub.add_parser("commit")
     commit.add_argument("--input")
     commit.add_argument("--model", required=True, help="Verified runtime model id, not client name")
@@ -151,6 +173,8 @@ def main(argv=None):
         return [vault.inspect(path) for path in args.paths]
     if args.command == "daily-context":
         return daily_context(vault, args.path)
+    if args.command == "format-times":
+        return format_times(vault, apply=args.apply)
     if args.command == "commit":
         payload = load_input(args.input)
         return vault.commit(payload["operations"], model_label(args.model), args.reason, payload.get("transaction_id"))

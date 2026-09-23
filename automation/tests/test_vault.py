@@ -106,7 +106,7 @@ class CommitTests(Fixture):
         self.assertTrue(after[after.index("## Session"):].encode().startswith(old_sessions))
         self.assertIn("## Session 2", after)
         self.assertIn("updated_by: opus 5", after)
-        self.assertIn("updated: " + core.now().date().isoformat(), after)
+        self.assertEqual(core.parse_note_time(core.frontmatter(after)[0]["updated"]).date(), core.now().date())
         self.assertIn("# Saturday, September 5, 2026", after)
 
     def test_existing_daily_full_replacement_rejected(self):

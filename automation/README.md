@@ -90,3 +90,7 @@ Both jobs defer with input less than five minutes ago, fullscreen foreground, an
 Observe an eligible real run and its receipt/report before claiming scheduled capture works. A deferred run is not a successful capture. Nightly hygiene makes zero model calls and stamps the day only on a verified report. Review `drain.log`, `audit.log`, and `state-v2/hygiene-latest.json`; no process exit alone proves capture.
 
 To disable scheduling, disable only `VaultQueueDrain` and `VaultNightlyAudit` within the user's requested scope. Preserve their definitions and all pending data for a later resume.
+
+## Readable note timestamps
+
+New writes use `September 23, 2026 at 6:20:14 AM (UTC-06:00)`. Legacy ISO timestamps and date-only notes stay valid. To reformat existing ISO metadata, preview with `python vaultctl.py format-times`, then apply with `python vaultctl.py format-times --apply`. Use `python3` on macOS/Linux. This changes only the `updated` representation: original times, offsets, authors and all note bodies remain unchanged. Hash checks, private snapshots and daily-history protection still apply. It skips date-only notes and frozen archives. Operational JSON receipts keep ISO timestamps for machine use.

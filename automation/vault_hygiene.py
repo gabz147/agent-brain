@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 
 from vault_core import (DEFAULT_VAULT, HERE, SCHEMA, VaultError, append_jsonl, atomic_json, file_lock,
-                        frontmatter, is_daily, now, read_text, sha, validate)
+                        format_note_time, frontmatter, is_daily, now, read_text, sha, validate)
 
 FOLDER_PROJECTS = SCHEMA["folder_projects"]
 
@@ -22,7 +22,7 @@ def schema_block():
         "- Project: any kebab-case slug; optional project_allowlist in vault-schema.json. Starter values: " + quote(SCHEMA["project"]) + ".",
         "- Type: " + quote(SCHEMA["type"]) + ".",
         "- Signature: lowercase model label/ID, `human`, `automation`, or `unknown-model`; legacy tags remain valid in history.",
-        "- Updated: actual local write time in `YYYY-MM-DDTHH:mm:ss+/-HH:mm`; legacy `YYYY-MM-DD` dates remain valid. The writer uses the system clock and timezone.",
+        "- Updated: readable local write time, for example `September 23, 2026 at 6:20:14 AM (UTC-06:00)`; legacy ISO timestamps and `YYYY-MM-DD` dates remain valid. The writer uses the system clock and timezone.",
         "<!-- VAULT SCHEMA END -->"
     ])
 
@@ -42,7 +42,7 @@ def missing_metadata(text, path):
         return None  # archive/inbox project cannot reliably be inferred
     inferred_type = "log" if is_daily(path) else "index" if path.stem == path.parent.name else "reference"
     defaults = {"status": "active", "project": default_project, "type": inferred_type,
-                "updated_by": "automation", "updated": now().isoformat(timespec="seconds")}
+                "updated_by": "automation", "updated": format_note_time(now().replace(microsecond=0))}
     missing = [k for k in SCHEMA["required"] if k not in fields]
     if not missing:
         return None

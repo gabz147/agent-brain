@@ -3,7 +3,7 @@ status: active
 project: meta
 type: guide
 updated_by: astra
-updated: 2026-09-22T17:54:31-06:00
+updated: September 23, 2026 at 6:39:19 AM (UTC-06:00)
 ---
 
 # Vault Workflow Contract
@@ -43,7 +43,7 @@ Four locations carry attribution: frontmatter `updated_by` records the last writ
 - Project: any kebab-case slug; optional project_allowlist in vault-schema.json. Starter values: `example-project`, `personal`, `meta`.
 - Type: `index`, `reference`, `guide`, `plan`, `log`.
 - Signature: lowercase model label/ID, `human`, `automation`, or `unknown-model`; legacy tags remain valid in history.
-- Updated: actual local write time in `YYYY-MM-DDTHH:mm:ss+/-HH:mm`; legacy `YYYY-MM-DD` dates remain valid. The writer uses the system clock and timezone.
+- Updated: readable local write time, for example `September 23, 2026 at 6:20:14 AM (UTC-06:00)`; legacy ISO timestamps and `YYYY-MM-DD` dates remain valid. The writer uses the system clock and timezone.
 <!-- VAULT SCHEMA END -->
 
 Infer values from evidence. Starter folder defaults: 02 example-project; 01/08 personal; root/10 meta. Configure folder_projects in the machine schema for actual project folders. Project slugs accept kebab-case unless project_allowlist restricts them. Inbox defaults to personal unless content establishes a project; archive retains its original project. Content wins over folder defaults. Use active for ongoing work, completed only for finished work, idea for a proposal, parked for deliberately quiet work, archived only after authorized archiving.
@@ -92,7 +92,7 @@ python $vaultCtl restore '<snapshot-id>' '<note-path>' --expected-sha256 '<curre
 
 Restore verifies the old snapshot, checks the current hash, and snapshots the current version before restoring exact prior bytes. It does not delete newly created notes or touch frozen memory. Confirm the intended note/version before a restore.
 
-The writer sets `updated` automatically, for example `2026-09-22T18:04:05-06:00`. It records the current write time, including seconds and UTC offset, even for a backfill. Existing date-only metadata remains valid; do not invent historical times or bulk-restamp untouched notes. Exact snapshot restores preserve the original bytes. The manual output template retains its date token.
+The writer sets `updated` automatically, for example `September 23, 2026 at 6:20:14 AM (UTC-06:00)`. It records the current write time, including seconds and UTC offset, even for a backfill. Existing date-only metadata remains valid; do not invent historical times or bulk-restamp untouched notes. Exact snapshot restores preserve the original bytes. The manual output template retains its date token.
 
 ## Daily checkpoints and coverage
 

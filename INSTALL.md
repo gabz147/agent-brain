@@ -8,10 +8,15 @@ Existing differing workflow files cause an error before writes. After reviewing 
 
 ## 1. Check prerequisites and preserve existing files
 
-Timestamp upgrades preview and migrate the known date-only `Updated` rule in
+Timestamp upgrades preview and migrate the known legacy `Updated` rule in
 the existing contract through the shared writer, with a checked hash and private
 snapshot. Custom wording is left for review. Other note content and historical
 date-only metadata stay intact; new writes receive local time and UTC offset.
+
+To make existing ISO timestamps readable after upgrading, preview
+`python <automation-dir>/vaultctl.py format-times`, then add `--apply` to perform
+the conversion. This preserves the original time, author and note body, and
+creates checked snapshots. Use `python3` on macOS/Linux.
 
 Use `install.py --doctor --client claude|codex|both` to check the chosen clients. Claude hooks need Node.js 22+. Python 3.11+ is required; the controller uses only the standard library. Obsidian is optional for agent work. Scheduling requires Windows PowerShell and Task Scheduler; retrospective capture additionally needs a logged-in Claude CLI with the required restricted-mode flags.
 
