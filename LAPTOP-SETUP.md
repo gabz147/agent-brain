@@ -157,7 +157,7 @@ restore their previous state afterward; setup does not schedule new jobs.
 PDF extraction optionally needs PyMuPDF in the interpreter used for extraction,
 preferably in a project virtual environment. Text and DOCX use the standard library.
 
-Optional Windows background capture and Agent Pulse are documented in
+The optional Windows audit task and Agent Pulse are documented in
 [automation/README.md](automation/README.md) and
-[the plugin guide](plugins/agent-pulse/README.md). Background capture needs Claude
-and may consume model tokens; live Codex-only use does not.
+[the plugin guide](plugins/agent-pulse/README.md). Neither makes model calls;
+checkpoints are written live by the agent in its own session.

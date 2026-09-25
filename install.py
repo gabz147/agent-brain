@@ -144,6 +144,33 @@ def installation(home, vault, replace=False, client="both"):
     return files
 
 
+# Brain adapters that earlier releases installed and this release retires.
+# session-end-enqueue.js only fed the removed background model-capture drain.
+RETIRED_HOOKS = ("session-end-enqueue.js",)
+
+
+def prune_retired_hooks(hooks):
+    """Remove only retired Brain adapter commands; keep every other hook and group."""
+    for event in list(hooks):
+        groups = hooks[event]
+        if not isinstance(groups, list):
+            continue
+        kept_groups = []
+        for group in groups:
+            entries = group.get("hooks", []) if isinstance(group, dict) else []
+            kept = [h for h in entries if not (isinstance(h, dict) and any(
+                name in str(part) for name in RETIRED_HOOKS for part in [h.get("command", ""), *h.get("args", [])]))]
+            if entries and not kept:
+                continue
+            if len(kept) != len(entries):
+                group = dict(group, hooks=kept)
+            kept_groups.append(group)
+        if kept_groups:
+            hooks[event] = kept_groups
+        elif groups:
+            del hooks[event]
+
+
 def merge_claude(home, env, add, replace):
     settings_path = home / ".claude/settings.json"
     settings = json.loads(settings_path.read_text(encoding="utf-8-sig")) if settings_path.exists() else {}
@@ -154,6 +181,7 @@ def merge_claude(home, env, add, replace):
     settings.setdefault("env", {}).update(env)
     snippet = json.loads((REPO / "settings/vault-hooks.snippet.json").read_text(encoding="utf-8"))
     hooks = settings.setdefault("hooks", {})
+    prune_retired_hooks(hooks)
     for event, entries in snippet["hooks"].items():
         existing = hooks.setdefault(event, [])
         if not isinstance(existing, list):

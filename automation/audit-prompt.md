@@ -9,4 +9,4 @@ Use this checklist only during an authorized interactive semantic review:
 4. Follow 10 - Resources/Vault Workflow Contract.md and the shared writer. New work signs with the actual runtime model. Daily filenames/times use event-local dates; frontmatter uses the actual write date.
 5. Checkpoint findings. A review authorizes findings and their checkpoint, not applying source/config fixes without existing authorization.
 
-Retrospective model capture uses capture-prompt.md over stdin in a restricted read-only child; vault_capture.py requires structured source evidence and a verified daily receipt before reporting completion. Both early errors and completed attempts enter state-v2/outcomes.jsonl. Never use substring/mtime heuristics.
+There is no retrospective or background model capture; checkpoints are written live by the agent. vault_capture.py requires structured source evidence and a verified daily receipt before reporting completion. Never use substring/mtime heuristics.

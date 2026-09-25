@@ -1,6 +1,6 @@
 # Install and upgrade
 
-Use the user's existing authorization and preferences. Establish the vault location, participating clients, and whether scheduled model capture is wanted before changing the machine. Do not overwrite existing notes, boot files, skills, or settings wholesale.
+Use the user's existing authorization and preferences. Establish the vault location, participating clients, and whether the optional scheduled audit is wanted before changing the machine. Do not overwrite existing notes, boot files, skills, or settings wholesale.
 
 For guided installation with client selection, start with [LAPTOP-SETUP.md](LAPTOP-SETUP.md). The included `install.py` implements the file-copy and settings-merge steps below. Preview with `python install.py --client claude|codex|both`; apply with the same selection and `--apply`. Use `python3` on macOS/Linux. `--wizard` offers the official installer for a missing CLI. Brain paths are merged into selected-client settings automatically; `--persist-env` is a legacy Windows option. Setup does not log in, enable community plugins or register tasks. Use the remaining checks below after installation.
 
@@ -18,9 +18,9 @@ To make existing ISO timestamps readable after upgrading, preview
 the conversion. This preserves the original time, author and note body, and
 creates checked snapshots. Use `python3` on macOS/Linux.
 
-Use `install.py --doctor --client claude|codex|both` to check the chosen clients. Claude hooks need Node.js 22+. Python 3.11+ is required; the controller uses only the standard library. Obsidian is optional for agent work. Scheduling requires Windows PowerShell and Task Scheduler; retrospective capture additionally needs a logged-in Claude CLI with the required restricted-mode flags.
+Use `install.py --doctor --client claude|codex|both` to check the chosen clients. Claude hooks need Node.js 22+. Python 3.11+ is required; the controller uses only the standard library. Obsidian is optional for agent work. The optional audit task requires Windows PowerShell and Task Scheduler; it never calls a model.
 
-For an upgrade, save copies of the installed boot files, skills, hooks, controller/schema, and relevant settings. Preserve pending queues, source receipts, and snapshot directories. Do not copy runtime state into this public repository. The old drainer must not run concurrently while its controller files are replaced; use the existing pause toggle or disable only the two vault tasks during the authorized upgrade, then restore their prior state.
+For an upgrade, save copies of the installed boot files, skills, hooks, controller/schema, and relevant settings. Preserve source receipts and snapshot directories. Do not copy runtime state into this public repository. Pause or disable the audit task while its controller files are replaced, then restore its prior state. The background capture drain was removed: the installer drops the retired SessionEnd hook entry, and an existing `VaultQueueDrain` task should be removed (`Unregister-ScheduledTask -TaskName VaultQueueDrain`), then the runtime baseline re-recorded once.
 
 ## 2. Copy or merge the starter vault
 
@@ -58,13 +58,12 @@ Copy `skills/obsidian-vault/`, `skills/handoff/` and `skills/source-to-vault/` i
 
 ## 5. Install Claude hook adapters
 
-Copy `hooks/vault/` to `~/.claude/hooks/vault/`. Merge the three arrays in `settings/vault-hooks.snippet.json` into the existing `hooks` object in `~/.claude/settings.json`. Replace `{{CLAUDE_DIR}}` inside each `args` entry with the absolute directory. Set `command` to the actual Python or Node executable. The direct-execution form needs no shell quoting and supports Windows without Git Bash. Claude Code 2.1.270+ is the tested minimum. Preserve unrelated hooks/settings, then parse the JSON to verify it.
+Copy `hooks/vault/` to `~/.claude/hooks/vault/`. Merge the two arrays in `settings/vault-hooks.snippet.json` into the existing `hooks` object in `~/.claude/settings.json`. Replace `{{CLAUDE_DIR}}` inside each `args` entry with the absolute directory. Set `command` to the actual Python or Node executable. The direct-execution form needs no shell quoting and supports Windows without Git Bash. Claude Code 2.1.270+ is the tested minimum. Preserve unrelated hooks/settings, then parse the JSON to verify it.
 
 - PostToolUse reports an invalid completed Markdown write with exit 2. It cannot undo the write; the shared controller prevents invalid writes before they happen.
 - Stop requests a source-bound checkpoint after substantive work. The request is not evidence that capture happened.
-- SessionEnd writes a durable spool record for optional later draining.
 
-Internal hook failures fail open and are logged. Codex does not use these Claude hooks; it checkpoints directly through the shared writer. Optional discovery handles Codex interruptions.
+Internal hook failures fail open and are logged. Codex does not use these Claude hooks; it checkpoints directly through the shared writer. There is no background capture: a session that ends without a checkpoint is not summarized automatically.
 
 ## 6. Verify the core in an isolated fixture
 

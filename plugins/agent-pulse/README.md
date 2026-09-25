@@ -22,6 +22,8 @@ This is optional and self-contained. The rest of agent-brain works without it.
 
 The orb watches the optional automation module's runtime files under `BRAIN_AUTOMATION_DIR` (falls back to `~/.claude/vault-automation`): `stop-state.json`, `queue.jsonl` / `queue.batch.jsonl`, `.drain.lock`, `automation-state.json`, and the tail of `drain.log` (for the last successful drain), plus a `tasklist` process check and Obsidian's own vault-write events. If you don't run the automation module, those files simply won't exist — every poll treats a missing file as "no signal", so the orb just stays idle and the refresh button still works.
 
+The background capture drain was removed from agent-brain, so new installations never write `queue.jsonl`, `queue.batch.jsonl` or `drain.log`. Those queue and last-drain signals then stay empty ("0 queued", "last drain: none logged"); the `.drain.lock` signal still reflects the scheduled audit, and the toggle's `afk` scope now pauses only that audit.
+
 No configuration is required beyond the `BRAIN_AUTOMATION_DIR` env var that the rest of agent-brain already uses.
 
 The workflow v2 controller preserves these activity signals. The orb and queue count do not certify capture: verified completion lives in the controller's private source receipts. New source records may also be waiting in the durable spool before they appear in the compatible queue feed.

@@ -18,7 +18,6 @@ Record what is actually installed, scheduled, hooked, and listening on this mach
 
 | Task | Trigger | Action | Owner note |
 |---|---|---|---|
-| `VaultQueueDrain` (optional) | hourly in the starter setup | `wscript.exe run-hidden.vbs drain-queue.ps1` | [[Vault Autonomy Pipeline]] |
 | `VaultNightlyAudit` (optional) | 03:30 daily + logon delayed 10 minutes | `wscript.exe run-hidden.vbs nightly-audit.ps1` | [[Vault Autonomy Pipeline]] |
 
 ## Agent hooks
@@ -28,10 +27,9 @@ When installed, registered in `~/.claude/settings.json`:
 | Event | Hook | Purpose |
 |---|---|---|
 | PostToolUse Write/Edit/MultiEdit | `hooks/vault/validate-vault-frontmatter.py` | vault schema guard (exit 2 on violation) |
-| SessionEnd | `hooks/vault/session-end-enqueue.js` | enqueue the session for the drainer (automation module) |
 | Stop (asyncRewake) | `hooks/vault/stop-vault-gate.js` | live vault checkpoint |
 
-_[Add the rest of your hooks, MCP servers, and skills of note.]_ Check the configured transcript-retention interval and clear capture backlogs before their sources expire. Codex uses live controller checkpoints directly; its optional interruption backstop reads `~/.codex/sessions/`.
+_[Add the rest of your hooks, MCP servers, and skills of note.]_ Codex uses live controller checkpoints directly. There is no background capture; checkpoint an interrupted session from its transcript before the client's transcript-retention interval expires.
 
 ## Obsidian
 
@@ -46,6 +44,6 @@ _[Add the rest of your hooks, MCP servers, and skills of note.]_ Check the confi
 
 ## Automation control files
 
-`BRAIN_AUTOMATION_DIR`: durable `spool/`, compatible queue/batch/incoming files, processed/failed/excluded journals, `stop-state.json` (activity feed, never completion evidence), `automation-state.json` (pause toggle), deferral state, `.drain.lock`, daily audit stamp, and logs. Preserve older journals during upgrades.
+`BRAIN_AUTOMATION_DIR`: `stop-state.json` (activity feed, never completion evidence), `automation-state.json` (pause toggle), deferral state, `.drain.lock` (audit lock; name kept for plugin compatibility), daily audit stamp, and logs. Queue/spool files and journals from releases with the retired drain can be deleted.
 
 `BRAIN_STATE_DIR` defaults to `<automation>/state-v2`: source receipts, live acknowledgments, loop guards, proposals, outcomes, hygiene reports, quota backoff, and the optional runtime baseline. `BRAIN_BACKUPS_DIR` holds private before/after snapshots. These directories are operational records, not a parallel memory database, and must not be published.

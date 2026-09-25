@@ -22,13 +22,14 @@ What was tried, why it failed, and what to do instead. The counterpart of "bank 
 These shipped with the template because they cost the original author real debugging time.
 
 - **Headless `claude -p` from a scheduled task** — tried: launching with the task's default working directory. Failed: cwd is `C:\WINDOWS\system32`; the sandbox denies every path under the user profile, and the child exits 0 after saying so. Do instead: `-WorkingDirectory` on the vault plus `--add-dir` for the transcript tree (the shipped scripts do this). → `automation/README.md`
-- **Trusting exit 0 from a headless child** — tried: journaling any exit 0 as processed. Failed: sandbox-blocked and rate-limited runs both exit 0. Do instead: verify a named vault file changed, or accept only a whitelisted no-op line. → `automation/drain-queue.ps1`
-- **Transcript byte size as a triviality signal** — tried: "under 64 KB is trivial". Failed: an 86 KB transcript held one prompt and a 344-char reply. Do instead: count `tool_use` blocks and assistant text chars. → `automation/drain-queue.ps1`
+- **Trusting exit 0 from a headless child** — tried: journaling any exit 0 as processed. Failed: sandbox-blocked and rate-limited runs both exit 0. Do instead: verify a named vault file changed, or accept only a whitelisted no-op line. → shared controller receipts (the drain that hit this was removed)
+- **Transcript byte size as a triviality signal** — tried: "under 64 KB is trivial". Failed: an 86 KB transcript held one prompt and a 344-char reply. Do instead: count `tool_use` blocks and assistant text chars. → historical (the drain was removed)
 - **`Start-Process -PassThru` exit codes (PowerShell 5.1)** — tried: reading `$p.ExitCode` after `WaitForExit`. Failed: stays `$null` unless the handle is cached. Do instead: `$null = $p.Handle` right after `Start-Process`.
 - **Hidden scheduled PowerShell** — tried: `powershell.exe -WindowStyle Hidden`. Failed: conhost still flashes and steals focus, tabbing fullscreen games out. Do instead: `wscript.exe run-hidden.vbs` with window style 0.
 - **Idle detection from a service task** — tried: S4U / session-0 logon type. Failed: `GetLastInputInfo` only sees its own session, so it always reads "away". Do instead: keep `LogonType=Interactive`.
 - **`ConvertTo-Json` on `Get-Content` strings** — tried: serialising the raw lines. Failed: ETS members (`PSPath` etc.) make `-Depth 10` walk the provider graph and hang. Do instead: cast to `[string]` first.
-- **Leaving a drain backlog for the scheduled run** — tried: waiting for an idle window. Failed: Claude Code deletes transcripts after 30 days; sessions were lost. Do instead: drain any backlog before day 30 (the drainer and the Agent Pulse tooltip warn at 20 days).
+- **Leaving a drain backlog for the scheduled run** — tried: waiting for an idle window. Failed: Claude Code deletes transcripts after 30 days; sessions were lost. Do instead: checkpoint live; checkpoint any missed session from its transcript before day 30.
+- **Unattended background model capture** — tried: an hourly scheduled drain running `claude -p` on idle machines to summarize past sessions. Failed: it spent the user's plan usage on Opus runs while they were away. Do instead: live checkpoints only; the drain, its queue and the SessionEnd enqueue hook were removed.
 
 ## Obsidian / Electron
 

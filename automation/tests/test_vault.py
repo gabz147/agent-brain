@@ -11,7 +11,6 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import vault_core as core
 import vault_capture as capture
-import vault_queue as queue
 import vault_sources as sources
 import vault_hooks as hooks
 from vault_hygiene import age_priorities, hygiene
@@ -223,18 +222,6 @@ class SourceTests(Fixture):
 
 
 class CaptureTests(Fixture):
-    def test_capture_repeat_does_not_call_model_or_duplicate(self):
-        path = self.transcript()
-        entry = {"source": "codex", "session_id": "session-1", "transcript_path": str(path)}
-        units = list(sources.stream_units(path, "codex", "session-1"))
-        with patch.object(capture, "build_prompt", return_value="full stdin evidence"):
-            result = capture.capture(self.vault, entry, model_runner=lambda *args: (self.proposal(units), "opus 5"))
-            again = capture.capture(self.vault, entry, model_runner=lambda *args: self.fail("must not run again"))
-        self.assertTrue(result["complete"])
-        self.assertTrue(again["complete"])
-        note = self.vault.inspect(core.daily_path(units[0]["day"]))["text"]
-        self.assertEqual(note.count("## Session"), 1)
-        self.assertIn("updated_by: opus 5", note)
 
     def test_unrelated_note_write_is_not_coverage(self):
         self.daily()
@@ -264,97 +251,6 @@ class CaptureTests(Fixture):
         capture.apply_proposal(self.vault, self.proposal(units), "opus 5", units, "codex", "session-1", "capture-test")
         self.vault.path(core.daily_path(units[0]["day"])).unlink()
         self.assertEqual(len(sources.uncovered(self.vault, path, "codex", "session-1")[0]), 2)
-
-    def test_stdin_transport_and_usage(self):
-        proposal = {"disposition": "trivial"}
-        script = "import sys,json; data=sys.stdin.read(); assert data == 'complete prompt'; print(json.dumps({'type':'assistant','message':{'model':'claude-opus-5'}})); print(json.dumps({'type':'result','is_error':False,'structured_output':" + repr(proposal) + ",'usage':{'input_tokens':123,'output_tokens':9},'modelUsage':{},'total_cost_usd':0.012}))"
-        result, signer = capture.run_model(self.vault, "complete prompt", "stub-test", [sys.executable, "-c", script])
-        self.assertEqual(signer, "opus 5")
-        outcome = json.loads((self.vault.state / "outcomes.jsonl").read_text().splitlines()[-1])
-        self.assertEqual(outcome["usage"]["input_tokens"], 123)
-        self.assertEqual(outcome["cost_usd"], 0.012)
-
-    def test_exit_zero_without_proof_fails_and_logs(self):
-        with self.assertRaises(core.VaultError):
-            capture.run_model(self.vault, "prompt", "no-proof", [sys.executable, "-c", "print('done')"])
-        self.assertEqual(json.loads((self.vault.state / "outcomes.jsonl").read_text().splitlines()[-1])["outcome"], "failed")
-
-    def test_timeout_logs(self):
-        with self.assertRaises(core.VaultError):
-            capture.run_model(self.vault, "prompt", "timeout", [sys.executable, "-c", "import time;time.sleep(2)"], timeout=0.1)
-        self.assertEqual(json.loads((self.vault.state / "outcomes.jsonl").read_text().splitlines()[-1])["outcome"], "timeout")
-
-    def test_quota_backoff_prevents_next_child(self):
-        script = "import json;print(json.dumps({'type':'result','is_error':True,'result':'Rate limit, retry-after: 600'}))"
-        with self.assertRaises(capture.Deferred):
-            capture.run_model(self.vault, "prompt", "rate-limit", [sys.executable, "-c", script])
-        with patch.object(capture.subprocess, "run", side_effect=AssertionError("child must not launch")):
-            with self.assertRaises(capture.Deferred):
-                capture.run_model(self.vault, "prompt", "backoff", ["unused"])
-
-
-class QueueTests(Fixture):
-    def batch(self, raw=None):
-        path = self.directory / "queue.batch.jsonl"
-        entry = {"source": "codex", "session_id": "session-1", "transcript_path": "somewhere.jsonl"}
-        path.write_bytes(raw or (json.dumps(entry) + "\n").encode())
-        return path
-
-    def test_batch_read_failure_preserves_batch(self):
-        batch = self.batch()
-        real = Path.read_bytes
-        def broken(path):
-            if path == batch:
-                raise OSError("read denied")
-            return real(path)
-        with patch.object(Path, "read_bytes", broken):
-            with self.assertRaises(OSError):
-                queue.drain(self.vault, self.directory, discover=False)
-        self.assertTrue(batch.exists())
-
-    def test_malformed_failed_journal_failure_preserves_batch(self):
-        batch = self.batch(b"not json\n")
-        with patch.object(queue, "append_jsonl", side_effect=OSError("journal failed")):
-            with self.assertRaises(OSError):
-                queue.drain(self.vault, self.directory, discover=False)
-        self.assertEqual(batch.read_bytes(), b"not json\n")
-
-    def test_processed_journal_failure_preserves_work(self):
-        batch = self.batch()
-        with patch.object(queue, "append_jsonl", side_effect=OSError("journal failed")):
-            with self.assertRaises(OSError):
-                queue.drain(self.vault, self.directory, capture_fn=lambda *args: {"disposition": "captured", "complete": True}, discover=False)
-        self.assertTrue(batch.exists())
-
-    def test_batch_replace_failure_preserves_work(self):
-        batch = self.batch()
-        before = batch.read_bytes()
-        with patch.object(queue, "atomic_bytes", side_effect=OSError("replace failed")):
-            with self.assertRaises(OSError):
-                queue.drain(self.vault, self.directory, capture_fn=lambda *args: {"disposition": "captured", "complete": False}, discover=False)
-        self.assertEqual(batch.read_bytes(), before)
-
-    def test_success_has_durable_journal_before_remove(self):
-        batch = self.batch()
-        result = queue.drain(self.vault, self.directory, capture_fn=lambda *args: {"disposition": "captured", "complete": True}, discover=False)
-        self.assertFalse(batch.exists())
-        self.assertEqual(result["completed"], 1)
-        self.assertTrue((self.directory / "processed-v2.jsonl").exists())
-
-    def test_spool_and_partial_retention(self):
-        queue.enqueue(self.directory, {"session_id": "session-1", "transcript_path": "source", "source": "codex"})
-        result = queue.drain(self.vault, self.directory, capture_fn=lambda *args: {"disposition": "captured", "complete": False}, discover=False)
-        self.assertEqual(result["partial"], 1)
-        self.assertTrue((self.directory / "queue.batch.jsonl").exists())
-
-    def test_quota_retains_remaining_records(self):
-        batch = self.batch()
-        before = batch.read_bytes()
-        def deferred(*args):
-            raise capture.Deferred("quota")
-        result = queue.drain(self.vault, self.directory, capture_fn=deferred, discover=False)
-        self.assertEqual(result["deferred"], 1)
-        self.assertEqual(batch.read_bytes(), before)
 
 
 class HygieneTests(Fixture):

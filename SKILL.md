@@ -39,6 +39,7 @@ for a real checkpoint and fresh-session recall. Treat account login, agent
 behavior and Obsidian UI acceptance separately from file validation.
 
 Everyday work uses the installed `obsidian-vault`, `handoff` and
-`source-to-vault` skills. Background capture and Agent Pulse are optional;
-configure them only when requested, using the guides in this repository.
+`source-to-vault` skills. The scheduled audit and Agent Pulse are optional;
+configure them only when requested, using the guides in this repository. There
+is no background model capture.
 Actual notes, credentials, transcripts and runtime state stay private.

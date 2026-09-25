@@ -21,7 +21,7 @@ This loading policy replaces older blanket startup/compaction reads in Brain not
 - Markdown is canonical. No parallel database, embeddings, external index or vault publication without explicit approval. Boot files stay outside the vault. Never archive unasked or alter frozen `09 - Archive/Old Memory/` bytes.
 - Use `<BRAIN_AUTOMATION_DIR>/vaultctl.py` for every vault mutation. Inspect current hashes, preserve existing daily sessions/Index entries, and re-read/rebuild after conflicts. Check the system date and sign with the verified runtime model, never a configured default or client name.
 - Checkpoint substantive work before handing back: relevant topic/index and affected ledgers, plus a new daily session through `checkpoint-context` and `checkpoint --summary` using the actual transcript. Verify the source-bound receipt; a tool request or exit zero is not completion. No invented backfills.
-- Hooks fail open on internal errors. Scheduled capture retains idle/fullscreen/pause guards and remains a backstop, not a substitute for live checkpoints.
+- Hooks fail open on internal errors. Checkpoints are live only; nothing captures sessions with a model in the background. The scheduled audit keeps idle/fullscreen/pause guards.
 <!-- SHARED VAULT RULES END -->
 
 Verify Claude's runtime model from trusted metadata or this transcript's `message.model`. A Stop-hook reminder does not establish capture.

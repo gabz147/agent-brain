@@ -1,6 +1,7 @@
-# Shared scheduled runner. Guard behavior and Interactive/hidden task identity remain intact.
+# Scheduled audit runner (hygiene only; never starts a model). Guard behavior and Interactive/hidden task identity remain intact.
+# The former background drain that ran model captures was removed; checkpoints are written live by the agent.
 param(
-    [ValidateSet('drain','audit')][string]$Kind,
+    [ValidateSet('audit')][string]$Kind = 'audit',
     [switch]$DryRun,
     [switch]$Force
 )
@@ -31,7 +32,7 @@ try {
     $PythonPath = (Get-Command $PythonCommand -ErrorAction Stop).Source
     if (-not (Test-Path -LiteralPath $Ctl)) { throw 'Shared vault controller is missing' }
     if ($DryRun) {
-        Write-Output (@{ kind=$Kind; mode='dry-run'; controller=$Ctl; operation=$(if ($Kind -eq 'audit') {'hygiene --fix'} else {'drain'}); model_calls=$(if ($Kind -eq 'audit') {0} else {'only uncovered source evidence'}) } | ConvertTo-Json -Compress)
+        Write-Output (@{ kind=$Kind; mode='dry-run'; controller=$Ctl; operation='hygiene --fix'; model_calls=0 } | ConvertTo-Json -Compress)
         exit 0
     }
     $pause = Get-AutomationPause -Scope 'afk'
@@ -39,7 +40,7 @@ try {
     $busy = Get-UserBusyReason
     if ($null -ne $busy) { Defer-Job $busy; exit 0 }
     $today = (Get-Date).ToString('yyyy-MM-dd')
-    if (($Kind -eq 'audit') -and (-not $Force) -and (Test-Path -LiteralPath $StampPath)) {
+    if ((-not $Force) -and (Test-Path -LiteralPath $StampPath)) {
         if ([System.IO.File]::ReadAllText($StampPath).Trim() -eq $today) {
             Defer-Job 'already audited today'
             exit 0
@@ -54,7 +55,7 @@ try {
         $LegacyLock.Write($bytes,0,$bytes.Length)
         $LegacyLock.Flush($true)
     } catch {
-        Defer-Job 'drain in progress'
+        Defer-Job 'audit in progress'
         exit 0
     }
     $streak = Close-DeferralStreak -Name $Kind
@@ -62,30 +63,19 @@ try {
     Write-JobLog ('START ' + $Kind + ' through shared controller')
     $env:PYTHONIOENCODING = 'utf-8'
     $env:VAULT_AUTOMATION = '1'
-    if ($Kind -eq 'audit') {
-        $output = & $PythonPath $Ctl hygiene --fix
-    } else {
-        $output = & $PythonPath $Ctl drain --directory $ScriptDir --max-attempts 8
-    }
+    $output = & $PythonPath $Ctl hygiene --fix
     $code = $LASTEXITCODE
     $result = (($output | ForEach-Object { [string]$_ }) -join "`n") | ConvertFrom-Json -ErrorAction Stop
     if (($code -ne 0) -and ($result.outcome -eq 'failed')) {
         $null = & $PythonPath $Ctl report-error --kind $Kind --error ([string]$result.error)
     }
-    if ($Kind -eq 'audit') {
-        if (($code -eq 0) -and ($result.outcome -eq 'verified')) {
-            $tempStamp = $StampPath + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
-            [System.IO.File]::WriteAllText($tempStamp,$today,$Utf8NoBom)
-            Move-Item -LiteralPath $tempStamp -Destination $StampPath -Force -ErrorAction Stop
-            Write-JobLog ('verified: ' + $result.notes + ' notes; ' + $result.repairs.Count + ' repairs; no model calls')
-        } else {
-            Write-JobLog ('NOT stamped: outcome=' + $result.outcome + '; issues=' + $result.issues.Count + '; controller exit=' + $code)
-        }
+    if (($code -eq 0) -and ($result.outcome -eq 'verified')) {
+        $tempStamp = $StampPath + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+        [System.IO.File]::WriteAllText($tempStamp,$today,$Utf8NoBom)
+        Move-Item -LiteralPath $tempStamp -Destination $StampPath -Force -ErrorAction Stop
+        Write-JobLog ('verified: ' + $result.notes + ' notes; ' + $result.repairs.Count + ' repairs; no model calls')
     } else {
-        Write-JobLog ('result: ' + ($result | ConvertTo-Json -Compress -Depth 5))
-        if (($code -eq 0) -and ($result.completed -gt 0)) {
-            Write-JobLog ('[INFO] verified ' + $result.completed + ' source records with durable receipts')
-        }
+        Write-JobLog ('NOT stamped: outcome=' + $result.outcome + '; issues=' + $result.issues.Count + '; controller exit=' + $code)
     }
     Write-JobLog ('END ' + $Kind + ' (controller exit=' + $code + ')')
     exit 0

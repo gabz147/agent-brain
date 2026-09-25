@@ -103,10 +103,11 @@ The core installer, vault writer and live checkpoints support **Windows, macOS
 and Linux**, with Claude-only, Codex-only and combined installations. Your chosen
 CLI must also support your OS/version. WSL is a separate Linux installation.
 
-Background retrospective capture is **optional, Windows-only, and not enabled
-by setup**. It requires Claude authentication even when capturing Codex sessions,
-uses model tokens, and retains idle/fullscreen/pause guards. Live Codex-only use
-does not require Claude. See [optional scheduling](automation/README.md).
+Checkpoints are live only: the agent writes them inside its own session, and
+nothing in this package starts a model call in the background. The former
+optional Windows retrospective-capture drain was removed because it spent plan
+usage on unattended runs. An optional Windows audit task (no model calls) is
+described in [optional scheduling](automation/README.md).
 [Agent Pulse](plugins/agent-pulse/README.md) is an optional Obsidian indicator.
 
 This installs a template, not a cloud sync service. Keep actual notes and runtime

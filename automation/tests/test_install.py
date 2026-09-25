@@ -33,6 +33,29 @@ class InstallTests(unittest.TestCase):
             self.assertNotIn("in full at startup", text, path)
             self.assertNotIn("Checked at the start of every conversation", text, path)
 
+    def test_upgrade_prunes_only_the_retired_session_end_hook(self):
+        spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")
+        installer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        retired = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/vault/session-end-enqueue.js"]}
+        other = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/other-session-end.js"]}
+        stop = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/vault/stop-vault-gate.js"]}
+        hooks = {"SessionEnd": [{"hooks": [retired]}, {"hooks": [other, dict(retired)]}], "Stop": [{"hooks": [stop]}]}
+        installer.prune_retired_hooks(hooks)
+        self.assertEqual(hooks, {"SessionEnd": [{"hooks": [other]}], "Stop": [{"hooks": [stop]}]})
+        only_retired = {"SessionEnd": [{"hooks": [retired]}]}
+        installer.prune_retired_hooks(only_retired)
+        self.assertEqual(only_retired, {})
+
+    def test_no_packaged_automation_starts_a_model(self):
+        # The background capture drain was removed: nothing shipped may launch a model CLI on its own.
+        self.assertFalse((REPO / "automation/vault_queue.py").exists())
+        self.assertFalse((REPO / "automation/drain-queue.ps1").exists())
+        self.assertFalse((REPO / "hooks/vault/session-end-enqueue.js").exists())
+        pattern = re.compile(r"""which\(\s*["'](claude|codex)["']|["']claude["']\s*,\s*["']-p["']|codex\s+exec""")
+        for path in list((REPO / "automation").glob("*.py")) + list((REPO / "automation").glob("*.ps1")) + list((REPO / "hooks").rglob("*.*")):
+            self.assertIsNone(pattern.search(path.read_text(encoding="utf-8", errors="replace")), str(path))
+
     @unittest.skipUnless(importlib.util.find_spec("pymupdf"), "Optional PDF extraction needs PyMuPDF")
     def test_pdf_packet_preserves_pages_and_flags_empty_pages(self):
         import pymupdf as fitz

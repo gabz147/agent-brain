@@ -194,7 +194,8 @@ class OnboardingTests(unittest.TestCase):
                 install.install(home, vault, apply=True, client="claude")
             settings = json.loads((home / ".claude/settings.json").read_text(encoding="utf-8"))
             env = dict(os.environ, **settings["env"], PYTHONIOENCODING="utf-8")
-            for event in ("Stop", "SessionEnd", "PostToolUse"):
+            self.assertNotIn("SessionEnd", settings["hooks"])  # retired with the background drain
+            for event in ("Stop", "PostToolUse"):
                 hook = settings["hooks"][event][0]["hooks"][0]
                 result = subprocess.run([hook["command"], *hook["args"]], input="{}", capture_output=True, text=True, env=env, timeout=20)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

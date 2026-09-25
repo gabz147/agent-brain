@@ -1,8 +1,8 @@
 # user-busy.ps1 - shared "don't interrupt the user" guard.
 #
-# Dot-sourced by drain-queue.ps1 and nightly-audit.ps1.
+# Dot-sourced by nightly-audit.ps1 (through invoke-vault-job.ps1).
 #
-# Why: these jobs spawn a headless `claude` session - a heavy CPU/IO burst. Even
+# Why: the scheduled audit is a CPU/IO burst (it never starts a model). Even
 # with no console window (see run-hidden.vbs) that is not acceptable while the
 # user is doing anything. So the rule is not "which app is open" (a browser is
 # ALWAYS open; that would mean never running). The rule is: only run when the
@@ -153,8 +153,8 @@ function Get-UserBusyReason {
 }
 
 # =========================================================================
-# Shared helpers (added 2026-09-03). Dot-sourced by drain-queue.ps1 and
-# nightly-audit.ps1 alongside the presence guard above:
+# Shared helpers (added 2026-09-03). Dot-sourced by the scheduled audit
+# alongside the presence guard above:
 #   Get-AutomationPause     - the user's on/off toggle (automation-state.json,
 #                             written by the Obsidian Agent Pulse plugin)
 #   Update-DeferralStreak / Close-DeferralStreak
@@ -169,7 +169,7 @@ $script:HelperUtf8 = New-Object System.Text.UTF8Encoding($false)
 
 function Get-AutomationPause {
     # Returns a reason string when the user has paused automation for $Scope,
-    # else $null. Scope 'afk' (drainer + audit) is paused by either
+    # else $null. Scope 'afk' (scheduled audit) is paused by either
     # {"scope":"afk"} or {"scope":"all"}; scope 'all' (also the live Stop-hook
     # gate) only by {"scope":"all"}. A missing or unreadable file means NOT
     # paused. An unreadable existing toggle defers scheduled work.
@@ -195,7 +195,7 @@ function Get-DeferralReasonKey {
     if ($Reason -match 'fullscreen') { return 'fullscreen' }
     if ($Reason -match 'paused') { return 'paused' }
     if ($Reason -match 'already audited') { return 'already audited' }
-    if ($Reason -match 'drain in progress') { return 'drain in progress' }
+    if ($Reason -match '(drain|audit) in progress') { return 'job in progress' }
     return 'other'
 }
 

@@ -1,4 +1,4 @@
-"""Deterministic, read-only checks of hook wiring and the two vault tasks."""
+"""Deterministic, read-only checks of hook wiring and the scheduled vault audit task."""
 import json
 import os
 from pathlib import Path
@@ -10,7 +10,7 @@ BASELINE = DEFAULT_STATE / "runtime-contract.json"
 TASK_QUERY = r"""
 $ErrorActionPreference = 'Stop'
 $items = @()
-foreach ($name in @('VaultQueueDrain','VaultNightlyAudit')) {
+foreach ($name in @('VaultNightlyAudit')) {
     $task = Get-ScheduledTask -TaskName $name -ErrorAction Stop
     $actions = @($task.Actions | ForEach-Object {
         @{ execute=[string]$_.Execute; arguments=[string]$_.Arguments; working_directory=[string]$_.WorkingDirectory }

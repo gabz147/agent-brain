@@ -92,15 +92,6 @@ class PortableTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len((missing / "hook-errors.jsonl").read_text().splitlines()), 2)
 
-    def test_session_end_prefers_public_environment_setting(self):
-        legacy = self.base / "Unused legacy location"
-        env = dict(self.env, VAULT_AUTOMATION_DIR=str(legacy))
-        result = self.child(["node", str(REPO / "hooks/vault/session-end-enqueue.js")],
-                            {"session_id": "portable", "transcript_path": str(self.base / "source.jsonl")}, env)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(list((self.auto / "spool").glob("*.json"))), 1)
-        self.assertFalse(legacy.exists())
-
     def test_stop_launcher_resolves_custom_paths_and_python(self):
         transcript = self.base / "source.jsonl"
         rows = [

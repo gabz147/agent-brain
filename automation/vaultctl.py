@@ -11,9 +11,8 @@ from vault_core import (DEFAULT_AUTOMATION, DEFAULT_BACKUPS, DEFAULT_STATE, DEFA
                         ISO_TIME, append_jsonl, atomic_json, file_lock, format_note_time, frontmatter,
                         is_daily, model_label, now, parse_note_time, read_text, sha, validate)
 from vault_sources import source_key, stream_units, uncovered, verified_receipts
-from vault_capture import Deferred, apply_proposal, capture
+from vault_capture import apply_proposal
 from vault_hygiene import hygiene
-from vault_queue import discover_codex, drain, enqueue
 
 
 def load_input(path):
@@ -141,7 +140,7 @@ def main(argv=None):
     maintenance = sub.add_parser("hygiene")
     maintenance.add_argument("--fix", action="store_true")
     maintenance.add_argument("--no-parity", action="store_true")
-    for name in ("capture", "checkpoint-context", "checkpoint"):
+    for name in ("checkpoint-context", "checkpoint"):
         command = sub.add_parser(name)
         command.add_argument("--source", choices=("claude", "codex"), required=True)
         command.add_argument("--session", required=True)
@@ -149,15 +148,6 @@ def main(argv=None):
         if name == "checkpoint":
             command.add_argument("--input")
             command.add_argument("--summary", action="store_true", help="Print compact verified receipt; retain full receipt on disk")
-    queue = sub.add_parser("drain")
-    queue.add_argument("--directory", default=str(DEFAULT_AUTOMATION))
-    queue.add_argument("--max-attempts", type=int, default=8)
-    queue.add_argument("--no-discover", action="store_true")
-    discovery = sub.add_parser("discover-codex")
-    discovery.add_argument("--directory", default=str(DEFAULT_AUTOMATION))
-    enqueue_parser = sub.add_parser("enqueue")
-    enqueue_parser.add_argument("--input")
-    enqueue_parser.add_argument("--directory", default=str(DEFAULT_AUTOMATION))
     restore = sub.add_parser("restore")
     restore.add_argument("snapshot")
     restore.add_argument("path")
@@ -186,8 +176,6 @@ def main(argv=None):
     if args.command == "hygiene":
         with file_lock(vault.state / "locks" / "scheduled.lock", timeout=1):
             return hygiene(vault, fix=args.fix, check_parity=not args.no_parity)
-    if args.command == "capture":
-        return capture(vault, {"source": args.source, "session_id": args.session, "transcript_path": args.transcript})
     if args.command == "checkpoint-context":
         units = live_units(args)
         return {"source": args.source, "session_id": args.session, "turn_key": units[-1]["turn_key"],
@@ -197,13 +185,6 @@ def main(argv=None):
     if args.command == "checkpoint":
         receipt = checkpoint(vault, args, load_input(args.input))
         return receipt_summary(receipt) if args.summary else receipt
-    if args.command == "drain":
-        return drain(vault, args.directory, discover=not args.no_discover, max_attempts=args.max_attempts)
-    if args.command == "discover-codex":
-        return {"enqueued": discover_codex(vault, args.directory)}
-    if args.command == "enqueue":
-        enqueue(args.directory, load_input(args.input))
-        return {"status": "enqueued"}
     if args.command == "restore":
         return vault.restore(args.snapshot, args.path, args.expected_sha256)
     if args.command == "report-error":
@@ -238,9 +219,6 @@ if __name__ == "__main__":
         result = main()
         print(json.dumps(result, ensure_ascii=False, indent=2))
         sys.exit(2 if isinstance(result, dict) and result.get("outcome") in ("invalid", "needs_review") else 0)
-    except Deferred as exc:
-        print(json.dumps({"outcome": "deferred", "error": str(exc)}))
-        sys.exit(75)
     except Exception as exc:
         print(json.dumps({"outcome": "failed", "error": str(exc)}))
         sys.exit(1)
