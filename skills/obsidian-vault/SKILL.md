@@ -20,6 +20,8 @@ rg --files $vaultRoot -g '*.md' -g '!**/.obsidian/**' -g '!**/09 - Archive/**'
 rg -n -i -g '*.md' -g '!**/.obsidian/**' -g '!**/09 - Archive/**' -- 'search terms' $vaultRoot
 ```
 
+Log each real retrieval miss as a new question in `10 - Resources/Recall Eval.md`; `vaultctl.py recall-eval --record` measures recall without an index. Treat facts marked `(as of <date>)` older than 90 days as unverified (`fact-freshness`). For a consolidation pass, start from `consolidate-context` and read the listed sessions fully.
+
 Read `10 - Resources/Vault Actions.md` only for link audits, inbox triage, next-action selection or evidence freshness. Existing vaults without that note can use this skill's `references/vault-actions.md`. No weekly reviews.
 
 ## Write and checkpoint

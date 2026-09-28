@@ -13,6 +13,7 @@ from vault_core import (DEFAULT_AUTOMATION, DEFAULT_BACKUPS, DEFAULT_STATE, DEFA
 from vault_sources import source_key, stream_units, uncovered, verified_receipts
 from vault_capture import apply_proposal
 from vault_hygiene import hygiene
+from vault_recall import consolidate_context, fact_freshness, mark_consolidated, recall_eval
 
 
 def load_input(path):
@@ -140,6 +141,15 @@ def main(argv=None):
     maintenance = sub.add_parser("hygiene")
     maintenance.add_argument("--fix", action="store_true")
     maintenance.add_argument("--no-parity", action="store_true")
+    evaluation = sub.add_parser("recall-eval", help="Measure retrieval against the Recall Eval note; no index")
+    evaluation.add_argument("--top", type=int, default=5)
+    evaluation.add_argument("--record", action="store_true", help="Append the result to the Inbox retrieval audit")
+    consolidate = sub.add_parser("consolidate-context", help="Read-only digest of recent sessions to consolidate")
+    consolidate.add_argument("--days", type=int, default=7)
+    consolidate.add_argument("--since")
+    consolidate.add_argument("--mark", help="Record consolidation through this day, after the updates are written")
+    freshness = sub.add_parser("fact-freshness", help="Stale (as of <date>) facts; read-only")
+    freshness.add_argument("--max-age-days", type=int, default=90)
     for name in ("checkpoint-context", "checkpoint"):
         command = sub.add_parser(name)
         command.add_argument("--source", choices=("claude", "codex"), required=True)
@@ -176,6 +186,14 @@ def main(argv=None):
     if args.command == "hygiene":
         with file_lock(vault.state / "locks" / "scheduled.lock", timeout=1):
             return hygiene(vault, fix=args.fix, check_parity=not args.no_parity)
+    if args.command == "recall-eval":
+        return recall_eval(vault, top_k=args.top, record=args.record)
+    if args.command == "consolidate-context":
+        if args.mark:
+            return mark_consolidated(vault, args.mark)
+        return consolidate_context(vault, days=args.days, since=args.since)
+    if args.command == "fact-freshness":
+        return fact_freshness(vault, max_age_days=args.max_age_days)
     if args.command == "checkpoint-context":
         units = live_units(args)
         return {"source": args.source, "session_id": args.session, "turn_key": units[-1]["turn_key"],

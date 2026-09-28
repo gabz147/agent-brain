@@ -10,6 +10,7 @@ The Python controller is required for live vault writes and checkpoints. The Pow
 | `vault_sources.py` | Claude/Codex transcript fragments, real model attribution, and source-bound coverage |
 | `vault_capture.py` | Validates checkpoint proposals and records source-bound receipts; controller alone writes |
 | `vault_hooks.py` | Live Stop decision logic; a request never claims capture |
+| `vault_recall.py` | Read-only recall eval, consolidation digest and `(as of <date>)` fact freshness; no index |
 | `vault_hygiene.py`, `vault_runtime.py` | Deterministic schema/index/priority checks, boot/skill parity, and approved runtime drift checks |
 | `invoke-vault-job.ps1`, `nightly-audit.ps1` | Guarded scheduled audit entry point; only verified audit results advance the day stamp |
 | `user-busy.ps1`, `run-hidden.vbs` | Interactive idle/fullscreen/pause guards and a windowless launcher |
@@ -27,6 +28,9 @@ python vaultctl.py checkpoint --source codex --session '<id>' --transcript '<act
 python vaultctl.py validate
 python vaultctl.py hygiene
 python vaultctl.py costs
+python vaultctl.py recall-eval [--record]
+python vaultctl.py consolidate-context [--days 7] [--mark YYYY-MM-DD]
+python vaultctl.py fact-freshness [--max-age-days 90]
 ```
 
 Use `--source claude` for Claude sessions. See the vault's `Vault Workflow Contract.md` for JSON formats and restore. A concurrent hash mismatch requires fresh reads and a rebuilt operation; never overwrite the other writer's edit. Existing daily sessions are immutable.
