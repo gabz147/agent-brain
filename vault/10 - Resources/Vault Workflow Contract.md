@@ -163,6 +163,12 @@ There is no background, scheduled or retrospective model capture: the agent writ
 
 Current implementation/test evidence belongs in the pipeline note and today's daily session. Record tested versus user-confirmed status explicitly. An internal hook error fails open and is logged; a scheduled audit failure is logged and retried on the next run. Keep the existing hidden launcher, Interactive task identity, five-minute idle/fullscreen guards and user pause toggle.
 
+## Read-only Obsidian CLI
+
+Optional (Obsidian 1.12.7+, CLI enabled in Settings → General): `python <BRAIN_AUTOMATION_DIR>/obsidian_read.py` exposes `diagnostics`, `link-audit`, `backlinks`, `properties`, `history` and `preflight`. It selects the vault by the ID in Obsidian's own `obsidian.json` (else its folder name), verifies the native vault path before each request, rejects unsafe or out-of-vault note paths, corrects a wrong-case path to the on-disk name and bounds each native call (20 seconds by default). No CLI write, eval, restore or Sync command is exposed; all mutations continue through the shared controller.
+
+Before updating an existing note, `preflight` reads local recovery history and compares SHA-256 before/after; on a change, re-read/rebuild. It is never a lock: retain the controller's expected hash. Unavailable observations are reported and never bypass writer safeguards. Native links reflect the file-link cache without freshness or heading/block/external validation; aggregate properties include Archive and zero-count keys, so `vaultctl.py validate` remains the schema authority.
+
 ## Recall quality and consolidation
 
 All three workflows read Markdown on demand; none adds a database, embedding or index.

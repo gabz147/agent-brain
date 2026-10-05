@@ -24,6 +24,12 @@ Log each real retrieval miss as a new question in `10 - Resources/Recall Eval.md
 
 Read `10 - Resources/Vault Actions.md` only for link audits, inbox triage, next-action selection or evidence freshness. Existing vaults without that note can use this skill's `references/vault-actions.md`. No weekly reviews.
 
+## Native Obsidian reads
+
+Optional, with Obsidian 1.12.7+ and **Settings → General → Command line interface** enabled: `python "<BRAIN_AUTOMATION_DIR>/obsidian_read.py"` with `diagnostics`, `link-audit`, `backlinks "<vault-relative.md>"`, `properties ["<vault-relative.md>"]`, `history "<vault-relative.md>"` or `preflight "<vault-relative.md>"`. Fixed read-only commands only; it verifies the selected vault's path and treats native error text as failure even when Obsidian exits zero. It finds the vault ID and CLI automatically (`BRAIN_OBSIDIAN_CLI`, `BRAIN_OBSIDIAN_VAULT`, `BRAIN_OBSIDIAN_TIMEOUT` override); Obsidian must be running.
+
+Before updating an existing note, `preflight` compares its hash around a local recovery-history read; if it changed, re-read and rebuild, and always keep the writer's expected hash. Native links reflect Obsidian's file-link cache (no freshness or heading/block guarantee); property counts are inventory only and `vaultctl.py validate` stays the schema authority. No CLI writes, eval, restore or Sync. If the CLI is unavailable, continue with the normal workflow.
+
 ## Write and checkpoint
 
 Read applicable contract sections before writing; inspect full target/topic/index and relevant linked evidence. For a routine append, use `daily-context <daily-path>` instead of loading the entire daily log; read matching historical sessions if coverage or conflicts are uncertain. The shared writer independently checks all existing daily bytes. Never use this exception to substitute an excerpt for a requested full review.

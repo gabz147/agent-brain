@@ -11,6 +11,7 @@ The Python controller is required for live vault writes and checkpoints. The Pow
 | `vault_capture.py` | Validates checkpoint proposals and records source-bound receipts; controller alone writes |
 | `vault_hooks.py` | Live Stop decision logic; a request never claims capture |
 | `vault_recall.py` | Read-only recall eval, consolidation digest and `(as of <date>)` fact freshness; no index |
+| `obsidian_read.py` | Optional read-only Obsidian CLI observations (links, backlinks, properties, local recovery history, write preflight); never writes |
 | `vault_hygiene.py`, `vault_runtime.py` | Deterministic schema/index/priority checks, boot/skill parity, and approved runtime drift checks |
 | `invoke-vault-job.ps1`, `nightly-audit.ps1` | Guarded scheduled audit entry point; only verified audit results advance the day stamp |
 | `user-busy.ps1`, `run-hidden.vbs` | Interactive idle/fullscreen/pause guards and a windowless launcher |

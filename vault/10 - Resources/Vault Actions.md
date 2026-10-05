@@ -21,6 +21,8 @@ Resolve the placeholders from your environment, defaulting to ~/.claude/vault-au
 
 Launch Obsidian with that flag using your normal application executable. If it is already running without the flag, save work and reopen it; never force-close it. Keep a single vault window on that port. No permanent service or external index is required.
 
+With the native CLI enabled (Obsidian 1.12.7+), a quicker file-link view needs no debug port: `python <BRAIN_AUTOMATION_DIR>/obsidian_read.py link-audit` (unresolved links and orphans) or `backlinks "<vault-relative.md>"`. It reads Obsidian's file-link cache only; use the checker above for headings and blocks.
+
 Report missing files/blocks, ambiguous names, headings needing review and orphan candidates. Archive is excluded as a source; archived targets can resolve, but their fragments are not inspected. External URLs/files are not fetched. Heading formatting/nesting and intentional orphans need review. Never create stubs, merge/delete notes or rewrite history automatically.
 
 ## Triage inbox
