@@ -93,6 +93,22 @@ def discover_cli() -> Path | None:
     return Path(found) if found else None
 
 
+def on_disk_case(root: Path, relative: Path) -> Path:
+    """Each component's stored spelling. Windows resolve() already returns it; macOS does not."""
+    current = root
+    for part in relative.parts:
+        try:
+            names = os.listdir(current)
+        except OSError:
+            return relative
+        if part not in names:
+            matches = [name for name in names if name.casefold() == part.casefold()]
+            if len(matches) == 1:
+                part = matches[0]
+        current = current / part
+    return current.relative_to(root)
+
+
 class Reader:
     def __init__(self, vault_path=None, vault_id=None, executable=None, timeout=None,
                  runner=subprocess.run, config_dirs=None):
@@ -122,7 +138,7 @@ class Reader:
             raise ObservationError(f"Cannot resolve note: {value}") from exc
         if not target.is_file() or not target.is_relative_to(self.vault):
             raise ObservationError("Note resolves outside the vault or is not a file.")
-        relative = target.relative_to(self.vault)
+        relative = on_disk_case(self.vault, target.relative_to(self.vault))
         if any(p.lower() == ".obsidian" for p in relative.parts):
             raise ObservationError("Note resolves into Obsidian configuration.")
         return relative.as_posix(), target

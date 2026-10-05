@@ -261,6 +261,11 @@ class ReaderTests(unittest.TestCase):
         self.reader.execute("history", "folder/my NOTE.md")
         self.assertIn("path=Folder/My note.md", self.fake.calls[-1][0])
 
+    def test_on_disk_case_lookup_is_portable(self):
+        # Runs on every file system: the lookup itself, not resolve(), supplies the stored case.
+        self.assertEqual(Path("Folder/My note.md"),
+                         subject.on_disk_case(self.vault, Path("folder/my NOTE.md")))
+
     def test_invalid_note_rejected_before_any_native_call(self):
         with self.assertRaises(subject.ObservationError):
             self.reader.execute("history", "../outside.md")
