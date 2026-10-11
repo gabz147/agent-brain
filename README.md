@@ -13,9 +13,7 @@ Have **Obsidian** and **Python 3.11+** installed. Claude's hooks also need
 folder, and offers the official installer if your chosen CLI is missing.
 You do not need Git, a GitHub account, or another repository.
 
-**`gabz147/skills` is not required.** All three Brain workflow skills and their
-supporting tools are included here. That separate repository is a personal
-setup backup, not an Agent Brain dependency.
+All three Brain workflow skills and their supporting tools are included here.
 
 **macOS / Linux** (Terminal with Bash or Zsh):
 

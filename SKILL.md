@@ -7,7 +7,7 @@ description: "Set up or update Agent Brain, the standalone shared Obsidian memor
 
 This repository is the complete distribution. It includes the vault templates,
 three everyday workflow skills, shared writer, hooks and optional Windows
-automation. Do not require `gabz147/skills` or copy a personal skill library.
+automation. Do not require any other repository or copy a personal skill library.
 
 Use the full checkout containing this file and `install.py`. If only this skill
 file is available, obtain the public `https://github.com/gabz147/agent-brain`
