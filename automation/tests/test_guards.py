@@ -12,6 +12,9 @@ CAPS = {"skills/obsidian-vault/SKILL.md": 4205, "skills/handoff/SKILL.md": 1793,
 STOP_TEMPLATE_CAP = 1246
 BANNED = ("keep queueing", "drain when you resume", "durable spool", "scheduled capture")
 PLACEHOLDER_PATHS = {"/home/x", "C:/Users/you", "C:/Users/me"}  # compared with separators normalized to '/'
+# Contract section references: quoted in the Stop text, "Contract's X section" or "its X section" in boots and skills.
+SECTION_REFERENCES = (re.compile(r'"([A-Z][^"{}]*)"(?= (?:sections?\b|and "))'),
+                      re.compile(r"(?:[Cc]ontract's|its) ([A-Z][A-Za-z -]+?) section"))
 
 
 def stop_template():
@@ -30,12 +33,10 @@ class ReleaseGuards(unittest.TestCase):
         template = stop_template()
         self.assertTrue(template.startswith("Vault checkpoint requested for session {session_id}."))
         headings = set(re.findall(r"^## (.+)$", CONTRACT.read_text(encoding="utf-8"), re.M))
-        named = set(re.findall(r'"(Daily checkpoints and coverage|Shared writer|Related notes and ledgers)"', template))
-        for rel in ("boot/CLAUDE.md", "boot/AGENTS.md", "skills/obsidian-vault/SKILL.md", "skills/handoff/SKILL.md"):
-            text = (REPO / rel).read_text(encoding="utf-8")
-            named |= {name for name in ("Daily checkpoints and coverage", "Shared writer", "Related notes and ledgers",
-                                        "Handoffs and manual use", "Read-only Obsidian CLI", "Context loading") if name in text}
-        self.assertTrue(named)
+        sources = [REPO / "boot/CLAUDE.md", REPO / "boot/AGENTS.md", REPO / "SKILL.md", *sorted((REPO / "skills").glob("*/SKILL.md"))]
+        texts = [template] + [path.read_text(encoding="utf-8") for path in sources]
+        named = {name for text in texts for pattern in SECTION_REFERENCES for name in pattern.findall(text)}
+        self.assertGreaterEqual(named, {"Daily checkpoints and coverage", "Shared writer", "Related notes and ledgers", "Read and reconcile"})
         self.assertFalse(named - headings, "Contract sections named by the Stop text, boots or skills are missing")
 
     def test_shipped_docs_have_no_retired_capture_promises(self):

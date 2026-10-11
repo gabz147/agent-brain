@@ -12,7 +12,7 @@ This is optional and self-contained. The rest of agent-brain works without it.
    - `active` — actively writing right now: a vault `.md` write in the last 45s, a fresh automation signal, or the drain lock held (faster, brighter, accent-colored).
    - `paused` — you switched the automation off (static, faint, slashed). `active` still wins while something is writing.
 
-   The tooltip names the state, the signal that fired, the file touched, and how long ago; a second line shows the toggle state. Colors come from Obsidian theme variables, so light/dark follow automatically, and all motion respects `prefers-reduced-motion`.
+   The tooltip names the state, the signal that fired, the file touched, and how long ago; a second line shows the legacy queue and last-drain counters and the toggle state. Colors come from Obsidian theme variables, so light/dark follow automatically, and all motion respects `prefers-reduced-motion`.
 
 2. **Automation toggle** — clicking the orb cycles **on → AFK paused → ALL paused → on**, writing `automation-state.json` in the automation dir. The nightly audit skips while `afk` or `all` is set. Under ALL, the Stop hook requests no checkpoints and nothing is queued; checkpoint work you want kept before pausing or after resuming. Three command-palette commands do the same without the click: *Toggle AFK automation*, *Toggle ALL vault automation*, *Resume vault automation*.
 
@@ -22,7 +22,7 @@ This is optional and self-contained. The rest of agent-brain works without it.
 
 The orb watches the optional automation module's runtime files under `BRAIN_AUTOMATION_DIR` (falls back to `~/.claude/vault-automation`): `stop-state.json`, `.drain.lock` and `automation-state.json`, plus a `tasklist` process check and Obsidian's own vault-write events. If you don't run the automation module, those files simply won't exist — every poll treats a missing file as "no signal", so the orb just stays idle and the refresh button still works.
 
-The background capture drain was removed, so the legacy queue and drain-log signals stay empty; `.drain.lock` reflects the scheduled audit, and the `afk` scope pauses only that audit.
+The background capture drain was removed, so current installs never write the legacy `queue.jsonl`, `queue.batch.jsonl` or `drain.log` the orb still polls: those counters stay empty ("0 queued", "last drain: none logged"), `.drain.lock` reflects the scheduled audit, and the `afk` scope pauses only that audit.
 
 No configuration is required beyond the `BRAIN_AUTOMATION_DIR` env var that the rest of agent-brain already uses.
 
