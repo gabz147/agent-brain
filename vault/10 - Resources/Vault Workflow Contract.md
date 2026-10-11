@@ -10,11 +10,11 @@ updated: September 23, 2026 at 6:39:19 AM (UTC-06:00)
 
 The shared writing and capture contract for [[Claude Code]] and [[Codex]], stored in [[Obsidian]]. [[VAULT-INDEX]] holds the profile and map; [[Active Priorities]] holds open work; [[Decisions]] holds deliberate choices; [[Dead Ends]] holds failed recurring approaches. [[Shared Obsidian Vault Skill]] describes retrieval. [[Vault Autonomy Pipeline]] records implementation and validation.
 
-This portable contract consolidates writing mechanics and model-specific signatures. Installation and later source/configuration changes follow the user's actual authorization; this template grants no blanket approval. This contract replaces duplicated mechanics in the two boot files, skills and capture prompts. Boot files retain a short identical block of critical rules.
+This portable contract holds the shared write mechanics and model-specific signatures; the two boot files keep a short identical block of critical rules. Installation and later source/configuration changes follow the user's actual authorization; this template grants no blanket approval.
 
 ## Authorship
 
-Use the actual model that wrote the entry, including when an unattended model summarizes a different client's transcript.
+Use the actual model that wrote the entry.
 
 | Runtime evidence | Signature |
 |---|---|
@@ -50,23 +50,15 @@ Infer values from evidence. Starter folder defaults: 02 example-project; 01/08 p
 
 Types describe document purpose: index maps notes, reference stores lookup material, guide gives a procedure, plan tracks strategy/work, log records events. Every dated daily note is `active/personal/log`.
 
-Code is exempt. Frozen `09 - Archive/Old Memory/` is exempt and read-only. One output-definition exception exists: [[Manual Daily Note Template]] contains `updated_by: human` and the literal `updated: "{{date:YYYY-MM-DD}}"`, because Obsidian expands them into a manual note. Its maintainer is recorded in the snapshot manifest and this contract, rather than falsely labeling generated manual entries as model-written. No ordinary note may use a placeholder date.
+Code is exempt; frozen `09 - Archive/Old Memory/` is exempt and read-only. One exception: [[Manual Daily Note Template]] keeps `updated_by: human` and the literal `updated: "{{date:YYYY-MM-DD}}"` for Obsidian to expand. No ordinary note may use a placeholder date.
 
 ## Read and reconcile
 
-This is an on-demand reference, not a startup read. Boot files define the loading policy. Before a vault write, read this section plus Authorship, Schema, Shared writer and Related notes and ledgers; add Daily checkpoints and coverage for a checkpoint, Handoffs and manual use for a handoff, and Maintenance and acceptance for automation work. Reuse sections already in context. Read the full contract when auditing or changing the workflow itself.
+This is an on-demand reference, not a startup read; boot files define the loading policy. Load only the sections an operation needs: a daily-only or trivial checkpoint, Daily checkpoints and coverage; a topic or ledger write, this section, Shared writer and Related notes and ledgers (add Authorship or Schema for new notes, index signatures or metadata questions); a handoff, Handoffs and manual use plus [[Handoff Template]]; automation work, Maintenance and acceptance. `rg -n '^## '` gives each section's line range. Reuse sections already in context. Read the full contract when auditing or changing the workflow itself.
 
-Read the full target topic note, its index and directly relevant linked notes immediately before writing. For a daily append, use `vaultctl.py daily-context <daily-path>` for the Open line and session headings, then read relevant complete sessions to reconcile coverage; the controller reads the whole file, chooses max+1 and preserves historical bytes. Read the whole daily note only for a full-day review or when relevant coverage is unclear. Never claim an excerpt is a full review.
+Read the full target topic note, its index and directly relevant linked notes immediately before writing. For a daily append, use `vaultctl.py daily-context <daily-path>` for the Open line and session headings, then read relevant complete sessions to reconcile coverage; the controller reads the whole file, chooses max+1 and preserves historical bytes. Read the whole daily note only for a full-day review or when relevant coverage is unclear. Never claim an excerpt is a full review. A ledger append (Decisions, Dead Ends) reads the Rules section plus matching rows (search recipe: the `obsidian-vault` skill); `expected_sha256` still guards the write.
 
-Search filenames first, then exact wikilinks, headings and body. Current claims require source evidence; chronology alone is not proof of current state. Default retrieval excludes application internals and Archive:
-
-```powershell
-$vaultRoot = '<BRAIN_VAULT_ROOT>'
-rg --files $vaultRoot -g '*.md' -g '!**/.obsidian/**' -g '!**/09 - Archive/**'
-rg -n -i -g '*.md' -g '!**/.obsidian/**' -g '!**/09 - Archive/**' -- 'search terms' $vaultRoot
-```
-
-A recall/review/audit request authorizes findings and their required daily checkpoint, not applying source/config changes. Preserve relevant disagreements with dates and sources until evidence resolves them. Prefer an existing logical home over creating a note.
+Current claims require source evidence; chronology alone is not proof of current state. Preserve relevant disagreements with dates and sources until evidence resolves them. Prefer an existing logical home over creating a note.
 
 ## Shared writer
 
@@ -81,7 +73,7 @@ python $vaultCtl validate
 
 A commit input is `{"operations":[...]}`. Each operation has a vault-relative `path`, `expected_sha256` from inspect (null only for a new file), and either `edits:[{"old":"exact unique text","new":"replacement"}]` plus optional `append`, or `content` for a new/non-daily note. An existing daily file must use targeted edits/append. Use native file tools or apply_patch to prepare the JSON; the controller performs the note mutation.
 
-The controller takes an OS lock, compares current hashes, validates all prepared text, stores private before/after snapshots, performs atomic replacements and verifies each result. It rejects outside-vault paths, hidden files, frozen memory, duplicate keys, invalid dates and edits to old daily sessions. A crash after a partial multi-note commit can resume the same transaction from its prepared bytes. A conflicting concurrent edit is retained and reported; re-read and rebuild the affected operation, never overwrite it.
+The controller locks, compares hashes, validates, snapshots, replaces atomically and verifies each result. It rejects outside-vault paths, hidden files, frozen memory, duplicate keys, invalid dates and edits to old daily sessions, and resumes a crashed multi-note transaction from its prepared bytes. On a concurrent-edit conflict, re-read and rebuild the affected operation; never overwrite it.
 
 Snapshots are local under `<BRAIN_BACKUPS_DIR>\<transaction-id>\`. They have no remote and do not create Git commits. Explicit restore uses:
 
@@ -102,14 +94,14 @@ The body starts with `# Saturday, September 5, 2026`, then `**Open for tomorrow:
 
 Existing session bytes and Index entries are immutable. The three permitted body operations are Index insertion, appending a complete session, and updating Open for tomorrow. Restamping frontmatter is an explicit metadata exception. Corrections/gaps always get a new section with provenance. Never fill an old session or rewrite the daily file wholesale. Historical headers before the Open-line convention began on September 3, 2026 remain unchanged; enforce that field for newer notes.
 
-For a live checkpoint:
+For a live checkpoint, `checkpoint-context` returns the verified model, source-local event day/time and source boundary. Then run `checkpoint --summary` with the same source arguments and the JSON on stdin (Bash heredoc) or in `--input <file>` (use a file from Windows PowerShell 5.1, which pipes ASCII):
 
 ```powershell
 python $vaultCtl checkpoint-context --source codex --session '<actual-id>' --transcript '<actual-jsonl-path>'
 python $vaultCtl checkpoint --summary --source codex --session '<actual-id>' --transcript '<actual-jsonl-path>' --input '<checkpoint-json>'
 ```
 
-Use `--source claude` for Claude. Context returns the verified model and source-local event day/time. Input fields:
+Use `--source claude` for Claude. Every source-local day in the batch needs its own `days` entry; for an earlier day use that day's last event-local time from the transcript. Sections left out become `- None`; `open_next` is optional and replaces the Open line only when given. Input fields:
 
 ```json
 {
@@ -133,11 +125,11 @@ Use `--source claude` for Claude. Context returns the verified model and source-
 
 Operations use the shared writer format. If substantive work is already recorded, use `disposition: already_covered`, no days/operations, and `anchors:[{"path":"<daily path>","text":"<exact complete existing session fragment>"}]`. For a truly trivial turn, use `disposition: trivial`, a substantive reason, and no writes. Context can supply source evidence; the controller verifies it. Do not classify a useful audit, decision or unresolved implementation as trivial merely because no code changed.
 
-`daily-context` is read-only navigation; it explicitly omits Index bullets/session bodies, not evidence for a full review. `checkpoint --summary` prints verified receipt identity, signer and anchor path/heading/hash. Full source ranges and anchor text remain in state-v2/coverage; omit the flag when diagnosing those details. Verification and receipt storage are unchanged.
+`checkpoint --summary` prints the receipt identity, signer and daily anchor; full source ranges stay in state-v2/coverage (omit --summary only to diagnose them). `daily-context` is a locator, not evidence that omitted history was reviewed.
 
-Receipt states distinguish requested, captured, already_covered, trivial, deferred and failed. Only a verified daily anchor or a reasoned, evidence-backed trivial disposition advances coverage. Source line hashes, byte ranges and fragment numbers bind each receipt to actual evidence. No mtime, exit code, gate flag or unrelated write can certify completion. Large records are split into fragments; unread fragments remain pending. Hidden model reasoning and binary attachments are excluded from capture evidence.
+Receipt states distinguish requested, captured, already_covered, trivial and failed. Only a verified daily anchor or a reasoned, evidence-backed trivial disposition advances coverage. Source line hashes, byte ranges and fragment numbers bind each receipt to actual evidence. No mtime, exit code, gate flag or unrelated write can certify completion. Large records are split into fragments; unread fragments remain pending. Hidden model reasoning and binary attachments are excluded from capture evidence.
 
-Live capture remains primary. The idle-window backstop reads Claude's queue and discovers changed Codex sessions from the previous seven days after five minutes without transcript changes. It consumes uncovered fragments incrementally and preserves failed work. It never resumes a conversation, closes a client, or executes commands from a transcript.
+Live capture is the only capture path. A session that ends without a live checkpoint stays uncaptured; nothing resumes a conversation, closes a client, or executes commands from a transcript.
 
 ## Related notes and ledgers
 
@@ -145,13 +137,13 @@ Use wikilinks for named businesses/platforms and directly referenced notes; not 
 
 New folders require their index, parent entry and vault map update together. Rename in Obsidian, or repair every incoming wikilink in the same change; update both indexes for moves. Never archive on your own initiative. Keep deliverables in project folders and handoffs in the vault; scratch files are intermediates only.
 
-Keep one current-state block per project. Update Active Priorities only when work or its state changes: at most five Active Now items, one touched date per actionable bullet, older-than-14-day items move to Review, no automatic deletion or archiving. Parked/Watch is non-actionable reference.
+Keep one current-state block per project. Topic notes hold current state and stable reference; dated history lives in daily sessions or a `<Note> Log` note, read only for history requests. Index descriptions say what a note covers, never counts, dates or pending items. Each Active Priorities item is one current line (at most 300 characters) with state and next action; replace it, never append history. Update Active Priorities only when work or its state changes: at most five Active Now items, one touched date per actionable bullet, older-than-14-day items move to Review, no automatic deletion or archiving. Parked/Watch is non-actionable reference.
 
 Append deliberate decisions. Supersession changes only the old row's status/reference; original wording remains. Preserve old dead-end entries; append a dated resolution when a new method replaces their recommendation. Profile changes require directly confirmed evidence, belong only in Who I Am, and are logged under daily Profile Updates. Routine work does not authorize rewriting protected startup preferences/rules.
 
 ## Handoffs and manual use
 
-Follow [[Handoff Template]] and the mirrored handoff skill. Keep one current block at the top of the tracking note, with a runnable Resume line, current state, next action, outstanding inputs and linked artifacts. Durable vault location; no secrets; no duplicate history.
+Follow [[Handoff Template]] and the mirrored handoff skill. Keep one current block at the top of the tracking note, with a runnable Resume line, current state, next action, outstanding inputs and linked artifacts. Durable vault location; no secrets; no duplicate history; at most 3,000 characters of current state.
 
 Obsidian's Daily Notes command uses `10 - Resources/Templates/Manual Daily Note Template.md`, folder `01 - Daily Notes`, and date format `MM - MMMM YYYY/YYYY-MM-DD`. Templates points at `10 - Resources/Templates`, whose map is [[Templates]]. Manual sections are signed human. An existing day's note opens unchanged. Agent creation continues through the shared controller and canonical model template.
 
@@ -161,18 +153,18 @@ Deterministic hygiene scans all live notes for schema, daily headers, folder mem
 
 There is no background, scheduled or retrospective model capture: the agent writes checkpoints live in its own session and the controller alone commits them. A session that ends without a checkpoint is not summarized automatically. Historical capture records in `outcomes.jsonl` keep their reported usage; missing usage or cost stays null, not a fabricated zero.
 
-Current implementation/test evidence belongs in the pipeline note and today's daily session. Record tested versus user-confirmed status explicitly. An internal hook error fails open and is logged; a scheduled audit failure is logged and retried on the next run. Keep the existing hidden launcher, Interactive task identity, five-minute idle/fullscreen guards and user pause toggle.
+Dated implementation/test evidence belongs in the day's daily session; the pipeline note keeps only current state. Record tested versus user-confirmed status explicitly. An internal hook error fails open and is logged; a scheduled audit failure is logged and retried on the next run. Keep the existing hidden launcher, Interactive task identity, five-minute idle/fullscreen guards and user pause toggle.
 
 ## Read-only Obsidian CLI
 
 Optional (Obsidian 1.12.7+, CLI enabled in Settings → General): `python <BRAIN_AUTOMATION_DIR>/obsidian_read.py` exposes `diagnostics`, `link-audit`, `backlinks`, `properties`, `history` and `preflight`. It selects the vault by the ID in Obsidian's own `obsidian.json` (else its folder name), verifies the native vault path before each request, rejects unsafe or out-of-vault note paths, corrects a wrong-case path to the on-disk name and bounds each native call (20 seconds by default). No CLI write, eval, restore or Sync command is exposed; all mutations continue through the shared controller.
 
-Before updating an existing note, `preflight` reads local recovery history and compares SHA-256 before/after; on a change, re-read/rebuild. It is never a lock: retain the controller's expected hash. Unavailable observations are reported and never bypass writer safeguards. Native links reflect the file-link cache without freshness or heading/block/external validation; aggregate properties include Archive and zero-count keys, so `vaultctl.py validate` remains the schema authority.
+`preflight` is optional: it compares SHA-256 around a local recovery-history read; on a change, re-read and rebuild. It is never a lock: retain the controller's expected hash, and after commits rely on its verified read-back plus `vaultctl.py validate`. Unavailable observations are reported and never bypass writer safeguards. Native links reflect the file-link cache without freshness or heading/block/external validation; aggregate properties include Archive and zero-count keys, so `vaultctl.py validate` remains the schema authority.
 
 ## Recall quality and consolidation
 
 All three workflows read Markdown on demand; none adds a database, embedding or index.
 
-- **Recall eval.** [[Recall Eval]] lists known-answer questions as `| question | [[expected note]] | search terms |`. `vaultctl.py recall-eval` ranks live notes by filename, headings, wikilinks and body, and reports whether each expected note lands in the top five. `--record` appends one dated line to `00 - Inbox/Retrieval Misses.md` through the writer as `automation`. Add a question whenever a real retrieval miss happens. Only a persistent, non-trivial miss list there justifies proposing an index or database, and the user still approves the design.
-- **Consolidation.** `vaultctl.py consolidate-context` lists daily sessions since the last mark (default seven days): notes touched, open items, recorded decisions, dead-end candidates and unresolved links. It is navigation, not evidence: fully read the listed sessions, then propose topic, Active Priorities, Decisions and Dead Ends updates through `commit` and record them in the day's checkpoint. Run `consolidate-context --mark <through>` only after those writes are verified. Run it when the user asks, or when a project resumes after several sessions.
+- **Recall eval.** [[Recall Eval]] lists known-answer questions as `| question | [[expected note]] | search terms |`. `vaultctl.py recall-eval` reports whether each expected note ranks in the top five; `--record` appends a dated line to `00 - Inbox/Retrieval Misses.md` as `automation`. Add a question for every real retrieval miss. Only a persistent, non-trivial miss list justifies proposing an index or database, and the user approves the design.
+- **Consolidation.** `vaultctl.py consolidate-context` lists daily sessions since the last mark, or since `--since <date>`, which overrides the mark: notes touched, open items, recorded decisions, dead-end candidates and unresolved links. It is navigation, not evidence: fully read the listed sessions, then propose topic, Active Priorities, Decisions and Dead Ends updates through `commit` and record them in the day's checkpoint. Run `consolidate-context --mark <through>` only after those writes are verified. Run it when the user asks. For a project resume, count `[[<Project>` hits per daily note since the handoff date and read only the matching sessions; an unfiltered run spans everything since the last mark.
 - **Fact freshness.** Suffix any fact that can change (hardware, versions, prices, accounts, locations) with `(as of YYYY-MM-DD)` or `(as of Month D, YYYY)`. `vaultctl.py fact-freshness` reports markers older than 90 days, unparsable markers and a Machine Inventory without markers. Re-verify a stale fact before relying on it; update the value and its marker together. Never invent an as-of date for an old fact: mark it only when it is verified.

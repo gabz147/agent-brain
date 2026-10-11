@@ -296,7 +296,11 @@ class HookTests(Fixture):
         payload = self.gate_fixture(padding=20 * 1024 * 1024)
         code, text = hooks.stop_gate(payload, self.vault, self.directory)
         self.assertEqual(code, 2)
+        self.assertTrue(text.startswith("Vault checkpoint requested for session "))
         self.assertIn("checkpoint-context", text)
+        self.assertIn("checkpoint --summary", text)
+        self.assertIn('"Daily checkpoints and coverage"', text)
+        self.assertNotIn("Read and reconcile", text)
 
     def test_topic_write_is_not_checkpoint_completion(self):
         payload = self.gate_fixture(vault_write=True)

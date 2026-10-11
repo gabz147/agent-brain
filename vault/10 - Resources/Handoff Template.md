@@ -13,7 +13,7 @@ Use when the user asks to hand off or pause work. The handoff is durable instruc
 ## Procedure
 
 1. Read the tracking note and current evidence. Prefer its existing logical home over a new document.
-2. Keep one `## Handoff — resume here` block at the top, after frontmatter/title. Replace stale handoff state instead of stacking copies.
+2. Keep one `## Handoff — resume here` block at the top, after frontmatter/title. Replace stale handoff state instead of stacking copies. Keep the block to at most 3,000 characters of current state; move anything worth keeping to the project's `<Note> Log` note (type log) or leave it in daily sessions. Merge any second Resume or Current state section into the handoff.
 3. Point to existing plans, source files, decisions and artifacts; do not duplicate them.
 4. Give one runnable Resume line: cwd, note/heading, skill, first action. The next action must be concrete.
 5. Include only real open decisions, required inputs and constraints. Never copy secrets; reference secure storage.
@@ -43,4 +43,4 @@ _Last updated: <readable local date and time with timezone> by <verified model>_
 **Suggested skills:** <names, or none>
 ```
 
-Store the handoff in the vault, never OS temp. Keep deliverables in the user's project folders. Daily history stays append-only; this current-state block is intentionally refreshed as work advances.
+Store the handoff in the vault, never OS temp. Keep deliverables in the user's project folders. Daily history stays append-only; this current-state block is intentionally refreshed as work advances. The heading keeps the template's em-dash: the boot rule against em-dashes covers published external prose, not vault formats.

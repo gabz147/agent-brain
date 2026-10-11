@@ -4,38 +4,32 @@ description: "Search, recall, continue, audit or update the user's shared Obsidi
 ---
 # Shared Obsidian Vault
 
-Resolve `<BRAIN_VAULT_ROOT>` and `<BRAIN_AUTOMATION_DIR>` from the environment, defaulting to `~/Documents/Brain` and `~/.claude/vault-automation`. Use `BRAIN_PYTHON`, otherwise `python3` on macOS/Linux or `python` on Windows. Angle-bracket paths are placeholders, not literal directories.
-
-Vault: `<BRAIN_VAULT_ROOT>`. Follow the boot's task-based loading policy. No blanket startup/compaction bundle. `VAULT-INDEX.md` routes project work; `10 - Resources/Vault Workflow Contract.md` defines writing mechanics and safeguards, loaded as needed before writes.
+Resolve `<BRAIN_VAULT_ROOT>` and `<BRAIN_AUTOMATION_DIR>` from the environment, defaulting to `~/Documents/Brain` and `~/.claude/vault-automation`. Use `BRAIN_PYTHON`, otherwise `python3` on macOS/Linux or `python` on Windows. Angle-bracket paths are placeholders, not literal directories. The boot's loading policy and guarantees apply; `10 - Resources/Vault Workflow Contract.md` holds write mechanics.
 
 ## Retrieve
 
-Classify recall, status, continue, relate or write. Start with filenames, relevant folder index/topic, then exact wikilinks/backlinks, headings and body; recency breaks ties. Exclude `.obsidian` and Archive by default; expand when history is requested or active retrieval misses. Fully read selected evidence and anything requested for full review. A search hit or navigation extract is a locator, not evidence of a complete read.
+Classify recall, status, continue, relate or write. Start with filenames, relevant folder index/topic, then exact wikilinks/backlinks, headings and body; recency breaks ties. Exclude `.obsidian` and Archive by default; expand when history is requested or active retrieval misses. A search hit or navigation extract is a locator, not evidence of a complete read; fully read selected evidence and anything requested for full review. Machine facts live in Machine Inventory. Preserve dated disagreements until evidence resolves them. Cite exact notes/headings.
 
-Status/continuation loads relevant priorities and the project's current handoff, then verifies actual state. If the project is unclear, inspect the queue or clarify. Check Decisions before potential conflicts, Dead Ends before recurring troubleshooting; Machine Inventory holds machine facts. Daily chronology is conditional: start with Open/session headings, then read matching sessions completely. Preserve dated disagreements until evidence resolves them. Cite exact notes/headings; distinguish recorded facts, verification and inference.
+Search in two steps: list or count first, then read capped lines from one chosen note. Daily notes are searched only for chronology.
 
 ```powershell
 $vaultRoot = '<BRAIN_VAULT_ROOT>'
-rg --files $vaultRoot -g '*.md' -g '!**/.obsidian/**' -g '!**/09 - Archive/**'
-rg -n -i -g '*.md' -g '!**/.obsidian/**' -g '!**/09 - Archive/**' -- 'search terms' $vaultRoot
+rg --files $vaultRoot -g '*.md' -g '!**/.obsidian/**' -g '!**/09 - Archive/**' -g '!**/01 - Daily Notes/**'
+rg -c -i -g '*.md' -g '!**/.obsidian/**' -g '!**/09 - Archive/**' -g '!**/01 - Daily Notes/**' -- 'terms' $vaultRoot
+rg -n -i -M 300 --max-columns-preview -m 5 -- 'terms' '<note.md>'
+rg -c -i -- 'terms' "$vaultRoot/01 - Daily Notes"
 ```
 
-Log each real retrieval miss as a new question in `10 - Resources/Recall Eval.md`; `vaultctl.py recall-eval --record` measures recall without an index. Treat facts marked `(as of <date>)` older than 90 days as unverified (`fact-freshness`). For a consolidation pass, start from `consolidate-context` and read the listed sessions fully.
+With a grep tool, list matching files or counts first and show content only for one chosen note with a line limit. For chronology, open `vaultctl.py daily-context <daily-path>` on the matching days and read only the matching sessions fully.
 
-Read `10 - Resources/Vault Actions.md` only for link audits, inbox triage, next-action selection or evidence freshness. Existing vaults without that note can use this skill's `references/vault-actions.md`. No weekly reviews.
+- **Status:** `rg -n -F '[[<Project>' 'Active Priorities.md'`, then the project's current handoff; verify actual state before acting.
+- **Continue after several sessions:** count `[[<Project>` hits per daily note since the handoff's date (`rg -c -F`), then read the matching sessions. `vaultctl.py consolidate-context --since <date>` gives the same window as a digest; always pass `--since`.
+- **Ledgers:** check Decisions with `rg -n -i -e '<topic>' -e '[[<Project>' -e '\| locked' Decisions.md` (each row is one line); check Dead Ends with `rg -n '^## ' 'Dead Ends.md'`, then the matching section, or `rg -n -i -m 8 '<term>' 'Dead Ends.md'`. Read a whole ledger only for a requested full review or before superseding a row.
 
-## Native Obsidian reads
+Log each real retrieval miss as a new question in `10 - Resources/Recall Eval.md`. Facts marked `(as of <date>)` older than 90 days are unverified (`vaultctl.py fact-freshness`). Read `10 - Resources/Vault Actions.md` only for link audits, inbox triage, next-action selection or evidence freshness; vaults without it can use this skill's `references/vault-actions.md`.
 
-Optional, with Obsidian 1.12.7+ and **Settings → General → Command line interface** enabled: `python "<BRAIN_AUTOMATION_DIR>/obsidian_read.py"` with `diagnostics`, `link-audit`, `backlinks "<vault-relative.md>"`, `properties ["<vault-relative.md>"]`, `history "<vault-relative.md>"` or `preflight "<vault-relative.md>"`. Fixed read-only commands only; it verifies the selected vault's path and treats native error text as failure even when Obsidian exits zero. It finds the vault ID and CLI automatically (`BRAIN_OBSIDIAN_CLI`, `BRAIN_OBSIDIAN_VAULT`, `BRAIN_OBSIDIAN_TIMEOUT` override); Obsidian must be running.
+Optional, with Obsidian 1.12.7+ and its command line interface enabled: `python "<BRAIN_AUTOMATION_DIR>/obsidian_read.py"` (`diagnostics`, `link-audit`, `backlinks`, `properties`, `history`, `preflight`); Obsidian must be running. Rules: the Contract's Read-only Obsidian CLI section. If the CLI is unavailable, continue normally.
 
-Before updating an existing note, `preflight` compares its hash around a local recovery-history read; if it changed, re-read and rebuild, and always keep the writer's expected hash. Native links reflect Obsidian's file-link cache (no freshness or heading/block guarantee); property counts are inventory only and `vaultctl.py validate` stays the schema authority. No CLI writes, eval, restore or Sync. If the CLI is unavailable, continue with the normal workflow.
+## Write
 
-## Write and checkpoint
-
-Read applicable contract sections before writing; inspect full target/topic/index and relevant linked evidence. For a routine append, use `daily-context <daily-path>` instead of loading the entire daily log; read matching historical sessions if coverage or conflicts are uncertain. The shared writer independently checks all existing daily bytes. Never use this exception to substitute an excerpt for a requested full review.
-
-Use `python "<BRAIN_AUTOMATION_DIR>/vaultctl.py"`: `inspect` for current text/hash, `commit` for checked operations, `checkpoint-context` for verified model/event time/source boundary, then `checkpoint --summary` with the same source/session/transcript and prepared JSON. The writer automatically stamps `updated` with readable local date, 12-hour time, seconds and timezone; never invent a historical time. Full receipts remain on disk. Re-read/rebuild after conflict; verify intended content and source-bound completion. Validate after changes; avoid repeating whole-vault reads or unchanged tool output.
-
-Consolidate the topic and stable index description, update only affected priorities/ledgers, and append the five-section daily session. Preserve all historical bytes/signatures and the five-key schema. No source/config fixes without existing authorization; audits authorize findings and their checkpoint. Substantive work needs capture even without code changes; backstops cover interruptions. Handoffs follow `10 - Resources/Handoff Template.md`, never OS temp.
-
-Markdown remains canonical; no external upload/index, embeddings or parallel knowledge database without explicit approval. Operational receipts/private snapshots are recovery bookkeeping. When both clients participate, keep this skill byte-identical in `.claude/skills/obsidian-vault` and `.codex/skills/obsidian-vault`; check parity after changes. Codex agents/openai.yaml is UI metadata, not a Claude mirror.
+Use `python "<BRAIN_AUTOMATION_DIR>/vaultctl.py"` (`inspect`, `commit`, `checkpoint-context`, `checkpoint --summary`, `validate`) as the Contract specifies. A daily-only or trivial checkpoint needs only its Daily checkpoints and coverage section; topic or ledger edits add Shared writer and Related notes and ledgers. Topic and handoff edits replace current state; history stays in the daily session. Substantive work needs capture even without code changes. Handoffs: `10 - Resources/Handoff Template.md`. Documents to ingest or answer from: the `source-to-vault` skill.
