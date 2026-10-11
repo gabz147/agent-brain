@@ -546,7 +546,8 @@ def daily_operation(vault, day, local_time, topic, sections, signer, marker, ope
             body.append("- " + entry)
         body.append("")
     session = newline.join(body)
-    index_line = f"- **{topic}** — {sections.get('What Got Done', ['Recorded session work.'])[0]} `({signer})`"
+    # New sessions add no Index bullet: the session heading already carries
+    # number, time, topic and signer. Existing Index entries stay immutable.
     if old is None:
         day_date = dt.date.fromisoformat(day)
         title = day_date.strftime("%A, %B ") + str(day_date.day) + day_date.strftime(", %Y")
@@ -565,10 +566,12 @@ def daily_operation(vault, day, local_time, topic, sections, signer, marker, ope
         # Keep template authority for schema and required body layout; remove
         # its human session stub and render the verified capture's session.
         prefix = template.split("## Index", 1)[0]
-        prefix = re.sub(r"^\*\*Open for tomorrow:\*\*[^\n]*", "**Open for tomorrow:** " + (open_next or "See Active Priorities."), prefix, flags=re.M)
-        content = prefix.rstrip() + "\n\n## Index\n\n" + index_line + "\n\n" + session
+        # A function replacement keeps backslashes (Windows paths) literal.
+        open_line = "**Open for tomorrow:** " + (open_next or "See Active Priorities.")
+        prefix = re.sub(r"^\*\*Open for tomorrow:\*\*[^\n]*", lambda _: open_line, prefix, flags=re.M)
+        content = prefix.rstrip() + "\n\n## Index\n\n" + session
         return {"path": rel, "expected_sha256": None, "content": content}
-    edits = [{"old": "## Index", "new": "## Index" + newline + newline + index_line}]
+    edits = []
     if open_next:
         # Backfills must not overwrite a later recorded session's handoff.
         proposed_time = dt.datetime.strptime(local_time, "%I:%M %p").time()

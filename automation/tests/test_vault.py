@@ -254,6 +254,22 @@ class CaptureTests(Fixture):
 
 
 class HygieneTests(Fixture):
+    def test_schema_block_lists_allowlisted_projects(self):
+        import vault_hygiene
+        with patch.dict(vault_hygiene.SCHEMA, {"project_allowlist": ["alpha-one", "meta"]}):
+            self.assertIn("- Project: `alpha-one`, `meta`.\n", vault_hygiene.schema_block())
+        with patch.dict(vault_hygiene.SCHEMA, {"project_allowlist": None}):
+            self.assertIn("- Project: any kebab-case slug;", vault_hygiene.schema_block())
+
+    def test_priority_aging_merges_into_existing_review_category(self):
+        import vault_hygiene
+        text = ("## Active Now\n\n**Personal**\n- Old item `touched: 2026-08-18`\n\n## Review\n\nReview here.\n\n"
+                "**Personal**\n- Older item `touched: 2026-08-01`\n- Fresh misfile `touched: 2026-09-05`\n\n## Parked / Watch\n")
+        revised = age_priorities(text, dt.date(2026, 9, 6))[0]
+        self.assertEqual(revised.count("**Personal**"), 2)
+        self.assertLess(revised.index("Older item"), revised.index("Old item"))
+        self.assertEqual(len(vault_hygiene.recent_review(revised, dt.date(2026, 9, 6))), 1)
+
     def test_priority_aging_idempotent(self):
         text = "## Active Now\n\n**Personal**\n- Old item `touched: 2026-08-18`\n- Current item `touched: 2026-09-06`\n\n## Review\n\nReview here.\n\n## Parked / Watch\n- Parked item `touched: 2020-01-01`\n"
         revised, count, active = age_priorities(text, dt.date(2026, 9, 6))
@@ -331,6 +347,142 @@ class HookTests(Fixture):
         self.assertEqual(hooks.stop_gate(payload, self.vault, self.directory)[0], 2)
         self.assertEqual(hooks.stop_gate(dict(payload, session_id="session-2"), self.vault, self.directory)[0], 2)
         self.assertEqual(len(list((self.vault.state / "requested").glob("*.json"))), 2)
+
+
+class CheapCheckpointTests(Fixture):
+    LAUNCH_MS = int(dt.datetime(2026, 9, 5, 21, 42, tzinfo=dt.timezone.utc).timestamp() * 1000)
+
+    def claude_rows(self, extra, path=None):
+        path = path or self.transcript("claude", model="claude-opus-5")
+        with path.open("a", encoding="utf-8") as out:
+            out.write("".join(json.dumps(row) + "\n" for row in extra))
+        return {"session_id": "session-1", "transcript_path": str(path)}
+
+    def shell(self, call_id, command, ok=True):
+        return [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": call_id, "name": "Bash", "input": {"command": command}}]}},
+                {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": call_id, "is_error": not ok, "content": "ok"}]}}]
+
+    def test_new_day_open_line_keeps_backslashes(self):
+        op = core.daily_operation(self.vault, "2026-09-07", "3:42 PM", "Path work", SECTIONS, "astra", "<!-- m -->", r"Resume in C:\Users\me\work")
+        self.assertIn(r"**Open for tomorrow:** Resume in C:\Users\me\work", op["content"])
+
+    def test_new_sessions_add_no_index_bullet(self):
+        _, rel = self.daily()
+        index = (self.vault.root / rel).read_text(encoding="utf-8").split("## Index", 1)[1].split("## Session", 1)[0]
+        self.assertNotIn("- **", index)
+        op = core.daily_operation(self.vault, "2026-09-05", "4:00 PM", "More work", SECTIONS, "astra", "<!-- m2 -->")
+        self.assertEqual(op["edits"], [])
+        self.vault.commit([op], "astra", "test")
+
+    def test_checkpoint_fills_day_time_and_skips_short_evidence(self):
+        import vaultctl
+        path = self.transcript("claude", text="ok", model="claude-opus-5")
+        units = list(sources.stream_units(path, "claude", "session-1"))
+        payload = {"days": [{"topic": "Work", "sections": SECTIONS}]}
+        vaultctl.fill_days(payload, units)
+        self.assertEqual((payload["days"][0]["day"], payload["days"][0]["time"]), (units[-1]["day"], units[-1]["time"]))
+        self.assertNotEqual(vaultctl.default_evidence(units)[0]["quote"].strip(), "ok")
+        self.assertEqual(vaultctl.day_times(units)[-1]["last"], units[-1]["time"])
+
+    def test_inspect_hash_only(self):
+        import vaultctl
+        _, rel = self.daily()
+        rows = vaultctl.main(["--vault", str(self.vault.root), "--state", str(self.vault.state), "--backups", str(self.vault.backups), "inspect", "--hash", rel])
+        self.assertEqual(sorted(rows[0]), ["bytes", "path", "sha256"])
+
+    def test_decision_edits_in_checkpoints_are_status_only(self):
+        row = "| 2026-09-01 | Use X. | Because. | `note` | active |"
+        capture.check_decision_edit({"old": row, "new": row.replace("| active |", "| superseded 2026-09-02 by the row below |")})
+        for bad in ({"old": row, "new": row.replace("Use X.", "Use Y.")},
+                    {"old": row.replace("| active |", "| locked |"), "new": row.replace("| active |", "| superseded |")}):
+            with self.assertRaises(core.VaultError):
+                capture.check_decision_edit(bad)
+
+    def test_consolidate_days_precedence_and_note_filter(self):
+        import vault_recall
+        (self.vault.root / "Alpha project.md").write_text(HEADER + "\n# Alpha project\n", encoding="utf-8")
+        with patch.object(vault_recall, "_today", return_value=dt.date(2026, 9, 5)):
+            self.daily(topic="Alpha project work")
+            self.vault.commit([core.daily_operation(self.vault, "2026-09-05", "4:00 PM", "Other work", SECTIONS, "astra", "<!-- m2 -->")], "astra", "test")
+            self.assertEqual(vault_recall.consolidate_context(self.vault, days=1)["from"], "2026-09-05")
+            core.atomic_json(self.vault.state / "consolidation.json", {"through": "2026-09-05"})
+            self.assertEqual(vault_recall.consolidate_context(self.vault, days=2)["from"], "2026-09-04")
+            report = vault_recall.consolidate_context(self.vault, note="Alpha project")
+            self.assertEqual(report["from"], "2026-08-01")
+            self.assertEqual(len(report["listed_sessions"]), 1)
+
+    def test_durable_command_alone_is_substantive_but_scratch_copy_is_not(self):
+        self.assertEqual(hooks.stop_gate(self.claude_rows(self.shell("c1", "git push origin main")), self.vault, self.directory)[0], 2)
+        scratch = self.claude_rows(self.shell("c2", r"cp a.json C:\Users\me\AppData\Local\Temp\scratchpad\b.json"), self.base / "other.jsonl")
+        self.assertEqual(hooks.stop_gate(dict(scratch, session_id="session-2"), self.vault, self.directory)[0], 0)
+
+    def test_pending_background_agents_defer_until_notified(self):
+        launch = [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "agent-1", "name": "Agent", "input": {}}]}},
+                  {"type": "user", "timestamp": "2026-09-05T21:42:00Z", "toolUseResult": {"isAsync": True, "status": "async_launched", "agentId": "a1"},
+                   "message": {"content": [{"type": "tool_result", "tool_use_id": "agent-1", "content": "launched"}]}},
+                  {"type": "assistant", "message": {"content": [{"type": "text", "text": "x" * 1600}]}}]
+        payload = self.claude_rows(launch)
+        later = self.LAUNCH_MS + 60000
+        self.assertEqual(hooks.stop_gate(payload, self.vault, self.directory, current_ms=later)[0], 0)
+        self.claude_rows([{"type": "user", "origin": {"kind": "task-notification"},
+                           "message": {"content": "<task-notification><tool-use-id>agent-1</tool-use-id><status>completed</status></task-notification>"}}],
+                         Path(payload["transcript_path"]))
+        self.assertEqual(hooks.stop_gate(payload, self.vault, self.directory, current_ms=later)[0], 2)
+
+    def test_after_checkpoint_only_new_durable_work_requests_again(self):
+        payload = self.claude_rows(self.shell("c1", "git commit -m x"))
+        live = self.vault.state / "live"
+        live.mkdir(parents=True, exist_ok=True)
+        core.atomic_json(live / (sources.source_key("claude", "session-1") + ".json"),
+                         {"turn_key": "turn-1", "receipt_id": "r1", "through": Path(payload["transcript_path"]).stat().st_size})
+        with patch.object(hooks, "verified_receipts", return_value=[{"id": "r1"}]):
+            self.assertEqual(hooks.stop_gate(payload, self.vault, self.directory)[0], 0)
+            self.claude_rows(self.shell("c2", "git push origin main"), Path(payload["transcript_path"]))
+            self.assertEqual(hooks.stop_gate(payload, self.vault, self.directory)[0], 2)
+
+    def test_trivial_refused_after_durable_work(self):
+        import types, vaultctl
+        payload = self.claude_rows(self.shell("c1", "git push origin main"))
+        with self.assertRaises(core.VaultError):
+            vaultctl.refuse_trivial(self.vault, types.SimpleNamespace(source="claude", session="session-1", transcript=payload["transcript_path"]))
+
+
+class RecallMeasurementTests(Fixture):
+    def test_handoff_report_and_heading_cases(self):
+        import vault_recall
+        text = ("---\nstatus: active\nproject: personal\ntype: plan\nupdated_by: astra\nupdated: 2026-09-10\n---\n\n# Project\n\n"
+                "## Handoff - resume here\n_Last updated: September 1, 2026 at 9:00 AM by astra_\n\n" + "x" * 4100 + "\n\n## Notes\n")
+        report = {"stale": [], "oversized": [], "nonstandard_heading": []}
+        vault_recall.handoff_report("Project.md", text, report)
+        self.assertEqual([len(report[k]) for k in ("stale", "oversized", "nonstandard_heading")], [1, 1, 1])
+        cases = vault_recall.load_eval("| Q | [[Project#Notes]] | project |\n| Q2 | [[Project]] | project |")
+        self.assertEqual([c["heading"] for c in cases], ["Notes", None])
+        self.assertTrue(vault_recall.has_heading(text, "Notes"))
+        self.assertFalse(vault_recall.has_heading(text, "Missing"))
+
+
+class RuntimeContractTests(unittest.TestCase):
+    def test_runtime_hash_covers_only_vault_hooks(self):
+        import vault_runtime
+        gate = {"type": "command", "command": "node C:\\Users\\me\\.claude\\hooks\\vault\\stop-vault-gate.js"}
+        base = {"Stop": [{"hooks": [gate]}], "PostToolUse": [{"matcher": "Read", "hooks": [{"type": "command", "command": "node other.js"}]}]}
+        changed = json.loads(json.dumps(base))
+        changed["PostToolUse"][0]["hooks"][0]["command"] = "node another.js"
+        self.assertEqual(vault_runtime.vault_hook_entries(base), vault_runtime.vault_hook_entries(changed))
+        self.assertNotEqual(vault_runtime.vault_hook_entries(base), vault_runtime.vault_hook_entries({"PostToolUse": base["PostToolUse"]}))
+
+    @unittest.skipUnless(os.name == "nt", "PowerShell job runner")
+    def test_job_log_rotates_past_128_kb(self):
+        import re
+        script = (Path(core.__file__).parent / "invoke-vault-job.ps1").read_text(encoding="utf-8")
+        function = re.search(r"function Write-JobLog \{.*?\n\}", script, re.S).group(0)
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "audit.log"
+            log.write_bytes(b"x" * (129 * 1024))
+            command = "$LogPath = '" + str(log) + "'\n" + function + "\nWrite-JobLog 'after rotation'"
+            subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command], check=True, capture_output=True, timeout=60)
+            self.assertEqual((Path(tmp) / "audit.log.1").stat().st_size, 129 * 1024)
+            self.assertIn("after rotation", log.read_text(encoding="utf-8-sig"))
 
 
 if __name__ == "__main__":

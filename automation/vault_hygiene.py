@@ -19,7 +19,8 @@ def schema_block():
         "- Required keys: " + quote(SCHEMA["required"]) + ".",
         "- Optional existing key: " + quote(SCHEMA["optional"]) + ". No other keys.",
         "- Status: " + quote(SCHEMA["status"]) + ".",
-        "- Project: any kebab-case slug; optional project_allowlist in vault-schema.json. Starter values: " + quote(SCHEMA["project"]) + ".",
+        ("- Project: " + quote(SCHEMA["project_allowlist"]) + "." if SCHEMA.get("project_allowlist") else
+         "- Project: any kebab-case slug; optional project_allowlist in vault-schema.json. Starter values: " + quote(SCHEMA["project"]) + "."),
         "- Type: " + quote(SCHEMA["type"]) + ".",
         "- Signature: lowercase model label/ID, `human`, `automation`, or `unknown-model`; legacy tags remain valid in history.",
         "- Updated: readable local write time, for example `September 23, 2026 at 6:20:14 AM (UTC-06:00)`; legacy ISO timestamps and `YYYY-MM-DD` dates remain valid. The writer uses the system clock and timezone.",
@@ -86,15 +87,35 @@ def age_priorities(text, today=None):
         review = next((i for i, chunk in enumerate(chunks) if chunk.startswith("## Review\n") or chunk.startswith("## Review\r\n")), None)
         if review is None:
             raise VaultError("Cannot age priorities without the Review section")
-        addition = ""
-        last_category = None
+        body = chunks[review].rstrip("\r\n").splitlines()
         for category, line in moved:
-            if category != last_category:
-                addition += newline + category + newline
-                last_category = category
-            addition += line + newline
-        chunks[review] = chunks[review].rstrip("\r\n") + newline + addition + newline
+            # Merge under an existing Review category heading instead of repeating it.
+            heading_at = max((i for i, existing in enumerate(body) if existing.strip() == category), default=None)
+            if heading_at is None:
+                body += ["", category, line]
+                continue
+            end = heading_at + 1
+            while end < len(body) and body[end].startswith("- "):
+                end += 1
+            body.insert(end, line)
+        chunks[review] = newline.join(body) + newline + newline
     return "".join(chunks), len(moved), count_active
+
+
+def recent_review(text, today=None):
+    """Review items touched within 14 days: misfiled, they belong back in Active Now, Next or Waiting."""
+    today = today or now().date()
+    review = re.search(r"^## Review\r?\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+    found = []
+    for line in (review.group(1).splitlines() if review else []):
+        match = re.search(r"`touched: (\d{4}-\d{2}-\d{2})`", line)
+        if line.startswith("- ") and match:
+            try:
+                if (today - dt.date.fromisoformat(match.group(1))).days <= 14:
+                    found.append(line[:80])
+            except ValueError:
+                pass
+    return found
 
 
 def parity(home):
@@ -203,6 +224,9 @@ def hygiene(vault, fix=False, check_parity=True, home=None):
     priority = "Active Priorities.md"
     if priority in texts:
         revised, aged, count_active = age_priorities(texts[priority])
+        misfiled = recent_review(texts[priority])
+        if misfiled:
+            report["recent_review"] = misfiled  # informational; does not block the stamp
         if count_active > 5:
             report["issues"].append({"path": priority, "problem": "Active Now exceeds five committed items"})
         if aged:

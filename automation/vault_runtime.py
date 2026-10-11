@@ -26,10 +26,23 @@ ConvertTo-Json -InputObject @($items) -Depth 6 -Compress
 """
 
 
+def vault_hook_entries(hooks):
+    """Only the vault's own hook wiring belongs to the approved runtime contract;
+    unrelated plugin or tool hooks may change without invalidating it."""
+    selected = {}
+    for event, groups in sorted((hooks or {}).items()):
+        for group in groups or []:
+            for hook in group.get("hooks", []) or []:
+                text = json.dumps(hook, sort_keys=True, ensure_ascii=False).replace("\\\\", "/").replace("\\", "/")
+                if "/hooks/vault/" in text:
+                    selected.setdefault(event, []).append({"matcher": group.get("matcher", ""), "hook": hook})
+    return selected
+
+
 def runtime_snapshot(home=None):
     home = Path(home or Path.home())
     settings = json.loads(read_text(home / ".claude/settings.json"))
-    hook_hash = sha(json.dumps(settings.get("hooks", {}), sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode())
+    hook_hash = sha(json.dumps(vault_hook_entries(settings.get("hooks", {})), sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode())
     command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", TASK_QUERY]
     process = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20,
                              creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)

@@ -15,6 +15,7 @@ What was tried, why it failed, and what to do instead. The counterpart of "bank 
 - **Add a line the moment an approach is abandoned for a working one.** Recurring operations only; not one-off typos.
 - Format: `- **operation** — tried: X. Failed: Y. Do instead: Z. → [[source note]] (YYYY-MM-DD, agent)`. One line.
 - Group under headings by area; add a heading when nothing fits.
+- Look up an operation with `rg -n '^## ' 'Dead Ends.md'`, then read the matching section, or `rg -n -i -m 8 '<term>' 'Dead Ends.md'`.
 - Never delete a line. If a dead end stops being one (a tool update fixes it), append `— resolved YYYY-MM-DD: …`.
 
 ## Vault automation (Windows)
@@ -28,7 +29,7 @@ These shipped with the template because they cost the original author real debug
 - **Hidden scheduled PowerShell** — tried: `powershell.exe -WindowStyle Hidden`. Failed: conhost still flashes and steals focus, tabbing fullscreen games out. Do instead: `wscript.exe run-hidden.vbs` with window style 0.
 - **Idle detection from a service task** — tried: S4U / session-0 logon type. Failed: `GetLastInputInfo` only sees its own session, so it always reads "away". Do instead: keep `LogonType=Interactive`.
 - **`ConvertTo-Json` on `Get-Content` strings** — tried: serialising the raw lines. Failed: ETS members (`PSPath` etc.) make `-Depth 10` walk the provider graph and hang. Do instead: cast to `[string]` first.
-- **Leaving a drain backlog for the scheduled run** — tried: waiting for an idle window. Failed: Claude Code deletes transcripts after 30 days; sessions were lost. Do instead: checkpoint live; checkpoint any missed session from its transcript before day 30.
+- **Leaving a drain backlog for the scheduled run** — tried: waiting for an idle window. Failed: Claude Code deletes transcripts after 30 days; sessions were lost. Do instead: checkpoint live; checkpoint any missed session from its transcript before day 30. — resolved 2026-10-11: the drain is retired; checkpoint live.
 - **Unattended background model capture** — tried: an hourly scheduled drain running `claude -p` on idle machines to summarize past sessions. Failed: it spent the user's plan usage on Opus runs while they were away. Do instead: live checkpoints only; the drain, its queue and the SessionEnd enqueue hook were removed.
 
 ## Obsidian / Electron
@@ -37,5 +38,5 @@ These shipped with the template because they cost the original author real debug
 - **Finding the Bookmarks tab** — tried: anchoring on `aria-label`. Failed: it is the localized display string. Do instead: `data-type="bookmarks"`.
 - **Vault write events** — tried: `vault.on('create')` at plugin load. Failed: replays every file at startup. Do instead: register inside `onLayoutReady` plus a warm-up guard.
 - **Repositioning ribbon icons** — tried: a plain `MutationObserver`. Failed: self-triggers on its own DOM writes. Do instead: `takeRecords()` in `finally` plus an idempotency check before every write.
-- **Detecting agent activity from log mtimes** — tried: watching `drain.log` / `audit.log`. Failed: they are written on every hourly deferral. Do instead: `queue.jsonl`, `stop-state.json`, `.drain.lock`.
+- **Detecting agent activity from log mtimes** — tried: watching `drain.log` / `audit.log`. Failed: they are written on every hourly deferral. Do instead: `queue.jsonl`, `stop-state.json`, `.drain.lock`. — resolved 2026-10-11: queue.jsonl retired with the drain; use stop-state.json and the audit job's .drain.lock.
 - **Renaming a note** — tried: shell `mv`. Failed: every `[[link]]` to it breaks. Do instead: rename inside Obsidian (auto-update links), or fix every reference by hand.

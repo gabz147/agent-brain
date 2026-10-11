@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 from pathlib import Path
 import re
@@ -17,7 +18,8 @@ from vault_recall import consolidate_context, fact_freshness, mark_consolidated,
 
 
 def load_input(path):
-    return json.loads(read_text(path) if path else sys.stdin.read())
+    # Windows PowerShell pipes may prepend a UTF-8 BOM; json.loads rejects it.
+    return json.loads((read_text(path) if path else sys.stdin.read()).lstrip("﻿"))
 
 
 def format_times(vault, apply=False):
@@ -98,6 +100,43 @@ def live_units(args):
     return [u for u in units if u.get("turn_key") == turn]
 
 
+def day_times(units):
+    """First and last source-local event time for each day in the turn."""
+    spans = {}
+    for unit in units:
+        spans.setdefault(unit["day"], [unit["time"], unit["time"]])[1] = unit["time"]
+    return [{"day": day, "first": first, "last": last} for day, (first, last) in sorted(spans.items())]
+
+
+def fill_days(payload, units):
+    """A single-day turn supplies its day; an omitted time is that day's last event."""
+    days = sorted({u["day"] for u in units})
+    for entry in payload.get("days", []):
+        if not entry.get("day") and len(days) == 1:
+            entry["day"] = days[0]
+        if entry.get("day") and not entry.get("time"):
+            times = [u["time"] for u in units if u["day"] == entry["day"]]
+            if times:
+                entry["time"] = times[-1]
+
+
+def default_evidence(units):
+    unit = next((u for u in units if len(re.sub(r"\s", "", u["text"][:120])) >= 8), units[0])
+    return [{"unit_id": unit["id"], "quote": unit["text"][:120]}]
+
+
+def refuse_trivial(vault, args):
+    """A trivial disposition must not hide durable work done since this turn's last checkpoint."""
+    if args.source != "claude":
+        return
+    from vault_hooks import latest_turn, signals, since_acknowledgment
+    rows, _ = since_acknowledgment(vault, args.session, latest_turn(args.transcript))
+    evidence = signals(rows) if rows else {"writes": [], "durable": 0}
+    if evidence["writes"] or evidence["durable"]:
+        raise VaultError(f"--trivial refused: this turn has {len(evidence['writes'])} vault/project writes and "
+                         f"{evidence['durable']} durable commands since its last checkpoint; record them as a captured session")
+
+
 def checkpoint(vault, args, payload):
     units = live_units(args)
     signer = model_label(next((u["model"] for u in reversed(units) if u.get("model")), None))
@@ -105,8 +144,10 @@ def checkpoint(vault, args, payload):
     # same prepared checkpoint to its human turn and payload, not that tail.
     prepared = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     capture_id = "live-" + sha((source_key(args.source, args.session) + ":" + units[0]["id"] + ":" + prepared).encode())
+    payload = copy.deepcopy(payload)
+    fill_days(payload, units)
     proposal = {"disposition": payload.get("disposition", "captured"), "reason": payload.get("reason", "Interactive checkpoint"),
-                "evidence": payload.get("evidence") or [{"unit_id": units[0]["id"], "quote": units[0]["text"][:120]}],
+                "evidence": payload.get("evidence") or default_evidence(units),
                 "days": payload.get("days", []), "operations": payload.get("operations", []), "anchors": payload.get("anchors", [])}
     current_ids = {u["id"] for u in units}
     receipt = next((r for r in verified_receipts(vault, args.source, args.session)
@@ -128,6 +169,7 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     inspect = sub.add_parser("inspect")
     inspect.add_argument("paths", nargs="+")
+    inspect.add_argument("--hash", action="store_true", help="Return path, sha256 and size only; read the note natively after this")
     daily = sub.add_parser("daily-context", help="Daily navigation without session bodies")
     daily.add_argument("path")
     formatting = sub.add_parser("format-times", help="Preview readable timestamps while preserving original times/authors")
@@ -138,15 +180,16 @@ def main(argv=None):
     commit.add_argument("--reason", required=True)
     check = sub.add_parser("validate")
     check.add_argument("paths", nargs="*")
-    maintenance = sub.add_parser("hygiene")
+    maintenance = sub.add_parser("hygiene", help="Records state-v2/hygiene-latest.json and an outcomes row even without --fix; only --fix edits notes")
     maintenance.add_argument("--fix", action="store_true")
     maintenance.add_argument("--no-parity", action="store_true")
     evaluation = sub.add_parser("recall-eval", help="Measure retrieval against the Recall Eval note; no index")
     evaluation.add_argument("--top", type=int, default=5)
     evaluation.add_argument("--record", action="store_true", help="Append the result to the Inbox retrieval audit")
     consolidate = sub.add_parser("consolidate-context", help="Read-only digest of recent sessions to consolidate")
-    consolidate.add_argument("--days", type=int, default=7)
+    consolidate.add_argument("--days", type=int, help="Window in days; default: since the last mark, else 7 days")
     consolidate.add_argument("--since")
+    consolidate.add_argument("--note", help="Only sessions whose heading names this note or whose Notes Touched links it")
     consolidate.add_argument("--mark", help="Record consolidation through this day, after the updates are written")
     freshness = sub.add_parser("fact-freshness", help="Stale (as of <date>) facts; read-only")
     freshness.add_argument("--max-age-days", type=int, default=90)
@@ -156,7 +199,8 @@ def main(argv=None):
         command.add_argument("--session", required=True)
         command.add_argument("--transcript", required=True)
         if name == "checkpoint":
-            command.add_argument("--input")
+            command.add_argument("--input", help="JSON file; default reads stdin (pipe a file under Windows PowerShell 5.1)")
+            command.add_argument("--trivial", metavar="REASON", help="Record a reasoned trivial disposition without JSON input")
             command.add_argument("--summary", action="store_true", help="Print compact verified receipt; retain full receipt on disk")
     restore = sub.add_parser("restore")
     restore.add_argument("snapshot")
@@ -170,6 +214,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     vault = Vault(args.vault, args.state, args.backups)
     if args.command == "inspect":
+        if args.hash:
+            return [{"path": info["path"], "sha256": info["sha256"],
+                     "bytes": None if info["text"] is None else len(info["text"].encode("utf-8"))}
+                    for info in (vault.inspect(path) for path in args.paths)]
         return [vault.inspect(path) for path in args.paths]
     if args.command == "daily-context":
         return daily_context(vault, args.path)
@@ -191,7 +239,7 @@ def main(argv=None):
     if args.command == "consolidate-context":
         if args.mark:
             return mark_consolidated(vault, args.mark)
-        return consolidate_context(vault, days=args.days, since=args.since)
+        return consolidate_context(vault, days=args.days, since=args.since, note=args.note)
     if args.command == "fact-freshness":
         return fact_freshness(vault, max_age_days=args.max_age_days)
     if args.command == "checkpoint-context":
@@ -199,9 +247,16 @@ def main(argv=None):
         return {"source": args.source, "session_id": args.session, "turn_key": units[-1]["turn_key"],
                 "model": next((u["model"] for u in reversed(units) if u.get("model")), None),
                 "days": sorted({u["day"] for u in units}), "latest_event": {k: units[-1][k] for k in ("day", "time", "end")},
-                "units": len(units), "first_evidence": {"unit_id": units[0]["id"], "quote": units[0]["text"][:120]}}
+                "day_times": day_times(units), "units": len(units), "first_evidence": default_evidence(units)[0]}
     if args.command == "checkpoint":
-        receipt = checkpoint(vault, args, load_input(args.input))
+        if args.trivial is not None:
+            if not args.trivial.strip():
+                raise VaultError("--trivial needs a reason")
+            refuse_trivial(vault, args)
+            payload = {"disposition": "trivial", "reason": args.trivial.strip()}
+        else:
+            payload = load_input(args.input)
+        receipt = checkpoint(vault, args, payload)
         return receipt_summary(receipt) if args.summary else receipt
     if args.command == "restore":
         return vault.restore(args.snapshot, args.path, args.expected_sha256)
@@ -235,7 +290,7 @@ if __name__ == "__main__":
     sys.stdin.reconfigure(encoding="utf-8")
     try:
         result = main()
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
         sys.exit(2 if isinstance(result, dict) and result.get("outcome") in ("invalid", "needs_review") else 0)
     except Exception as exc:
         print(json.dumps({"outcome": "failed", "error": str(exc)}))

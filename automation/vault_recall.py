@@ -81,10 +81,16 @@ def load_eval(text):
         if len(cells) < 3 or set(cells[0]) <= set("-: ") or cells[0].lower() == "question":
             continue
         expected = WIKILINK.findall(cells[1])
+        heading = re.search(r"\[\[[^\]|#]+#([^\]|]+)", cells[1])
         terms = [t.strip().lower() for t in cells[2].split(",") if t.strip()]
         if cells[0] and expected and terms:
-            cases.append({"question": cells[0], "expected": expected[0].strip(), "terms": terms})
+            cases.append({"question": cells[0], "expected": expected[0].strip(), "terms": terms,
+                          "heading": heading.group(1).strip() if heading else None})
     return cases
+
+
+def has_heading(text, heading):
+    return any(re.fullmatch(r"#{1,6}\s+" + re.escape(heading) + r"\s*", line) for _, line in _unfenced_lines(text))
 
 
 def score_note(stem, text, terms):
@@ -122,13 +128,16 @@ def recall_eval(vault, top_k=5, record=False):
         order = [stem.lower() for _, _, stem in ranked]
         target = case["expected"].lower()
         rank = order.index(target) + 1 if target in order else None
-        results.append({**case, "rank": rank, "found": rank is not None and rank <= top_k,
-                        "missing_note": target not in stems, "top": [stem for _, _, stem in ranked[:top_k]]})
+        note_text = next((text for stem, _, text in corpus if stem.lower() == target), "")
+        missing_heading = bool(case.get("heading")) and not has_heading(note_text, case["heading"])
+        results.append({**case, "rank": rank, "found": rank is not None and rank <= top_k and not missing_heading,
+                        "missing_note": target not in stems, "missing_heading": missing_heading,
+                        "top": [stem for _, _, stem in ranked[:top_k]]})
     misses = [r for r in results if not r["found"]]
     report = {"outcome": "needs_review" if misses else "passed", "questions": len(results),
               "found": len(results) - len(misses), "top_k": top_k,
               "recall_at_k": round((len(results) - len(misses)) / len(results), 3),
-              "misses": [{k: r[k] for k in ("question", "expected", "rank", "missing_note", "top")} for r in misses],
+              "misses": [{k: r[k] for k in ("question", "expected", "rank", "missing_note", "missing_heading", "top")} for r in misses],
               "method": "Lexical ranking over live notes: filename, headings, wikilinks, body (no index)"}
     if record:
         report["recorded"] = record_eval(vault, report)
@@ -187,19 +196,54 @@ def consolidation_state(vault):
     return path, (json.loads(read_text(path)) if path.exists() else {})
 
 
-def consolidate_context(vault, days=7, since=None):
-    """Digest of recent daily sessions for a consolidation pass. Read-only."""
+def _leading_day(value):
+    match = re.match(r"\s*(\d{4}-\d{2}-\d{2}|[A-Za-z]+ [1-9]\d?, \d{4})", value or "")
+    return parse_day(match.group(1)) if match else None
+
+
+def note_start(vault, note):
+    """Default window for --note: the older of its handoff `_Last updated:` date and frontmatter `updated`."""
+    path = next((p for p, _ in _live_notes(vault) if not is_daily(p) and p.stem.lower() == note.strip().lower()), None)
+    if path is None:
+        raise VaultError("--note: no live note named " + note)
+    text = read_text(path)
+    fields, _ = frontmatter(text)
+    handoff = re.search(r"^_Last updated:\s*(.+)$", text, re.M)
+    dates = [d for d in (_leading_day(fields.get("updated", "")), _leading_day(handoff.group(1) if handoff else "")) if d]
+    return min(dates) if dates else None
+
+
+def _mentions(session, note):
+    key = note.strip().lower()
+    if key in session["heading"].lower():
+        return True
+    return any(link.strip().lower() == key for item in session["sections"].get("Notes Touched", []) for link in WIKILINK.findall(item))
+
+
+def consolidate_context(vault, days=None, since=None, note=None):
+    """Digest of daily sessions for a consolidation pass or a project resume. Read-only.
+
+    Window precedence: --since, then an explicit --days, then (with --note) the
+    note's own handoff/update date, then the stored mark, then seven days.
+    """
     state_path, state = consolidation_state(vault)
     today = _today()
+    start = None
     if since:
         start = parse_day(since)
         if start is None:
             raise VaultError("--since needs YYYY-MM-DD")
-    elif state.get("through"):
-        start = dt.date.fromisoformat(state["through"]) + dt.timedelta(days=1)
-    else:
-        start = today - dt.timedelta(days=days - 1)
+    elif days is not None:
+        start = today - dt.timedelta(days=max(days, 1) - 1)
+    elif note:
+        start = note_start(vault, note)
+    if start is None:
+        if state.get("through"):
+            start = dt.date.fromisoformat(state["through"]) + dt.timedelta(days=1)
+        else:
+            start = today - dt.timedelta(days=6)
     stems = {path.stem.lower() for path, _ in _live_notes(vault)}
+    listed = []
     touched, open_items, decisions, dead_ends, unresolved, sessions_seen = {}, [], [], [], set(), 0
     covered = []
     for path, rel in _live_notes(vault):
@@ -210,8 +254,12 @@ def consolidate_context(vault, days=7, since=None):
             continue
         covered.append(path.stem)
         for session in daily_sessions(read_text(path)):
+            if note and not _mentions(session, note):
+                continue
             sessions_seen += 1
             ref = {"daily": rel, "session": session["heading"]}
+            if note:
+                listed.append(ref)
             sections = session["sections"]
             for item in sections.get("Notes Touched", []):
                 for link in WIKILINK.findall(item):
@@ -223,15 +271,20 @@ def consolidate_context(vault, days=7, since=None):
             decisions += [{**ref, "item": _clip(i)} for i in sections.get("Decisions Made", [])]
             dead_ends += [{**ref, "item": _clip(i)} for s in ("What Got Done", "What's Still In Progress")
                           for i in sections.get(s, []) if DEAD_END_HINT.search(i)]
-    return {"outcome": "context", "from": start.isoformat(), "through": today.isoformat(),
-            "days_with_notes": sorted(covered), "sessions": sessions_seen,
-            "last_marked": state.get("through"), "state_file": str(state_path),
-            "touched_notes": sorted(({"note": k, "sessions": len(v), "refs": v[:5]} for k, v in touched.items()),
-                                    key=lambda row: -row["sessions"]),
-            "open_items": open_items, "decisions": decisions, "dead_end_candidates": dead_ends,
-            "unresolved_links": sorted(unresolved),
-            "next": "Fully read the listed sessions before proposing topic, Active Priorities, Decisions or Dead Ends "
-                    "updates; write through commit/checkpoint, then run consolidate-context --mark <through>."}
+    result = {"outcome": "context", "from": start.isoformat(), "through": today.isoformat(),
+              "days_with_notes": sorted(covered), "sessions": sessions_seen,
+              "last_marked": state.get("through"), "state_file": str(state_path),
+              "touched_notes": sorted(({"note": k, "sessions": len(v), "refs": v[:5]} for k, v in touched.items()),
+                                      key=lambda row: -row["sessions"]),
+              "open_items": open_items, "decisions": decisions, "dead_end_candidates": dead_ends,
+              "unresolved_links": sorted(unresolved),
+              "next": "Fully read the listed sessions before proposing topic, Active Priorities, Decisions or Dead Ends "
+                      "updates; write through commit/checkpoint, then run consolidate-context --mark <through>."}
+    if note:
+        result.update(note=note, listed_sessions=listed,
+                      next=f"Read only these {len(listed)} sessions with daily-context and the matching session bodies; "
+                           "the --note view is stateless and never moves the consolidation mark.")
+    return result
 
 
 def mark_consolidated(vault, through):
@@ -246,10 +299,34 @@ def mark_consolidated(vault, through):
 
 # ------------------------------------------------------------- fact freshness
 
+HANDOFF_HEADING = "## Handoff — resume here"
+HANDOFF_LIMIT = 4000
+
+
+def handoff_report(rel, text, report):
+    """Measurement only: a handoff older than its note, oversized, or under a nonstandard heading."""
+    lines = [line for _, line in _unfenced_lines(text)]
+    start = next((i for i, line in enumerate(lines) if line.startswith("## Handoff")), None)
+    if start is None:
+        return
+    if lines[start].strip() != HANDOFF_HEADING:
+        report["nonstandard_heading"].append({"path": rel, "heading": lines[start][:60]})
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    block = "\n".join(lines[start:end])
+    if len(block) > HANDOFF_LIMIT:
+        report["oversized"].append({"path": rel, "chars": len(block)})
+    stamp = re.search(r"^_Last updated:\s*(.+)$", block, re.M)
+    fields, _ = frontmatter(text)
+    written, refreshed = _leading_day(fields.get("updated", "")), _leading_day(stamp.group(1) if stamp else "")
+    if written and refreshed and (written - refreshed).days > 2:
+        report["stale"].append({"path": rel, "handoff": refreshed.isoformat(), "note_updated": written.isoformat()})
+
+
 def fact_freshness(vault, max_age_days=90):
     """Stale `(as of <date>)` markers and volatile notes that carry none. Read-only."""
     today = _today()
     stale, unparsed, fresh, unmarked = [], [], 0, []
+    handoffs = {"stale": [], "oversized": [], "nonstandard_heading": []}
     for path, rel in _live_notes(vault):
         if is_daily(path):
             continue  # Daily history is dated by construction.
@@ -270,8 +347,10 @@ def fact_freshness(vault, max_age_days=90):
         if path.name in VOLATILE_NOTES and markers == 0:
             fields, _ = frontmatter(text)
             unmarked.append({"path": rel, "updated": fields.get("updated")})
+        handoff_report(rel, text, handoffs)
     issues = stale or unparsed or unmarked
     return {"outcome": "needs_review" if issues else "passed", "max_age_days": max_age_days,
             "fresh_markers": fresh, "stale": stale, "unparsed": unparsed, "volatile_without_markers": unmarked,
+            "handoffs": handoffs,
             "convention": "Suffix a fact that can change with (as of YYYY-MM-DD) or (as of Month D, YYYY); "
                           "re-verify before relying on a stale one."}

@@ -17,6 +17,8 @@ The decision ledger. Every deliberate, cross-session choice lives here in one ta
 - **Never edit another row's wording.** To change a decision, add a new row and mark the old one `superseded`.
 - **Enforced in** names the file or note that makes the decision real. If nothing enforces it, say `convention`.
 - One line per row. The reasoning goes in the linked note, not here.
+- Look up rows with `rg -n -i -e '<topic>' -e '[[<Project>' -e '\| locked' Decisions.md`; read the whole ledger only for a requested review or before superseding a row.
+- Append rows as `| ... |` lines with no blank line before them.
 
 ## Ledger
 

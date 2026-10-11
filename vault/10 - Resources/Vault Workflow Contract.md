@@ -71,7 +71,7 @@ python $vaultCtl commit --model '<verified-runtime-id>' --reason '<concrete chan
 python $vaultCtl validate
 ```
 
-A commit input is `{"operations":[...]}`. Each operation has a vault-relative `path`, `expected_sha256` from inspect (null only for a new file), and either `edits:[{"old":"exact unique text","new":"replacement"}]` plus optional `append`, or `content` for a new/non-daily note. An existing daily file must use targeted edits/append. Use native file tools or apply_patch to prepare the JSON; the controller performs the note mutation.
+A commit input is `{"operations":[...]}`. Each operation has a vault-relative `path`, `expected_sha256` from inspect (null only for a new file), and either `edits:[{"old":"exact unique text","new":"replacement"}]` plus optional `append`, or `content` for a new/non-daily note. An existing daily file must use targeted edits/append. Use native file tools or apply_patch to prepare the JSON; the controller performs the note mutation. Take `expected_sha256` from `inspect --hash` before a native read of the note (hash first, then read, so a write in between fails as a conflict); plain `inspect` also prints the text, so use it as the read itself rather than as a second copy.
 
 The controller locks, compares hashes, validates, snapshots, replaces atomically and verifies each result. It rejects outside-vault paths, hidden files, frozen memory, duplicate keys, invalid dates and edits to old daily sessions, and resumes a crashed multi-note transaction from its prepared bytes. On a concurrent-edit conflict, re-read and rebuild the affected operation; never overwrite it.
 
@@ -90,18 +90,18 @@ The writer sets `updated` automatically, for example `September 23, 2026 at 6:20
 
 Use [[Daily Note Template]] for model-created daily notes. Location: `01 - Daily Notes/<MM - Month YYYY>/<YYYY-MM-DD>.md`. Event-local dates/times choose the filename, date heading and session timestamp; the actual local write time with timezone stamps frontmatter. Split multi-day transcripts by event day. Backfills do not replace a later event's Open line.
 
-The body starts with `# Saturday, September 5, 2026`, then `**Open for tomorrow:**`, then `## Index`. Insert one bold-topic, past-tense outcome bullet per new session. Append `## Session N — 3:42 PM: Topic — model-signature`; choose max+1 at write time, never renumber existing labels. All five `###` sections appear in this order: What Got Done; What's Still In Progress; Decisions Made; Notes Touched; Profile Updates. Use `- None` for an empty section.
+The body starts with `# Saturday, September 5, 2026`, then `**Open for tomorrow:**`, then `## Index`. New sessions add no Index bullet; the session heading carries number, time, topic and signer, and existing Index entries stay. Append `## Session N — 3:42 PM: Topic — model-signature`; choose max+1 at write time, never renumber existing labels. All five `###` sections appear in this order: What Got Done; What's Still In Progress; Decisions Made; Notes Touched; Profile Updates. Use `- None` for an empty section.
 
 Existing session bytes and Index entries are immutable. The three permitted body operations are Index insertion, appending a complete session, and updating Open for tomorrow. Restamping frontmatter is an explicit metadata exception. Corrections/gaps always get a new section with provenance. Never fill an old session or rewrite the daily file wholesale. Historical headers before the Open-line convention began on September 3, 2026 remain unchanged; enforce that field for newer notes.
 
-For a live checkpoint, `checkpoint-context` returns the verified model, source-local event day/time and source boundary. Then run `checkpoint --summary` with the same source arguments and the JSON on stdin (Bash heredoc) or in `--input <file>` (use a file from Windows PowerShell 5.1, which pipes ASCII):
+A live checkpoint is one `checkpoint --summary` call with the JSON on stdin (Bash heredoc) or in `--input <file>` (use a file from Windows PowerShell 5.1, which pipes ASCII). The controller fills the verified model, evidence and signature, plus a days entry's omitted `day` (single-day turns) and `time` (that day's last event). `checkpoint-context` lists each day's first and last event times for multi-day turns or diagnosis. When nothing is durable, `--trivial '<reason>'` replaces the JSON; it is refused while the turn holds unsaved writes or durable commands.
 
 ```powershell
-python $vaultCtl checkpoint-context --source codex --session '<actual-id>' --transcript '<actual-jsonl-path>'
 python $vaultCtl checkpoint --summary --source codex --session '<actual-id>' --transcript '<actual-jsonl-path>' --input '<checkpoint-json>'
+python $vaultCtl checkpoint --summary --source codex --session '<actual-id>' --transcript '<actual-jsonl-path>' --trivial '<reason>'
 ```
 
-Use `--source claude` for Claude. Every source-local day in the batch needs its own `days` entry; for an earlier day use that day's last event-local time from the transcript. Sections left out become `- None`; `open_next` is optional and replaces the Open line only when given. Input fields:
+Use `--source claude` for Claude. Every source-local day in the batch needs its own `days` entry. Sections left out become `- None`; `open_next` is optional and replaces the Open line only when given. Input fields:
 
 ```json
 {
@@ -123,7 +123,7 @@ Use `--source claude` for Claude. Every source-local day in the batch needs its 
 }
 ```
 
-Operations use the shared writer format. If substantive work is already recorded, use `disposition: already_covered`, no days/operations, and `anchors:[{"path":"<daily path>","text":"<exact complete existing session fragment>"}]`. For a truly trivial turn, use `disposition: trivial`, a substantive reason, and no writes. Context can supply source evidence; the controller verifies it. Do not classify a useful audit, decision or unresolved implementation as trivial merely because no code changed.
+Operations use the shared writer format. If substantive work is already recorded, use `disposition: already_covered`, no days/operations, and `anchors:[{"path":"<daily path>","text":"<exact complete existing session fragment>"}]`. For a truly trivial turn, use `disposition: trivial` (or `--trivial`), a substantive reason, and no writes. Context can supply source evidence; the controller verifies it. Do not classify a useful audit, decision or unresolved implementation as trivial merely because no code changed.
 
 `checkpoint --summary` prints the receipt identity, signer and daily anchor; full source ranges stay in state-v2/coverage (omit --summary only to diagnose them). `daily-context` is a locator, not evidence that omitted history was reviewed.
 
@@ -139,7 +139,7 @@ New folders require their index, parent entry and vault map update together. Ren
 
 Keep one current-state block per project. Topic notes hold current state and stable reference; dated history lives in daily sessions or a `<Note> Log` note, read only for history requests. Index descriptions say what a note covers, never counts, dates or pending items. Each Active Priorities item is one current line (at most 300 characters) with state and next action; replace it, never append history. Update Active Priorities only when work or its state changes: at most five Active Now items, one touched date per actionable bullet, older-than-14-day items move to Review, no automatic deletion or archiving. Parked/Watch is non-actionable reference.
 
-Append deliberate decisions. Supersession changes only the old row's status/reference; original wording remains. Preserve old dead-end entries; append a dated resolution when a new method replaces their recommendation. Profile changes require directly confirmed evidence, belong only in Who I Am, and are logged under daily Profile Updates. Routine work does not authorize rewriting protected startup preferences/rules.
+Append deliberate decisions. Supersession changes only the old row's status/reference; original wording remains. Checkpoint operations may append Decisions rows and change a non-locked row's Enforced in/Status cells; superseding a locked row needs the owner's words and an interactive commit. Preserve old dead-end entries; append a dated resolution when a new method replaces their recommendation. Profile changes require directly confirmed evidence, belong only in Who I Am, and are logged under daily Profile Updates. Routine work does not authorize rewriting protected startup preferences/rules.
 
 ## Handoffs and manual use
 
@@ -166,5 +166,5 @@ Optional (Obsidian 1.12.7+, CLI enabled in Settings → General): `python <BRAIN
 All three workflows read Markdown on demand; none adds a database, embedding or index.
 
 - **Recall eval.** [[Recall Eval]] lists known-answer questions as `| question | [[expected note]] | search terms |`. `vaultctl.py recall-eval` reports whether each expected note ranks in the top five; `--record` appends a dated line to `00 - Inbox/Retrieval Misses.md` as `automation`. Add a question for every real retrieval miss. Only a persistent, non-trivial miss list justifies proposing an index or database, and the user approves the design.
-- **Consolidation.** `vaultctl.py consolidate-context` lists daily sessions since the last mark, or since `--since <date>`, which overrides the mark: notes touched, open items, recorded decisions, dead-end candidates and unresolved links. It is navigation, not evidence: fully read the listed sessions, then propose topic, Active Priorities, Decisions and Dead Ends updates through `commit` and record them in the day's checkpoint. Run `consolidate-context --mark <through>` only after those writes are verified. Run it when the user asks. For a project resume, count `[[<Project>` hits per daily note since the handoff date and read only the matching sessions; an unfiltered run spans everything since the last mark.
+- **Consolidation.** `vaultctl.py consolidate-context` lists daily sessions from `--since <date>`, else the last `--days <n>`, else since the last mark (seven days without one): notes touched, open items, recorded decisions, dead-end candidates and unresolved links. It is navigation, not evidence: fully read the listed sessions, then propose topic, Active Priorities, Decisions and Dead Ends updates through `commit` and record them in the day's checkpoint. Run `consolidate-context --mark <through>` only after those writes are verified. Run it when the user asks. For a project resume, `consolidate-context --note <Project>` lists only that project's sessions since its handoff date (stateless; the mark is untouched); an unfiltered run spans everything since the last mark.
 - **Fact freshness.** Suffix any fact that can change (hardware, versions, prices, accounts, locations) with `(as of YYYY-MM-DD)` or `(as of Month D, YYYY)`. `vaultctl.py fact-freshness` reports markers older than 90 days, unparsable markers and a Machine Inventory without markers. Re-verify a stale fact before relying on it; update the value and its marker together. Never invent an as-of date for an old fact: mark it only when it is verified.

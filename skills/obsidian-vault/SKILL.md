@@ -23,7 +23,7 @@ rg -c -i -- 'terms' "$vaultRoot/01 - Daily Notes"
 With a grep tool, list matching files or counts first and show content only for one chosen note with a line limit. For chronology, open `vaultctl.py daily-context <daily-path>` on the matching days and read only the matching sessions fully.
 
 - **Status:** `rg -n -F '[[<Project>' 'Active Priorities.md'`, then the project's current handoff; verify actual state before acting.
-- **Continue after several sessions:** count `[[<Project>` hits per daily note since the handoff's date (`rg -c -F`), then read the matching sessions. `vaultctl.py consolidate-context --since <date>` gives the same window as a digest; always pass `--since`.
+- **Continue after several sessions:** `vaultctl.py consolidate-context --note <Project>` lists that project's sessions since its handoff date; read only those sessions.
 - **Ledgers:** check Decisions with `rg -n -i -e '<topic>' -e '[[<Project>' -e '\| locked' Decisions.md` (each row is one line); check Dead Ends with `rg -n '^## ' 'Dead Ends.md'`, then the matching section, or `rg -n -i -m 8 '<term>' 'Dead Ends.md'`. Read a whole ledger only for a requested full review or before superseding a row.
 
 Log each real retrieval miss as a new question in `10 - Resources/Recall Eval.md`. Facts marked `(as of <date>)` older than 90 days are unverified (`vaultctl.py fact-freshness`). Read `10 - Resources/Vault Actions.md` only for link audits, inbox triage, next-action selection or evidence freshness; vaults without it can use this skill's `references/vault-actions.md`.
@@ -32,4 +32,4 @@ Optional, with Obsidian 1.12.7+ and its command line interface enabled: `python 
 
 ## Write
 
-Use `python "<BRAIN_AUTOMATION_DIR>/vaultctl.py"` (`inspect`, `commit`, `checkpoint-context`, `checkpoint --summary`, `validate`) as the Contract specifies. A daily-only or trivial checkpoint needs only its Daily checkpoints and coverage section; topic or ledger edits add Shared writer and Related notes and ledgers. Topic and handoff edits replace current state; history stays in the daily session. Substantive work needs capture even without code changes. Handoffs: `10 - Resources/Handoff Template.md`. Documents to ingest or answer from: the `source-to-vault` skill.
+Use `python "<BRAIN_AUTOMATION_DIR>/vaultctl.py"` as the Contract specifies: `inspect --hash`, then a native read, before `commit`; one `checkpoint --summary` call per checkpoint, with `--trivial "<reason>"` when nothing is durable; `validate`. A daily-only or trivial checkpoint needs only its Daily checkpoints and coverage section; topic or ledger edits add Shared writer and Related notes and ledgers. Topic and handoff edits replace current state; history stays in the daily session. Substantive work needs capture even without code changes. Handoffs: `10 - Resources/Handoff Template.md`. Documents to ingest or answer from: the `source-to-vault` skill.

@@ -42,27 +42,47 @@ def validate_proposal(vault, proposal, units):
         if not days:
             raise VaultError("Capture requires a daily checkpoint")
         source_days = {u["day"] for u in units}
+        valid = ", ".join(sorted(source_days))
         seen = set()
         for day in days:
+            if not day.get("day"):
+                raise VaultError(f"This turn spans {valid}; give each days entry its day")
             if day["day"] not in source_days or day["day"] in seen:
-                raise VaultError("Daily capture must use distinct source-local dates")
+                raise VaultError(f"Daily capture must use distinct source-local dates; valid days: {valid}")
             seen.add(day["day"])
-            dt.datetime.strptime(day["time"], "%I:%M %p")
-            if not any(u["day"] == day["day"] and u["time"] == day["time"] for u in units):
-                raise VaultError("Session time must come from source evidence")
+            try:
+                dt.datetime.strptime(day.get("time", ""), "%I:%M %p")
+            except ValueError:
+                raise VaultError(f"Session time for {day['day']} must look like 3:42 PM, or be omitted to use that day's last event")
+            times = [u["time"] for u in units if u["day"] == day["day"]]
+            if day["time"] not in times:
+                raise VaultError(f"Session time {day['time']} is not a source event on {day['day']} (first {times[0]}, last {times[-1]}); omit it to use the last")
             if not day.get("sections", {}).get("What Got Done"):
                 raise VaultError("Capture needs an outcome")
         if seen != source_days:
-            raise VaultError("Capture must account for every source-local day in this batch")
+            missing = ", ".join(sorted(source_days - seen))
+            raise VaultError(f"Capture must account for every source-local day in this batch; add a days entry for {missing}")
         for op in proposal.get("operations", []):
             path = vault.path(op["path"])
             if is_daily(path):
                 raise VaultError("Daily notes must use the structured days field")
-            if path.name in ("VAULT-INDEX.md", "Decisions.md"):
-                # Structured checkpoints can append decisions but cannot rewrite
-                # profile, protected boot rules or prior decision text.
-                if path.name == "VAULT-INDEX.md" or "content" in op or op.get("edits"):
-                    raise VaultError("Protected note requires an interactive reconciliation")
+            if path.name == "VAULT-INDEX.md" or (path.name == "Decisions.md" and "content" in op):
+                raise VaultError("VAULT-INDEX changes or whole-note Decisions rewrites need a separate vaultctl commit")
+            if path.name == "Decisions.md":
+                for edit in op.get("edits", []):
+                    check_decision_edit(edit)
+
+
+def check_decision_edit(edit):
+    """Inside checkpoints a Decisions edit may only change a non-locked row's Enforced in/Status cells."""
+    old, new = edit.get("old", ""), edit.get("new", "")
+    if not (old.startswith("| ") and new.startswith("| ")) or "\n" in old or "\n" in new:
+        raise VaultError("A Decisions edit must replace exactly one table row")
+    old_cells, new_cells = old.strip().strip("|").split("|"), new.strip().strip("|").split("|")
+    if len(old_cells) != len(new_cells) or old_cells[:-2] != new_cells[:-2]:
+        raise VaultError("A Decisions edit may change only the Enforced in and Status cells; original wording stays")
+    if old_cells[-1].strip().startswith("locked"):
+        raise VaultError("Superseding a locked decision needs the owner's words and an interactive vaultctl commit")
 
 
 def apply_proposal(vault, proposal, signer, units, provider, session_id, capture_id, transaction_id=None):

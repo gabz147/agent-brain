@@ -19,6 +19,10 @@ $PriorAutomation = $env:VAULT_AUTOMATION
 
 function Write-JobLog {
     param([string]$Message)
+    # Keep the log bounded: past 128 KB it rotates to <log>.1, replacing the previous one.
+    if ((Test-Path -LiteralPath $LogPath) -and (Get-Item -LiteralPath $LogPath).Length -gt 128KB) {
+        Move-Item -LiteralPath $LogPath -Destination ($LogPath + '.1') -Force
+    }
     Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ('[' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '] ' + $Message)
 }
 function Defer-Job {
@@ -75,7 +79,12 @@ try {
         Move-Item -LiteralPath $tempStamp -Destination $StampPath -Force -ErrorAction Stop
         Write-JobLog ('verified: ' + $result.notes + ' notes; ' + $result.repairs.Count + ' repairs; no model calls')
     } else {
-        Write-JobLog ('NOT stamped: outcome=' + $result.outcome + '; issues=' + $result.issues.Count + '; controller exit=' + $code)
+        $cause = ''
+        if ($result.issues.Count -gt 0) {
+            $first = [string]$result.issues[0].path + ': ' + [string]$result.issues[0].problem
+            $cause = '; first=' + $first.Substring(0, [Math]::Min(160, $first.Length))
+        }
+        Write-JobLog ('NOT stamped: outcome=' + $result.outcome + '; issues=' + $result.issues.Count + '; controller exit=' + $code + $cause)
     }
     Write-JobLog ('END ' + $Kind + ' (controller exit=' + $code + ')')
     exit 0
