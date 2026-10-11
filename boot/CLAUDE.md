@@ -8,7 +8,7 @@ Resolve `BRAIN_VAULT_ROOT` (default `~/Documents/Brain`) and `BRAIN_AUTOMATION_D
 - Greetings and self-contained questions: no vault reads or checkpoint unless they establish something durable.
 - Substantive project work or recall: read `VAULT-INDEX.md` once for the profile, preferences and map, then retrieve only relevant project notes. Use filenames before body search; exclude `.obsidian` and Archive by default. Fully read selected evidence and anything explicitly requested for full review.
 - Continuation/status: read the relevant part of `Active Priorities.md` and the project's current handoff. Use daily history only if needed; start with the latest relevant day's `Open for tomorrow` and session headings (`vaultctl.py daily-context <daily-path>`), then read matching sessions. Do not load yesterday's entire note by default.
-- Before vault writes: load the applicable sections of `10 - Resources/Vault Workflow Contract.md` (its Context loading section names them). For handoffs, also read `10 - Resources/Handoff Template.md`.
+- Before vault writes: load the applicable sections of `10 - Resources/Vault Workflow Contract.md` (its Read and reconcile section names them). For handoffs, also read `10 - Resources/Handoff Template.md`.
 - After compaction: reload this policy and only context needed for the current task. Reuse material still available; do not repeat the startup bundle.
 
 This loading policy replaces older blanket startup/compaction reads in Brain notes; their task-specific rules still apply.

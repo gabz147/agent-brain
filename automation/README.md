@@ -24,8 +24,8 @@ Run with the configured environment, or provide `--vault`, `--state`, and `--bac
 ```powershell
 python vaultctl.py inspect '02 - Example Project/Example.md'
 python vaultctl.py commit --model '<verified-runtime-id>' --reason '<actual change>' --input '<operations.json>'
-python vaultctl.py checkpoint-context --source codex --session '<id>' --transcript '<actual.jsonl>'
-python vaultctl.py checkpoint --source codex --session '<id>' --transcript '<actual.jsonl>' --input '<checkpoint.json>'
+python vaultctl.py checkpoint --summary --source codex --session '<id>' --transcript '<actual.jsonl>' --input '<checkpoint.json>'
+python vaultctl.py checkpoint --summary --source codex --session '<id>' --transcript '<actual.jsonl>' --trivial '<reason>'
 python vaultctl.py validate
 python vaultctl.py hygiene
 python vaultctl.py costs
@@ -84,7 +84,7 @@ The baseline is private at `<BRAIN_STATE_DIR>/runtime-contract.json`. Core-only 
 
 The audit defers with input less than five minutes ago, fullscreen foreground, an unavailable presence probe, or a pause toggle. `-Force` skips only the daily audit stamp. Keep Interactive identity; SYSTEM/S4U cannot observe the user's input session correctly. Keep the VBS launcher to avoid console flashes.
 
-Nightly hygiene makes zero model calls and stamps the day only on a verified report. Review `audit.log` and `state-v2/hygiene-latest.json`; no process exit alone proves success.
+Nightly hygiene makes zero model calls and stamps the day only on a verified report. `hygiene` records `state-v2/hygiene-latest.json` and an outcomes row even without `--fix`; only `--fix` edits notes. Review `audit.log` and `state-v2/hygiene-latest.json`; no process exit alone proves success.
 
 To disable scheduling, disable only `VaultNightlyAudit` within the user's requested scope.
 

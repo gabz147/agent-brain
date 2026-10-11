@@ -9,3 +9,4 @@
 *.vbs text eol=crlf
 *.sh text eol=lf
 *.png binary
+docs/graphics/** export-ignore

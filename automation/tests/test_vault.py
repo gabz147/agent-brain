@@ -279,9 +279,9 @@ class HygieneTests(Fixture):
         self.assertEqual(age_priorities(revised, dt.date(2026, 9, 6))[0], revised)
 
     def test_hygiene_no_model_and_no_archive_changes(self):
-        folder = self.vault.root / "02 - System Utilities & Machine Setup"
+        folder = self.vault.root / "02 - Example Project"
         folder.mkdir()
-        (folder / "02 - System Utilities & Machine Setup.md").write_text(HEADER.replace("type: log", "type: index") + "\n# Index\n", encoding="utf-8")
+        (folder / "02 - Example Project.md").write_text(HEADER.replace("type: log", "type: index") + "\n# Index\n", encoding="utf-8")
         (folder / "A note.md").write_text(HEADER + "\n# A note\n", encoding="utf-8")
         frozen = self.vault.root / "09 - Archive/Old Memory/frozen.md"
         frozen.parent.mkdir(parents=True)

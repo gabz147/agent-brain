@@ -4,6 +4,6 @@
   "version": "1.2.0",
   "minAppVersion": "1.4.0",
   "description": "Sidebar status orb for background coding agents (idle / present / active / paused) with queue depth and last-drain in the tooltip, a click-to-toggle for the vault automation (AFK or all), and a soft refresh button that reloads open panes to pick up agent edits without an app reload.",
-  "author": "Gabriel Marquez",
+  "author": "gabz147",
   "isDesktopOnly": true
 }

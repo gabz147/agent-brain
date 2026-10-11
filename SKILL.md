@@ -14,8 +14,8 @@ file is available, obtain the public `https://github.com/gabz147/agent-brain`
 repository in a user workspace first. A standalone copy of these instructions
 is not the installed system. Never put the user's vault inside the checkout.
 
-Read [LAPTOP-SETUP.md](LAPTOP-SETUP.md) for prerequisites and installation;
-use [INSTALL.md](INSTALL.md) for an existing installation or a manual merge.
+Run `install.py --doctor` first; open [LAPTOP-SETUP.md](LAPTOP-SETUP.md) only for a prerequisite
+or login it reports missing, and [INSTALL.md](INSTALL.md) only for an upgrade conflict or manual merge.
 Detect the OS. Use the user's chosen clients and vault path; ask only for
 choices that remain unknown. Default vault: `~/Documents/Brain`.
 

@@ -24,21 +24,8 @@ From the repository root, run `python` on Windows or `python3` on macOS/Linux:
 python3 -c "from pathlib import Path; paths = ['boot/CLAUDE.md', 'boot/AGENTS.md', 'vault/VAULT-INDEX.md']; [print(p, len(Path(p).read_bytes()), 'UTF-8 bytes') for p in paths]"
 ```
 
-Before this change, the Claude boot file plus index, full contract and priorities
-totaled **24,179 UTF-8 bytes**, excluding yesterday's daily note. Codex totaled
-24,302 bytes.
-
-| Required package text | Claude | Codex |
-|---|---:|---:|
-| Previous startup, before yesterday's note | 24,179 bytes | 24,302 bytes |
-| New greeting: boot only | 3,419 bytes | 3,433 bytes |
-| New project startup: boot plus starter map | 5,726 bytes | 5,740 bytes |
-
-That is about **86% less for a greeting** and **76% less before project-specific
-sources**. The regression test caps each new boot file at 3,600 bytes and the
-boot plus starter map at 6,000 bytes. These are starter-template measurements;
-personalized boot text or a larger root map adds to them. Daily-note growth no
-longer increases the required startup reads.
+Tests cap each boot file at 3,600 bytes and boot plus starter map at 6,000 bytes. The old blanket startup read
+about 24 KB plus yesterday's daily note. Writes and checkpoints load their contract sections on demand.
 
 Bytes divided by four is only a rough token estimate. These figures exclude the
 client's system prompt, tool schemas, skill metadata, user instructions and task
@@ -67,8 +54,8 @@ bodies are explicitly omitted. Read matching sessions completely for history or
 coverage, and honor every full-read request. The writer still reads and protects
 the entire daily note and chooses the next session number at commit.
 
-Use `checkpoint --summary` with the normal source/session/transcript/input
-arguments. Its short result contains the verified receipt ID, model and daily
+A checkpoint is one `checkpoint --summary` call (JSON on stdin or `--input`, or
+`--trivial "<reason>"` when nothing is durable). Its short result contains the verified receipt ID, model and daily
 anchor path/heading/hash; complete source evidence remains stored on disk. Omit
 --summary when diagnosing those details. Neither option changes write safety.
 

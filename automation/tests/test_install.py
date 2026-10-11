@@ -168,5 +168,24 @@ class InstallTests(unittest.TestCase):
             self.assertIn("17 spans", extracted)
 
 
+class SourcePacketSafetyTests(unittest.TestCase):
+    def test_existing_packet_identity_and_names_are_checked(self):
+        spec = importlib.util.spec_from_file_location("source_packet", REPO / "skills/source-to-vault/scripts/source_packet.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve()
+            source = base / "source.txt"
+            source.write_text("A verified source fixture.", encoding="utf-8")
+            packet = module.packet(source, base / "packets")
+            self.assertEqual(module.packet(source, base / "packets"), packet)
+            manifest_path = packet / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            for change in ({"source_sha256": "0" * 64}, {"files": {**manifest["files"], "../escape.txt": "0" * 64}}):
+                manifest_path.write_text(json.dumps({**manifest, **change}), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    module.packet(source, base / "packets")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -94,7 +94,7 @@ Daily Notes should use `01 - Daily Notes`, format `MM - MMMM YYYY/YYYY-MM-DD`, a
 
 Test creation in a temporary vault: the date/time tokens expand, the five sections and `human` signatures appear, and repeating the command opens the existing note without changing its bytes. Do not infer real UI acceptance from Python tests.
 
-## 8. Optional scheduled capture and Agent Pulse
+## 8. Optional scheduled audit and Agent Pulse
 
 For approved Windows scheduling, follow [automation/README.md](automation/README.md). Its dry runs do not invoke a model or write the vault. Register tasks with hidden launchers, an Interactive user identity, and the five-minute idle/fullscreen/pause guards intact. Record the local runtime baseline only after inspecting the installed task/hook definitions.
 

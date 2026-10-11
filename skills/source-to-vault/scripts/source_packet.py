@@ -55,20 +55,26 @@ def packet(source, output):
     data = source.read_bytes()
     digest = hashlib.sha256(data).hexdigest()
     target = output / digest
+    original_name = "original" + source.suffix.lower()
     if target.exists():
         manifest = json.loads((target / "manifest.json").read_text(encoding="utf-8"))
+        if (manifest.get("source_sha256") != digest or manifest.get("files", {}).get(original_name) != digest
+                or "extracted.md" not in manifest.get("files", {})):
+            raise ValueError("Existing packet identity or required files changed")
         for name, expected in manifest["files"].items():
+            if Path(name).name != name or (target / name).resolve().parent != target:
+                raise ValueError("Existing packet contains an unsafe file path")
             if hashlib.sha256((target / name).read_bytes()).hexdigest() != expected:
                 raise ValueError(f"Existing packet changed: {name}")
         return target
-    sections, warnings = extract(source)
-    if hashlib.sha256(source.read_bytes()).hexdigest() != digest:
-        raise ValueError("Source changed during extraction; retry with a stable copy")
     output.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".packet-", dir=output))
     try:
-        original_name = "original" + source.suffix.lower()
         (staging / original_name).write_bytes(data)
+        # Extract from the staged copy so the packet describes exactly the bytes it stores.
+        sections, warnings = extract(staging / original_name)
+        if hashlib.sha256(source.read_bytes()).hexdigest() != digest:
+            raise ValueError("Source changed during extraction; retry with a stable copy")
         md = f"# {source.name}\n\nSource SHA-256: `{digest}`\n\n"
         md += "## Extraction limitations\n\n" + ("\n".join("- " + w for w in warnings) or "- Plain text extraction; source claims remain unverified.") + "\n\n"
         md += "\n\n".join(f"## {heading}\n\n{text}" for heading, text in sections) + "\n"
