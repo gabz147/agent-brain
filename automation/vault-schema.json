@@ -39,12 +39,7 @@
     "automation",
     "unknown-model"
   ],
-  "model_labels": {
-    "gpt-6-astra": "astra",
-    "gpt-5.6-sol": "sol",
-    "gpt-5.6-terra": "terra",
-    "gpt-5.6-luna": "luna"
-  },
+  "model_labels": {},
   "exempt": [
     "09 - Archive/Old Memory"
   ],
@@ -60,7 +55,6 @@
   "folder_projects": {
     "01": "personal",
     "02": "example-project",
-    "08": "personal",
     "10": "meta"
   }
 }

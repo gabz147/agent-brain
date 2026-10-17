@@ -86,7 +86,7 @@ class SchemaTests(Fixture):
         self.assertTrue(core.validate(HEADER.replace("project: personal", "project: meta"), "01 - Daily Notes/2026-09-05.md"))
 
     def test_model_labels(self):
-        self.assertEqual(core.model_label("gpt-6-astra"), "astra")
+        self.assertEqual(core.model_label("gpt-6-astra"), "gpt-6-astra")  # no shipped label map: the exact lowercase id
         self.assertEqual(core.model_label("claude-opus-5"), "opus 5")
         self.assertEqual(core.model_label("claude-sonnet-4-6"), "sonnet 4.6")
         for model in (None, "codex", "claude"):

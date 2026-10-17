@@ -2,7 +2,7 @@
 status: active
 project: meta
 type: guide
-updated_by: astra
+updated_by: human
 updated: 2026-09-07
 ---
 
@@ -40,4 +40,4 @@ After reviewing actual task/hook definitions, `snapshot-runtime` records a priva
 
 The repository provides regression tests using temporary vaults and stub processes. After installation, separately verify a real live checkpoint, an eligible scheduled audit if enabled, and manual daily-note creation in an isolated Obsidian vault. Record tested versus user-confirmed outcomes explicitly. Do not copy private transcripts, runtime journals, or snapshots into the public template.
 
-Related: [[Shared Obsidian Vault Skill]], [[Automation Costs]], [[Machine Inventory]].
+Related: [[Automation Costs]], [[Machine Inventory]].

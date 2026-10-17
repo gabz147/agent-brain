@@ -2,7 +2,7 @@
 status: active
 project: personal
 type: log
-updated_by: astra
+updated_by: human
 updated: 2026-09-07
 ---
 

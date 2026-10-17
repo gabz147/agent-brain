@@ -13,6 +13,6 @@ Create or update one `## Handoff — resume here` block at the top of the existi
 
 Include current verified state, one next action, necessary user inputs/decisions, constraints, key artifacts and suggested skills. Preserve secrets by referencing their secure storage rather than copying values. Tailor the handoff to any focus the user supplied.
 
-Sign with the verified runtime model (for example astra or opus 5), preserve historical authorship, and commit through the shared writer. Reconcile the project's index and Active Priorities, then append a daily checkpoint with a verified source receipt.
+Sign with the verified runtime model (for example `opus 5.5`), preserve historical authorship, and commit through the shared writer. Reconcile the project's index and Active Priorities, then append a daily checkpoint with a verified source receipt.
 
 Both Claude and Codex copies of this skill are byte-identical. Detailed mechanics live only in the vault templates and contract.

@@ -2,13 +2,13 @@
 status: active
 project: meta
 type: reference
-updated_by: astra
-updated: 2026-09-07
+updated_by: human
+updated: 2026-10-17
 ---
 
 # Decisions
 
-The decision ledger. Every deliberate, cross-session choice lives here in one table so any agent can answer "does this contradict something we already decided?" without knowing which note to open. The boot-file rule **Locked decisions stay locked** points at this file.
+The decision ledger. Every deliberate, cross-session choice lives here in one table so any agent can answer "does this contradict something we already decided?" without knowing which note to open. The boot rule to check this ledger before a potentially conflicting action points at this file.
 
 ## Rules
 
@@ -24,14 +24,11 @@ The decision ledger. Every deliberate, cross-session choice lives here in one ta
 
 | Date | Decision | Why | Enforced in | Status |
 |---|---|---|---|---|
-| (setup) | Markdown is canonical. No database, vector store, or embedding layer unless measured retrieval misses justify it and the user approves the design. | Portability, one source of truth, retrieval works at this size. | `skills/obsidian-vault/SKILL.md` Boundaries | locked |
-| (setup) | Boot files (`CLAUDE.md`, `AGENTS.md`) live outside the vault. | They survive compaction and keep the vault pure memory. | boot files | locked |
-| (setup) | Every automation component fails open: a bug must never block a real session. | A broken guard that blocks is worse than no guard. | `hooks/vault/` | locked |
-| (setup) | Never archive a note on the agent's own initiative. | Archiving is the user's call. | `VAULT-INDEX.md` Archiving | locked |
-| (setup) | Double-confirm before any source-code, running-config, commit, push, or deploy change. Vault notes are exempt. | Code is read-only by default. | boot files | superseded by workflow v2 authorization row below |
-| (setup) | Existing daily-note session sections are immutable; append only. `Session N` is a label, never renumbered; the heading's time is the order. The `Open for tomorrow` line is the one mutable line. | Bounds any bad append to one extra section; concurrent writers cannot race on N. | `VAULT-INDEX.md` Daily Notes, shared controller | locked |
-| (setup) | Automation success means a verified write or an accepted no-op; a headless child's exit 0 is never trusted on its own. | Sandbox-blocked and rate-limited children exit 0. | `automation/nightly-audit.ps1`, shared controller | locked |
-| (workflow v2) | Existing in-session authorization persists; ask only for an action not already authorized. Vault checkpoints need no extra confirmation. | Keep the source/config approval boundary without repeated approval loops. | [[Vault Workflow Contract]]; boot files | active |
-| (workflow v2) | New work signs the verified runtime model; preserve historical client signatures. | Actual authorship remains distinguishable across clients and retrospective capture. | Shared schema/writer and skills | active |
-| (workflow v2) | Daily capture requires verified source receipts; old Index/session bytes remain immutable, with separate frontmatter restamping. | Requests, process exits and unrelated edits do not prove capture. | [[Vault Workflow Contract]]; shared controller | active |
-| (workflow v3) | No background or scheduled model capture. Checkpoints are written live by the agent in its own session; nothing starts a model unattended. | An hourly drain spent plan usage on unattended model runs while the user was away. | shared controller; `automation/tests/test_install.py` | active |
+| (template) | Markdown is canonical. No database, vector store, or embedding layer unless measured retrieval misses justify it and the user approves the design. | Portability, one source of truth, retrieval works at this size. | boot files; [[Recall Eval]] | locked |
+| (template) | Boot files (`CLAUDE.md`, `AGENTS.md`) live outside the vault. | They survive compaction and keep the vault pure memory. | boot files; installer | locked |
+| (template) | Every automation component fails open: a bug must never block a real session. | A broken guard that blocks is worse than no guard. | `hooks/vault/` adapters; shared controller | locked |
+| (template) | Never archive a note on the agent's own initiative. | Archiving is the user's call. | boot files | locked |
+| (template) | Existing daily-note session sections are immutable; append only. `Session N` is a label, never renumbered; the heading's time is the order. The `Open for tomorrow` line is the one mutable line. | Bounds any bad append to one extra section; concurrent writers cannot race on N. | shared controller; [[Vault Workflow Contract]] | locked |
+| (template) | No background or scheduled model capture. Checkpoints are written live by the agent in its own session; nothing starts a model unattended. | Unattended model runs spend plan usage while the user is away. | shared controller; installer tests | locked |
+| (template) | New work signs the verified runtime model; `claude` and `codex` remain valid only as historical signatures. | Actual authorship stays distinguishable across clients. | shared schema and writer | active |
+| (template) | Existing in-session authorization persists; ask only for an action not already authorized. Vault checkpoints need no extra confirmation. | Keep the source/config approval boundary without repeated approval loops. | boot files; [[Vault Workflow Contract]] | active |
