@@ -44,7 +44,7 @@ $vaultCtl = Join-Path $env:BRAIN_AUTOMATION_DIR 'vaultctl.py'
 
 Use the confirmed custom paths instead of these defaults when needed. On macOS/Linux, export the same variables in the agent's environment. Existing apps/tasks may need a later restart to see new environment values; do not restart active user work without authorization.
 
-Optional `BRAIN_STATE_DIR` and `BRAIN_BACKUPS_DIR` override private storage. Keep both outside the Markdown vault and any public checkout. Set `BRAIN_PYTHON` if the hook/runner needs an explicit executable. The PostToolUse hook command in the settings snippet must also use the correct interpreter.
+The installer also writes `~/.agent-brain/config.json` with the vault root, controller directory, interpreter and selected clients. The controller and hook adapters read `BRAIN_*` variables first and that file second, so a client that cannot inject environment variables still finds the vault. Optional `BRAIN_STATE_DIR` and `BRAIN_BACKUPS_DIR` override private storage. Keep both outside the Markdown vault and any public checkout. Set `BRAIN_PYTHON` if the hook/runner needs an explicit executable. The PostToolUse hook command in the settings snippet must also use the correct interpreter.
 
 Customize `vault-schema.json`'s `folder_projects` for the user's actual folders; an optional `project_allowlist` restricts otherwise valid kebab-case slugs. Keep the shared human schema block synchronized through reviewed hygiene repairs.
 

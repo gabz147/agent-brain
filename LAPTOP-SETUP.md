@@ -92,6 +92,7 @@ are disabled for another home so tests cannot install software into your account
 | `~/.codex/AGENTS.md`, if selected | Codex Brain startup/writing rules |
 | Selected clients' `skills/` folders | `obsidian-vault`, `handoff`, `source-to-vault` only |
 | `~/.claude/vault-automation` | Shared writer/schema and first-checkpoint guide; used by either client |
+| `~/.agent-brain/config.json` | The vault root, controller directory and interpreter, readable by any client or adapter |
 | `~/.claude/hooks/vault`, if selected | Claude reminder and validation adapters |
 | Selected clients' configuration | Brain paths/interpreter merged with existing settings |
 
@@ -99,8 +100,9 @@ The shared controller retains its established `.claude/vault-automation` locatio
 for compatibility. Codex-only setup uses that folder but does not install Claude,
 its boot file, its skills or its hooks.
 
-Brain paths are stored in Claude's `settings.json.env` and Codex's
-`shell_environment_policy.set`. Shell-profile editing and `--persist-env` are
+Brain paths are stored in `~/.agent-brain/config.json`, and also in Claude's
+`settings.json.env` and Codex's `shell_environment_policy.set`; the controller
+and hook adapters read the environment first, then the config file. Shell-profile editing and `--persist-env` are
 unnecessary for normal agent use. Restart your CLI to load its settings.
 For manual commands outside a client, explicitly supply your vault:
 

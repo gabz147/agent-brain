@@ -21,6 +21,7 @@ for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8")
 
 REPO = Path(__file__).resolve().parent
+CONFIG_VERSION = 1
 BLOCK = re.compile(r"<!-- SHARED VAULT RULES START -->.*?<!-- SHARED VAULT RULES END -->", re.S)
 SKILLS = ("obsidian-vault", "handoff", "source-to-vault")
 
@@ -34,6 +35,25 @@ def selected(client):
 def environment(home, vault):
     return {"BRAIN_VAULT_ROOT": str(vault), "BRAIN_AUTOMATION_DIR": str(home / ".claude/vault-automation"),
             "BRAIN_PYTHON": sys.executable}
+
+
+def config_bytes(home, vault, clients, existing):
+    """The neutral home's config.json: Brain paths any client or adapter can read without environment injection."""
+    data = dict(existing)
+    known = data.get("clients") if isinstance(data.get("clients"), list) else []
+    data.update({"version": CONFIG_VERSION, "vault_root": str(vault), "automation_dir": str(home / ".claude/vault-automation"),
+                 "python": sys.executable, "clients": sorted({*map(str, known), *clients})})
+    return (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def read_config(home):
+    path = home / ".agent-brain/config.json"
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must be a JSON object")
+    return data
 
 
 def toml_bytes(data):
@@ -108,6 +128,7 @@ def installation(home, vault, replace=False, client="both"):
                 continue
             add(auto / path.name, path.read_bytes())
     add(auto / "FIRST-CHECKPOINT.md", (REPO / "FIRST-CHECKPOINT.md").read_bytes())
+    add(home / ".agent-brain/config.json", config_bytes(home, vault, clients, read_config(home)), merge=True)
     if "claude" in clients:
         copy_tree(REPO / "hooks/vault", home / ".claude/hooks/vault")
     for name in clients:
@@ -357,6 +378,8 @@ def install_client(name):
 
 def configured_vault(home, client):
     paths = set()
+    if read_config(home).get("vault_root"):
+        paths.add(Path(read_config(home)["vault_root"]).expanduser().resolve())
     for name in selected(client):
         path = home / ("." + name) / ("settings.json" if name == "claude" else "config.toml")
         if not path.exists():
@@ -369,7 +392,7 @@ def configured_vault(home, client):
         if env.get("BRAIN_VAULT_ROOT"):
             paths.add(Path(env["BRAIN_VAULT_ROOT"]).expanduser().resolve())
     if len(paths) > 1:
-        raise ValueError("Selected clients use different vaults. Choose the intended one with --vault.")
+        raise ValueError("config.json and the selected clients point at different vaults. Choose the intended one with --vault.")
     return next(iter(paths), home / "Documents/Brain")
 
 
@@ -420,7 +443,7 @@ def main():
             vault = Path(answer).expanduser().resolve()
     if args.persist_env and (os.name != "nt" or home != Path.home().resolve()):
         parser.error("--persist-env requires Windows and the current user's home")
-    if any(root == vault or vault in root.parents or root in vault.parents for root in (REPO, home / ".claude", home / ".codex")):
+    if any(root == vault or vault in root.parents or root in vault.parents for root in (REPO, home / ".claude", home / ".codex", home / ".agent-brain")):
         parser.error("Vault must be separate from the checkout and client directories")
     if args.doctor:
         return 1 if doctor(args.client) else 0

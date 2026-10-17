@@ -1,4 +1,6 @@
 """Real installer subprocess, fresh home, preservation, and portable source packets."""
+import contextlib
+import io
 import json
 import importlib.util
 import os
@@ -32,6 +34,38 @@ class InstallTests(unittest.TestCase):
             self.assertNotIn("fully at startup", text, path)
             self.assertNotIn("in full at startup", text, path)
             self.assertNotIn("Checked at the start of every conversation", text, path)
+
+    def test_neutral_home_config_is_written_and_read_without_env(self):
+        spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")
+        installer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        with tempfile.TemporaryDirectory(prefix="brain-config-") as tmp:
+            home = Path(tmp).resolve() / "home"
+            vault = home / "Notes" / "My Brain"
+            with contextlib.redirect_stdout(io.StringIO()):
+                installer.install(home, vault, apply=True, client="codex")
+            config = json.loads((home / ".agent-brain/config.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["vault_root"], str(vault))
+            self.assertEqual(config["clients"], ["codex"])
+            self.assertEqual(config["automation_dir"], str(home / ".claude/vault-automation"))
+            # A later run for the other client keeps the vault and adds the client; nothing conflicts.
+            with contextlib.redirect_stdout(io.StringIO()):
+                installer.install(home, installer.configured_vault(home, "both"), apply=True, client="claude")
+            config = json.loads((home / ".agent-brain/config.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["clients"], ["claude", "codex"])
+            self.assertEqual(config["vault_root"], str(vault))
+            # With no BRAIN_* variables at all, the controller and the hook adapter resolve through the config.
+            env = {k: v for k, v in os.environ.items() if not k.startswith("BRAIN_") and k not in ("VAULT_AUTOMATION_DIR", "VAULT_AUTOMATION")}
+            env.update(HOME=str(home), USERPROFILE=str(home), PYTHONIOENCODING="utf-8")
+            probe = subprocess.run([sys.executable, "-c", "import vault_core; print(vault_core.DEFAULT_VAULT)"],
+                                   cwd=str(home / ".claude/vault-automation"), capture_output=True, text=True, env=env, timeout=30)
+            self.assertEqual(probe.stdout.strip(), str(vault), probe.stderr)
+            note = vault / "00 - Inbox/Config probe.md"
+            note.write_text("# no metadata\n", encoding="utf-8")
+            hook = subprocess.run([sys.executable, str(home / ".claude/hooks/vault/validate-vault-frontmatter.py")],
+                                  input=json.dumps({"tool_input": {"file_path": str(note)}}), capture_output=True, text=True, env=env, timeout=30)
+            self.assertEqual(hook.returncode, 2, hook.stdout + hook.stderr)
+            self.assertIn("Missing opening frontmatter", hook.stderr)
 
     def test_upgrade_prunes_only_the_retired_session_end_hook(self):
         spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")

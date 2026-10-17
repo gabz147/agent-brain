@@ -16,8 +16,22 @@ import time
 import uuid
 
 HERE = Path(__file__).resolve().parent
+
+
+def brain_config():
+    """The neutral home's ~/.agent-brain/config.json, or {} when absent or unreadable. Never raises."""
+    try:
+        data = json.loads((Path.home() / ".agent-brain" / "config.json").read_text(encoding="utf-8-sig"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+CONFIG = brain_config()
 DEFAULT_AUTOMATION = Path(os.environ.get("BRAIN_AUTOMATION_DIR") or os.environ.get("VAULT_AUTOMATION_DIR") or HERE).expanduser()
-DEFAULT_VAULT = Path(os.environ.get("BRAIN_VAULT_ROOT") or Path.home() / "Documents" / "Brain").expanduser()
+# Resolution order for the vault: environment, then config.json, then the default folder.
+DEFAULT_VAULT = Path(os.environ.get("BRAIN_VAULT_ROOT") or (CONFIG.get("vault_root") if isinstance(CONFIG.get("vault_root"), str) else None)
+                     or Path.home() / "Documents" / "Brain").expanduser()
 DEFAULT_STATE = Path(os.environ.get("BRAIN_STATE_DIR") or DEFAULT_AUTOMATION / "state-v2").expanduser()
 DEFAULT_BACKUPS = Path(os.environ.get("BRAIN_BACKUPS_DIR") or DEFAULT_VAULT.parent / (DEFAULT_VAULT.name + " Backups") / "versions").expanduser()
 SCHEMA = json.loads((HERE / "vault-schema.json").read_text(encoding="utf-8-sig"))
