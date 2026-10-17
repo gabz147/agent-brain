@@ -43,7 +43,6 @@ Project folders carry a same-named index. Start there, then read relevant notes.
 - [[Decisions]] records deliberate choices. Read it before a potentially conflicting action; preserve original decision wording.
 - [[Dead Ends]] records failed recurring methods and verified alternatives. Search it before inventing a workaround.
 - [[Machine Inventory]] holds actual tasks, hooks, versions, and paths after installation.
-- [[Automation Costs]] explains reported usage and operational outcome records.
 - [[10 - Resources]] maps the contract, recall eval, pipeline, handoff, and manual templates.
 - [[02 - Example Project]] is a placeholder folder; rename it to a real project or delete it.
 

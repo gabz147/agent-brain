@@ -209,7 +209,6 @@ def main(argv=None):
     error = sub.add_parser("report-error")
     error.add_argument("--kind", required=True)
     error.add_argument("--error", required=True)
-    sub.add_parser("costs")
     sub.add_parser("snapshot-runtime")
     args = parser.parse_args(argv)
     vault = Vault(args.vault, args.state, args.backups)
@@ -265,21 +264,6 @@ def main(argv=None):
                   "model": None, "usage": None, "cost_usd": None}
         append_jsonl(vault.state / "outcomes.jsonl", result, vault.state)
         return result
-    if args.command == "costs":
-        ledger = vault.state / "outcomes.jsonl"
-        rows = [json.loads(line) for line in read_text(ledger).splitlines() if line.strip()] if ledger.exists() else []
-        attempts = [row for row in rows if row.get("kind") == "capture"]
-        reported = [row["cost_usd"] for row in attempts if isinstance(row.get("cost_usd"), (int, float))]
-        totals = {key: sum((row.get("usage") or {}).get(key, 0) or 0 for row in attempts)
-                  for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")}
-        outcomes = {}
-        for row in rows:
-            key = row.get("kind", "unknown") + ":" + row.get("outcome", "unknown")
-            outcomes[key] = outcomes.get(key, 0) + 1
-        return {"capture_attempts": len(attempts), "reported_cost_usd": round(sum(reported), 8),
-                "attempts_without_cost": len(attempts) - len(reported), "reported_token_totals": totals,
-                "attempts_without_usage": sum(row.get("usage") is None for row in attempts),
-                "outcomes": outcomes, "cost_basis": "CLI-reported estimate; not a subscription invoice"}
     if args.command == "snapshot-runtime":
         from vault_runtime import write_baseline
         return write_baseline()

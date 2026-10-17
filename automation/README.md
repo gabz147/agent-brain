@@ -28,7 +28,6 @@ python vaultctl.py checkpoint --summary --source codex --session '<id>' --transc
 python vaultctl.py checkpoint --summary --source codex --session '<id>' --transcript '<actual.jsonl>' --trivial '<reason>'
 python vaultctl.py validate
 python vaultctl.py hygiene
-python vaultctl.py costs
 python vaultctl.py recall-eval [--record]
 python vaultctl.py consolidate-context [--days 7] [--mark YYYY-MM-DD]
 python vaultctl.py fact-freshness [--max-age-days 90]
@@ -36,11 +35,11 @@ python vaultctl.py fact-freshness [--max-age-days 90]
 
 Use `--source claude` for Claude sessions. See the vault's `Vault Workflow Contract.md` for JSON formats and restore. A concurrent hash mismatch requires fresh reads and a rebuilt operation; never overwrite the other writer's edit. Existing daily sessions are immutable.
 
-## Checkpoints and costs
+## Checkpoints
 
 Capture is live only. The agent writes each checkpoint in its own session through `checkpoint`; there is no background, scheduled or retrospective model capture. The earlier hourly drain (`VaultQueueDrain`, `drain-queue.ps1`, `vault_queue.py` and the SessionEnd enqueue hook) was removed because it spent the user's plan usage on unattended model runs while they were away. A session that ends without a checkpoint is not summarized automatically; checkpoint it later from its transcript if needed.
 
-`already_covered` needs a matching complete daily section; `trivial` needs source evidence and an honest reason. Exit 0, note names, timestamps, unrelated edits, and prose claims cannot certify success. `vaultctl.py costs` summarizes any historical capture records in `state-v2/outcomes.jsonl`; it is not a subscription bill.
+`already_covered` needs a matching complete daily section; `trivial` needs source evidence and an honest reason. Exit 0, note names, timestamps, unrelated edits, and prose claims cannot certify success.
 
 Upgrading from a release with the drain: the installer removes the retired SessionEnd hook entry. Remove an existing `VaultQueueDrain` task yourself (`Unregister-ScheduledTask -TaskName VaultQueueDrain`); left in place it can no longer start a model and only logs an error. Leftover queue/spool files can be deleted.
 

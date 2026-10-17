@@ -147,7 +147,7 @@ Obsidian's Daily Notes command uses `10 - Resources/Templates/Manual Daily Note 
 
 Deterministic hygiene scans all live notes for schema, daily headers, folder membership/signatures, skill parity, shared boot parity, the approved task/hook runtime baseline and priority aging. It repairs unambiguous missing metadata and index/aging mechanics; ambiguous semantic changes require evidence and reconciliation. Hygiene makes no model calls.
 
-There is no background, scheduled or retrospective model capture: the agent writes checkpoints live in its own session and the controller alone commits them. A session that ends without a checkpoint is not summarized automatically. Historical capture records in `outcomes.jsonl` keep their reported usage; missing usage or cost stays null, not a fabricated zero.
+There is no background, scheduled or retrospective model capture: the agent writes checkpoints live in its own session and the controller alone commits them. A session that ends without a checkpoint is not summarized automatically.
 
 Dated implementation/test evidence belongs in the day's daily session; the pipeline note keeps only current state. Record tested versus user-confirmed status explicitly. An internal hook error fails open and is logged; a scheduled audit failure is logged and retried on the next run. Keep the existing hidden launcher, Interactive task identity, five-minute idle/fullscreen guards and user pause toggle.
 
