@@ -27,7 +27,7 @@ When installed, registered in `~/.claude/settings.json`:
 | Event | Hook | Purpose |
 |---|---|---|
 | PostToolUse Write/Edit/MultiEdit | `hooks/vault/validate-vault-frontmatter.py` | vault schema guard (exit 2 on violation) |
-| Stop (asyncRewake) | `hooks/vault/stop-vault-gate.js` | live vault checkpoint |
+| Stop (asyncRewake) | `hooks/vault/stop-vault-gate.py` | live vault checkpoint |
 
 _[Add the rest of your hooks, MCP servers, and skills of note.]_ Codex uses live controller checkpoints directly. There is no background capture; checkpoint an interrupted session from its transcript before the client's transcript-retention interval expires.
 

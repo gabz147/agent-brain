@@ -464,7 +464,7 @@ class RecallMeasurementTests(Fixture):
 class RuntimeContractTests(unittest.TestCase):
     def test_runtime_hash_covers_only_vault_hooks(self):
         import vault_runtime
-        gate = {"type": "command", "command": "node C:\\Users\\me\\.claude\\hooks\\vault\\stop-vault-gate.js"}
+        gate = {"type": "command", "command": "python C:\\Users\\me\\.claude\\hooks\\vault\\stop-vault-gate.py"}
         base = {"Stop": [{"hooks": [gate]}], "PostToolUse": [{"matcher": "Read", "hooks": [{"type": "command", "command": "node other.js"}]}]}
         changed = json.loads(json.dumps(base))
         changed["PostToolUse"][0]["hooks"][0]["command"] = "node another.js"

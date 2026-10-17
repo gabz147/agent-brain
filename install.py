@@ -166,8 +166,9 @@ def installation(home, vault, replace=False, client="both"):
 
 
 # Brain adapters that earlier releases installed and this release retires.
-# session-end-enqueue.js only fed the removed background model-capture drain.
-RETIRED_HOOKS = ("session-end-enqueue.js",)
+# session-end-enqueue.js only fed the removed background model-capture drain;
+# stop-vault-gate.js was the Node launcher replaced by stop-vault-gate.py.
+RETIRED_HOOKS = ("session-end-enqueue.js", "stop-vault-gate.js")
 
 
 def prune_retired_hooks(hooks):
@@ -212,7 +213,7 @@ def merge_claude(home, env, add, replace):
             entry = json.loads(json.dumps(entry))
             for hook in entry["hooks"]:
                 name = Path(hook["args"][0]).name
-                interpreter = sys.executable if hook["command"] == "python" else shutil.which("node") or "node"
+                interpreter = sys.executable if hook["command"] == "python" else shutil.which(hook["command"]) or hook["command"]
                 hook["command"] = interpreter
                 hook["args"] = [str(home / ".claude/hooks/vault" / name)]
             # Match only our adapter filenames; preserve all unrelated commands/groups.
@@ -332,15 +333,13 @@ def executable(name):
 
 def doctor(client, include_clients=True):
     problems = []
-    names = (["node"] if "claude" in selected(client) else []) + (list(selected(client)) if include_clients else [])
+    names = list(selected(client)) if include_clients else []
     print(f"Python {sys.version.split()[0]}: {sys.executable}")
     for name in names:
         try:
             result = subprocess.run(executable(name) + ["--version"], capture_output=True, text=True, encoding="utf-8", timeout=20)
             if result.returncode:
                 raise ValueError(f"{name} --version failed: {result.stderr.strip()}")
-            if name == "node" and int(result.stdout.strip().lstrip("v").split(".")[0]) < 22:
-                raise ValueError("Node.js 22+ is required for the Claude hook runtime")
             if name == "claude":
                 version = re.search(r"(\d+)\.(\d+)\.(\d+)", result.stdout)
                 if not version or tuple(map(int, version.groups())) < (2, 1, 270):
@@ -349,8 +348,6 @@ def doctor(client, include_clients=True):
         except (ValueError, OSError, subprocess.TimeoutExpired) as exc:
             problems.append(name)
             print(f"MISSING {name}: {exc}")
-    if "node" in problems:
-        print("Install Node.js LTS: https://nodejs.org/en/download then reopen your terminal.")
     for name in selected(client):
         if name in problems:
             print(f"Install {name}: " + ("https://code.claude.com/docs/en/setup" if name == "claude" else "https://github.com/openai/codex#installing-and-running-codex-cli"))
@@ -452,8 +449,6 @@ def main():
         return 0
     if args.wizard:
         problems = doctor(args.client)
-        if "node" in problems:
-            return 1
         for name in problems:
             if home != Path.home().resolve():
                 raise ValueError("Install missing clients separately before testing an isolated --home")

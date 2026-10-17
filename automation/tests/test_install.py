@@ -73,8 +73,9 @@ class InstallTests(unittest.TestCase):
         spec.loader.exec_module(installer)
         retired = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/vault/session-end-enqueue.js"]}
         other = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/other-session-end.js"]}
-        stop = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/vault/stop-vault-gate.js"]}
-        hooks = {"SessionEnd": [{"hooks": [retired]}, {"hooks": [other, dict(retired)]}], "Stop": [{"hooks": [stop]}]}
+        old_stop = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/vault/stop-vault-gate.js"]}
+        stop = {"type": "command", "command": "python", "args": ["/home/x/.claude/hooks/vault/stop-vault-gate.py"]}
+        hooks = {"SessionEnd": [{"hooks": [retired]}, {"hooks": [other, dict(retired)]}], "Stop": [{"hooks": [old_stop]}, {"hooks": [stop]}]}
         installer.prune_retired_hooks(hooks)
         self.assertEqual(hooks, {"SessionEnd": [{"hooks": [other]}], "Stop": [{"hooks": [stop]}]})
         only_retired = {"SessionEnd": [{"hooks": [retired]}]}

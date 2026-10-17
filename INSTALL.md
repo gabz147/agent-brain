@@ -18,9 +18,9 @@ To make existing ISO timestamps readable after upgrading, preview
 the conversion. This preserves the original time, author and note body, and
 creates checked snapshots. Use `python3` on macOS/Linux.
 
-Use `install.py --doctor --client claude|codex|both` to check the chosen clients. Claude hooks need Node.js 22+. Python 3.11+ is required; the controller uses only the standard library. Obsidian is optional for agent work. The optional audit task requires Windows PowerShell and Task Scheduler; it never calls a model.
+Use `install.py --doctor --client claude|codex|both` to check the chosen clients. Python 3.11+ is required; the controller and the hook adapters use only the standard library. Node.js 22+ is needed only by the optional link checker. Obsidian is optional for agent work. The optional audit task requires Windows PowerShell and Task Scheduler; it never calls a model.
 
-For an upgrade, save copies of the installed boot files, skills, hooks, controller/schema, and relevant settings. Preserve source receipts and snapshot directories. Do not copy runtime state into this public repository. Pause or disable the audit task while its controller files are replaced, then restore its prior state. The background capture drain was removed: the installer drops the retired SessionEnd hook entry, and an existing `VaultQueueDrain` task should be removed (`Unregister-ScheduledTask -TaskName VaultQueueDrain`), then the runtime baseline re-recorded once.
+For an upgrade, save copies of the installed boot files, skills, hooks, controller/schema, and relevant settings. Preserve source receipts and snapshot directories. Do not copy runtime state into this public repository. Pause or disable the audit task while its controller files are replaced, then restore its prior state. The Node Stop launcher was replaced by `stop-vault-gate.py`: the installer retires the old `stop-vault-gate.js` hook entry on upgrade and leaves that inert file in place. The background capture drain was removed: the installer drops the retired SessionEnd hook entry, and an existing `VaultQueueDrain` task should be removed (`Unregister-ScheduledTask -TaskName VaultQueueDrain`), then the runtime baseline re-recorded once.
 
 ## 2. Copy or merge the starter vault
 
@@ -58,7 +58,7 @@ Copy `skills/obsidian-vault/`, `skills/handoff/` and `skills/source-to-vault/` i
 
 ## 5. Install Claude hook adapters
 
-Copy `hooks/vault/` to `~/.claude/hooks/vault/`. Merge the two arrays in `settings/vault-hooks.snippet.json` into the existing `hooks` object in `~/.claude/settings.json`. Replace `{{CLAUDE_DIR}}` inside each `args` entry with the absolute directory. Set `command` to the actual Python or Node executable. The direct-execution form needs no shell quoting and supports Windows without Git Bash. Claude Code 2.1.270+ is the tested minimum. Preserve unrelated hooks/settings, then parse the JSON to verify it.
+Copy `hooks/vault/` to `~/.claude/hooks/vault/`. Merge the two arrays in `settings/vault-hooks.snippet.json` into the existing `hooks` object in `~/.claude/settings.json`. Replace `{{CLAUDE_DIR}}` inside each `args` entry with the absolute directory. Set `command` to the actual Python executable. The direct-execution form needs no shell quoting and supports Windows without Git Bash. Claude Code 2.1.270+ is the tested minimum. Preserve unrelated hooks/settings, then parse the JSON to verify it.
 
 - PostToolUse reports an invalid completed Markdown write with exit 2. It cannot undo the write; the shared controller prevents invalid writes before they happen.
 - Stop requests a source-bound checkpoint after substantive work. The request is not evidence that capture happened.

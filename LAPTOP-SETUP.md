@@ -15,8 +15,8 @@ handle everyday vault work after installation.
 - **Python 3.11+**, on PATH: [official downloads](https://www.python.org/downloads/).
   On Windows select Add Python to PATH. On Linux use your distribution's Python
   package if it is new enough. Reopen the terminal afterward.
-- **Node.js 22+** for Claude's hooks: [official LTS download](https://nodejs.org/en/download).
-  Codex-only setup does not need Node unless your Codex installation does.
+- **Node.js 22+** only if you want the optional link checker in Vault Actions;
+  the hooks and the writer need Python alone.
 - An account for your chosen CLI. Setup offers a missing CLI's official native
   installer with your approval. Alternatively install
   [Claude Code](https://code.claude.com/docs/en/setup) or
@@ -144,8 +144,6 @@ restore their previous state afterward; setup does not schedule new jobs.
 
 - **Python missing:** install Python 3.11+, enable PATH on Windows, reopen the
   terminal and rerun. `py -3` can also launch a downloaded installer on Windows.
-- **Node missing:** install Node LTS and reopen the terminal. It is needed for
-  Claude hooks, not the Python writer.
 - **CLI missing after installation:** reopen the terminal for the vendor's PATH
   change and run its `--version` command.
 - **Folder lacks a Brain index/contract:** choose an empty folder or deliberately

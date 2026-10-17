@@ -88,7 +88,7 @@ class PortableTests(unittest.TestCase):
         result = self.child([sys.executable, str(REPO / "hooks/vault/validate-vault-frontmatter.py")], {}, env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((missing / "hook-errors.jsonl").exists())
-        result = self.child(["node", str(REPO / "hooks/vault/stop-vault-gate.js")], {}, env)
+        result = self.child([sys.executable, str(REPO / "hooks/vault/stop-vault-gate.py")], {}, env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len((missing / "hook-errors.jsonl").read_text().splitlines()), 2)
 
@@ -99,7 +99,7 @@ class PortableTests(unittest.TestCase):
             {"type": "assistant", "message": {"content": "Verified findings. " * 100}},
         ]
         transcript.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
-        result = self.child(["node", str(REPO / "hooks/vault/stop-vault-gate.js")],
+        result = self.child([sys.executable, str(REPO / "hooks/vault/stop-vault-gate.py")],
                             {"session_id": "portable", "transcript_path": str(transcript)})
         self.assertEqual(result.returncode, 2, result.stderr + result.stdout)
         self.assertIn(str(self.vault / "10 - Resources/Vault Workflow Contract.md"), result.stdout)

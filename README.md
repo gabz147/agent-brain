@@ -8,9 +8,9 @@ needed for the Brain workflow. Your notes stay on your computer.
 
 ## Install
 
-Have **Obsidian** and **Python 3.11+** installed. Claude's hooks also need
-**Node.js 22+**. Guided setup checks these, lets you choose a CLI and vault
-folder, and offers the official installer if your chosen CLI is missing.
+Have **Obsidian** and **Python 3.11+** installed. Guided setup checks these,
+lets you choose a CLI and vault folder, and offers the official installer if
+your chosen CLI is missing. Nothing else is required.
 You do not need Git, a GitHub account, or another repository.
 
 All three Brain workflow skills and their supporting tools are included here.
@@ -32,7 +32,7 @@ paths for your chosen clients, creates the vault, and checks the installed
 workflow. Then open the printed folder in Obsidian, restart/sign into your CLI,
 and follow [your first checkpoint](FIRST-CHECKPOINT.md).
 
-Missing Python or Node? See [prerequisites and troubleshooting](LAPTOP-SETUP.md).
+Missing Python? See [prerequisites and troubleshooting](LAPTOP-SETUP.md).
 Prefer to inspect the download first? Use the
 [download-and-inspect method](LAPTOP-SETUP.md#download-and-inspect).
 

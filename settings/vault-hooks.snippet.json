@@ -1,5 +1,5 @@
 {
-  "_comment": "Merge these two vault hooks into the `hooks` object of your ~/.claude/settings.json. Do NOT paste this file wholesale over settings.json if you already have other hooks — merge each array. Replace {{CLAUDE_DIR}} with the absolute path to your .claude directory (e.g. C:/Users/you/.claude), using forward slashes. `node` and `python` must be on PATH; if not, replace them with absolute exe paths. On non-Windows, keep the same shape — just adjust the interpreter paths.",
+  "_comment": "Merge these two vault hooks into the `hooks` object of your ~/.claude/settings.json. Do NOT paste this file wholesale over settings.json if you already have other hooks — merge each array. Replace {{CLAUDE_DIR}} with the absolute path to your .claude directory (e.g. C:/Users/you/.claude), using forward slashes. `python` must be on PATH; if not, replace it with the absolute executable path. The installer does both substitutions for you.",
 
   "hooks": {
     "PostToolUse": [
@@ -20,11 +20,10 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node",
-            "args": ["{{CLAUDE_DIR}}/hooks/vault/stop-vault-gate.js"],
+            "command": "python",
+            "args": ["{{CLAUDE_DIR}}/hooks/vault/stop-vault-gate.py"],
             "timeout": 30,
-            "asyncRewake": true,
-            "rewakeSummary": "Vault checkpoint"
+            "asyncRewake": true
           }
         ]
       }
