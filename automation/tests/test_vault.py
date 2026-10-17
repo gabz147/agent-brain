@@ -318,6 +318,17 @@ class HookTests(Fixture):
         self.assertIn('"Daily checkpoints and coverage"', text)
         self.assertNotIn("Read and reconcile", text)
 
+    def test_long_answer_counts_only_beside_real_tool_use(self):
+        rows = [{"type": "user", "origin": {"kind": "human"}, "uuid": "t", "message": {"content": "Explain this"}},
+                {"type": "assistant", "message": {"content": [{"type": "text", "text": "A long answer. " * 200}]}}]
+        self.assertFalse(hooks.signals(rows)["substantive"])
+        for n in range(5):
+            rows.append({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": f"r{n}", "name": "Bash", "input": {"command": "cat notes.md"}}]}})
+            rows.append({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": f"r{n}", "content": "text"}]}})
+        evidence = hooks.signals(rows)
+        self.assertEqual(evidence["tool_calls"], 5)
+        self.assertTrue(evidence["substantive"])
+
     def test_topic_write_is_not_checkpoint_completion(self):
         payload = self.gate_fixture(vault_write=True)
         self.assertEqual(hooks.stop_gate(payload, self.vault, self.directory)[0], 2)

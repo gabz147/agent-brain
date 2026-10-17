@@ -93,7 +93,7 @@ are disabled for another home so tests cannot install software into your account
 | Selected clients' `skills/` folders | `obsidian-vault`, `handoff`, `source-to-vault` only |
 | `~/.claude/vault-automation` | Shared writer/schema and first-checkpoint guide; used by either client |
 | `~/.agent-brain/config.json` | The vault root, controller directory and interpreter, readable by any client or adapter |
-| `~/.claude/hooks/vault`, if selected | Claude reminder and validation adapters |
+| `~/.claude/hooks/vault`, if selected | Claude startup brief, checkpoint reminder and validation adapters |
 | Selected clients' configuration | Brain paths/interpreter merged with existing settings |
 
 The shared controller retains its established `.claude/vault-automation` location

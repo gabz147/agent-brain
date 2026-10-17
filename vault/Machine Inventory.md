@@ -26,6 +26,7 @@ When installed, registered in `~/.claude/settings.json`:
 
 | Event | Hook | Purpose |
 |---|---|---|
+| SessionStart startup/resume | `hooks/vault/session-brief.py` | continuity brief, read-only |
 | PostToolUse Write/Edit/MultiEdit | `hooks/vault/validate-vault-frontmatter.py` | vault schema guard (exit 2 on violation) |
 | Stop (asyncRewake) | `hooks/vault/stop-vault-gate.py` | live vault checkpoint |
 

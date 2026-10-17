@@ -96,6 +96,8 @@ class PortableTests(unittest.TestCase):
         transcript = self.base / "source.jsonl"
         rows = [
             {"type": "user", "origin": {"kind": "human"}, "uuid": "portable-turn", "message": {"content": "Explain a useful finding"}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "durable-1", "name": "Bash", "input": {"command": "git commit -m 'portable'"}}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "durable-1", "content": "committed"}]}},
             {"type": "assistant", "message": {"content": "Verified findings. " * 100}},
         ]
         transcript.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
@@ -106,6 +108,18 @@ class PortableTests(unittest.TestCase):
         self.assertIn(str(self.auto / "vaultctl.py"), result.stdout)
         self.assertIn('load only the "Daily checkpoints and coverage" section', result.stdout)
         self.assertTrue(list((self.state / "requested").glob("*.json")))
+
+    def test_session_brief_adapter_prints_continuity_and_fails_open(self):
+        result = self.child([sys.executable, str(REPO / "hooks/vault/session-brief.py")], {"source": "startup"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Brain: no sessions recorded yet.", result.stdout)
+        self.assertIn("navigation, not evidence", result.stdout)
+        self.assertLessEqual(len(result.stdout.encode("utf-8")), 720)
+        missing = self.base / "Uninstalled controller"
+        result = self.child([sys.executable, str(REPO / "hooks/vault/session-brief.py")], {}, dict(self.env, BRAIN_AUTOMATION_DIR=str(missing)))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("SessionStart brief", (missing / "hook-errors.jsonl").read_text(encoding="utf-8"))
 
     def test_one_client_and_two_client_parity(self):
         home = self.base / "Fresh home"

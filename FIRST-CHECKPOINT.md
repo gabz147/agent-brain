@@ -22,8 +22,9 @@ Watch the note appear in Obsidian. Start another session and ask:
 
 If both clients are installed, use the other client for that second prompt.
 
-Also try a greeting in a fresh session. It should not trigger vault reads or a
-checkpoint. A project task should load the map and relevant notes; priorities,
+Also try a greeting in a fresh session. The short brief at the top of the
+session comes from the SessionStart hook, not from a read; the greeting itself
+should not trigger vault reads or a checkpoint. A project task should load the map and relevant notes; priorities,
 daily history and contract sections should appear only when needed. Inspect the
 tool reads to check this; file installation alone cannot prove model compliance.
 

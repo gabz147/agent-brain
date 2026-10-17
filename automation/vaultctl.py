@@ -14,7 +14,7 @@ from vault_core import (DEFAULT_AUTOMATION, DEFAULT_BACKUPS, DEFAULT_STATE, DEFA
 from vault_sources import source_key, stream_units, uncovered, verified_receipts
 from vault_capture import apply_proposal
 from vault_hygiene import hygiene
-from vault_recall import consolidate_context, fact_freshness, mark_consolidated, recall_eval
+from vault_recall import consolidate_context, fact_freshness, mark_consolidated, recall_eval, session_brief
 
 
 def load_input(path):
@@ -192,6 +192,7 @@ def main(argv=None):
     consolidate.add_argument("--note", help="Only sessions whose heading names this note or whose Notes Touched links it")
     consolidate.add_argument("--mark", help="Record consolidation through this day, after the updates are written")
     freshness = sub.add_parser("fact-freshness", help="Stale (as of <date>) facts; read-only")
+    sub.add_parser("session-brief", help="Plain-text startup continuity: Open line, last sessions, Active Now, recent hook errors; read-only")
     freshness.add_argument("--max-age-days", type=int, default=90)
     for name in ("checkpoint-context", "checkpoint"):
         command = sub.add_parser(name)
@@ -241,6 +242,8 @@ def main(argv=None):
         return consolidate_context(vault, days=args.days, since=args.since, note=args.note)
     if args.command == "fact-freshness":
         return fact_freshness(vault, max_age_days=args.max_age_days)
+    if args.command == "session-brief":
+        return session_brief(vault, DEFAULT_AUTOMATION)
     if args.command == "checkpoint-context":
         units = live_units(args)
         return {"source": args.source, "session_id": args.session, "turn_key": units[-1]["turn_key"],
@@ -274,7 +277,7 @@ if __name__ == "__main__":
     sys.stdin.reconfigure(encoding="utf-8")
     try:
         result = main()
-        print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+        print(result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, separators=(",", ":")))
         sys.exit(2 if isinstance(result, dict) and result.get("outcome") in ("invalid", "needs_review") else 0)
     except Exception as exc:
         print(json.dumps({"outcome": "failed", "error": str(exc)}))

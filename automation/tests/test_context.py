@@ -3,9 +3,10 @@ import json
 import subprocess
 import sys
 
-from test_vault import Fixture, SECTIONS
+from test_vault import Fixture, HEADER, SECTIONS
 import vault_core as core
 import vault_sources as sources
+from vault_recall import session_brief
 from vaultctl import daily_context, main, receipt_summary
 
 
@@ -42,6 +43,39 @@ class ContextTests(Fixture):
         file.write_text("bad schema", encoding="utf-8")
         with self.assertRaises(core.VaultError):
             daily_context(self.vault, path)
+
+    def test_session_brief_is_capped_read_only_navigation(self):
+        self.assertIn("no vault at", session_brief(self.vault, self.directory))
+        (self.vault.root / "VAULT-INDEX.md").write_text(HEADER.replace("type: log", "type: index") + "\n# Map\n", encoding="utf-8")
+        self.assertIn("no sessions recorded yet", session_brief(self.vault, self.directory))
+        sections = dict(SECTIONS, **{"What Got Done": ["Did the thing"]})
+        for time, topic, marker, open_next in (("3:42 PM", "First topic", "<!-- b1 -->", "Finish the adapter"),
+                                               ("4:42 PM", "Second topic", "<!-- b2 -->", "Ship it " * 60)):
+            op = core.daily_operation(self.vault, "2026-09-05", time, topic, sections, "astra", marker, open_next)
+            self.vault.commit([op], "astra", "fixture")
+        priorities = self.vault.root / "Active Priorities.md"
+        items = "".join(f"- Item {n} " + "detail " * 40 + "`touched: 2026-09-01`\n" for n in range(10))
+        priorities.write_text(HEADER + "\n# Active Priorities\n\n## Active Now\n" + items + "\n## Next\n- None\n", encoding="utf-8")
+        stale = (core.now() - __import__("datetime").timedelta(days=30)).isoformat()
+        (self.directory / "hook-errors.jsonl").write_text(json.dumps({"at": core.now().isoformat(), "hook": "Stop", "error": "x"}) + "\n"
+                                                           + json.dumps({"at": stale, "hook": "Stop", "error": "old"}) + "\n" + "not json\n", encoding="utf-8")
+        before = {p: p.read_bytes() for p in self.vault.root.rglob("*.md")}
+        text = session_brief(self.vault, self.directory)
+        self.assertLessEqual(len(text.encode("utf-8")), 700)
+        self.assertIn("open: Ship it", text)
+        self.assertIn("Last session: Session 2", text)
+        self.assertIn("Hook errors: 1 in the last 7 days", text)
+        self.assertIn("navigation, not evidence", text)
+        self.assertNotIn("touched:", text)
+        self.assertEqual(before, {p: p.read_bytes() for p in self.vault.root.rglob("*.md")})
+        roomy = session_brief(self.vault, self.directory, cap=4000)
+        self.assertIn("Before that: Session 1", roomy)
+        self.assertIn("Active Now: Item 0", roomy)
+        args = ["--vault", str(self.vault.root), "--state", str(self.vault.state), "--backups", str(self.vault.backups), "session-brief"]
+        self.assertIsInstance(main(args), str)
+        child = subprocess.run([sys.executable, str(core.HERE / "vaultctl.py"), *args], capture_output=True, text=True, encoding="utf-8", timeout=10)
+        self.assertEqual(child.returncode, 0, child.stderr)
+        self.assertTrue(child.stdout.startswith("Brain: last day 2026-09-05"), child.stdout)
 
     def test_real_cli_summary_keeps_complete_verified_receipt_and_retry(self):
         transcript = self.transcript()

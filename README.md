@@ -68,7 +68,7 @@ hooks; setup installs them together from this one repository.
 | Startup instructions | Load relevant context on demand; checkpoint substantive work and decisions |
 | Shared writer | Validate notes, preserve history, back up changes and return compact verified receipts |
 | On-demand actions | Read-only link checks, inbox triage, next actions and evidence freshness |
-| Claude hooks, if selected | Remind Claude to checkpoint and validate completed Markdown writes |
+| Claude hooks, if selected | Inject the startup brief, remind Claude to checkpoint and validate completed Markdown writes |
 
 No personal skill bundle, unrelated plugins, credentials or prewritten personal
 notes are installed. Existing notes and unrelated client settings are preserved.
@@ -78,7 +78,10 @@ Client accounts and usage costs remain your own.
 
 ![Work in your agent, checkpoint verified findings into Markdown, and recall them in a future session.](docs/graphics/brain-workflow.png)
 
-The agent starts with a compact boot policy. Greetings and self-contained
+The agent starts with a compact boot policy. On Claude Code a SessionStart hook
+injects a short brief, about 200 tokens: the latest Open line, the last session
+headings, Active Now and any recent hook errors. Codex gets the same brief from
+`vaultctl.py session-brief`. Greetings and self-contained
 questions need no vault reads. For substantive project work, it reads the map
 and relevant notes. Priorities are for status/continuation, daily history starts
 with compact Open/session navigation and relevant complete sessions, and workflow sections load before writing.
