@@ -195,6 +195,8 @@ class InstallTests(unittest.TestCase):
             self.assertTrue((vault / "Home.md").is_file())
             self.assertTrue((vault / "10 - Resources/Vault Actions.md").is_file())
             self.assertIn("bases", json.loads((vault / ".obsidian/core-plugins.json").read_text()))
+            self.assertTrue(json.loads((vault / ".obsidian/app.json").read_text())["alwaysUpdateLinks"])
+            self.assertTrue((vault / "10 - Resources/Templates/Job Template.md").is_file())
             env = dict(os.environ, BRAIN_VAULT_ROOT=str(vault), BRAIN_AUTOMATION_DIR=str(auto),
                        BRAIN_STATE_DIR=str(home / "private-state"), BRAIN_BACKUPS_DIR=str(home / "private-backups"))
             report = run([sys.executable, str(auto / "vaultctl.py"), "validate"], env=env)

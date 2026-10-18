@@ -203,7 +203,8 @@ def installation(home, vault, replace=False, client="both"):
     else:
         copy_tree(REPO / "vault", vault)
         for source, name in (("obsidian-daily-notes.json", "daily-notes.json"),
-                             ("obsidian-templates.json", "templates.json")):
+                             ("obsidian-templates.json", "templates.json"),
+                             ("obsidian-app.json", "app.json")):
             add(vault / ".obsidian" / name, (REPO / "settings" / source).read_bytes())
         add(vault / ".obsidian/core-plugins.json", b'["file-explorer", "global-search", "backlink", "daily-notes", "templates", "bases"]\n')
 

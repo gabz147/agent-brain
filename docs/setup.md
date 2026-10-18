@@ -265,7 +265,7 @@ Exercise a real live checkpoint using an actual session transcript, first callin
 
 ### 7. Configure manual daily notes in Obsidian
 
-Merge `settings/obsidian-daily-notes.json` into `.obsidian/daily-notes.json` and `settings/obsidian-templates.json` into `.obsidian/templates.json`. Enable the built-in Daily Notes and Templates plugins if wanted. Preserve unrelated Obsidian settings.
+Merge `settings/obsidian-daily-notes.json` into `.obsidian/daily-notes.json` and `settings/obsidian-templates.json` into `.obsidian/templates.json`. Enable the built-in Daily Notes and Templates plugins if wanted. Merge `settings/obsidian-app.json` into `.obsidian/app.json`, or turn on Settings → Files and links → Automatically update internal links, so a rename inside Obsidian repairs every wikilink to the note. Preserve unrelated Obsidian settings.
 
 Daily Notes should use `01 - Daily Notes`, format `MM - MMMM YYYY/YYYY-MM-DD`, and `10 - Resources/Templates/Manual Daily Note Template.md`. Agent-created notes use the separate model template through the controller.
 
