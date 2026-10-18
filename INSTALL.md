@@ -30,13 +30,13 @@ For an existing vault, add or merge the contract and guides under `10 - Resource
 
 ## 3. Install the shared controller and environment
 
-Copy the source files in `automation/` into `~/.claude/vault-automation`, or a chosen `BRAIN_AUTOMATION_DIR`. The controller is required even if scheduled jobs are disabled. Runtime queues, logs, state, and backups are private and must not be replaced during upgrades.
+Copy the source files in `automation/` (with `automation/adapters/` and `boot/BRAIN.md`) into `~/.agent-brain/automation`, or keep an existing `~/.claude/vault-automation`, or a chosen `BRAIN_AUTOMATION_DIR`; record it as `automation_dir` in `~/.agent-brain/config.json`. The controller is required even if scheduled jobs are disabled. Runtime queues, logs, state, and backups are private and must not be replaced during upgrades.
 
 On Windows, set the chosen paths for this process and future user processes:
 
 ```powershell
 $env:BRAIN_VAULT_ROOT = Join-Path $env:USERPROFILE 'Documents\Brain'
-$env:BRAIN_AUTOMATION_DIR = Join-Path $env:USERPROFILE '.claude\vault-automation'
+$env:BRAIN_AUTOMATION_DIR = Join-Path $env:USERPROFILE '.agent-brain\automation'
 [Environment]::SetEnvironmentVariable('BRAIN_VAULT_ROOT', $env:BRAIN_VAULT_ROOT, 'User')
 [Environment]::SetEnvironmentVariable('BRAIN_AUTOMATION_DIR', $env:BRAIN_AUTOMATION_DIR, 'User')
 $vaultCtl = Join-Path $env:BRAIN_AUTOMATION_DIR 'vaultctl.py'

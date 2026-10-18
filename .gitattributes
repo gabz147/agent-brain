@@ -10,3 +10,5 @@
 *.sh text eol=lf
 *.png binary
 docs/graphics/** export-ignore
+*.cmd text eol=crlf
+bin/brain text eol=lf

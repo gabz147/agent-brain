@@ -17,7 +17,7 @@ With Node 22+ and Obsidian open on a dedicated `--remote-debugging-port=9333`, r
 node <BRAIN_AUTOMATION_DIR>/vault_links.mjs --vault <BRAIN_VAULT_ROOT>
 ```
 
-Resolve the placeholders from your environment, defaulting to ~/.claude/vault-automation and ~/Documents/Brain; quote paths with spaces. The checker also honors BRAIN_VAULT_ROOT. It verifies the open vault and completed indexing, using Obsidian's own link parser. Default output is counts plus 20 findings; --json returns the complete report, --port selects a different debug port.
+Resolve the placeholders from your environment or ~/.agent-brain/config.json, defaulting to ~/.agent-brain/automation (older installs: ~/.claude/vault-automation) and ~/Documents/Brain; quote paths with spaces. The checker also honors BRAIN_VAULT_ROOT. It verifies the open vault and completed indexing, using Obsidian's own link parser. Default output is counts plus 20 findings; --json returns the complete report, --port selects a different debug port.
 
 Launch Obsidian with that flag using your normal application executable. If it is already running without the flag, save work and reopen it; never force-close it. Keep a single vault window on that port. No permanent service or external index is required.
 

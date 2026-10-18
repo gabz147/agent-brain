@@ -37,6 +37,16 @@ Missing Python? See [prerequisites and troubleshooting](LAPTOP-SETUP.md).
 Prefer to inspect the download first? Use the
 [download-and-inspect method](LAPTOP-SETUP.md#download-and-inspect).
 
+### Release bundle (preview)
+
+`get.sh` and `get.ps1` download a tagged release's `brain.pyz` (a reproducible
+zipapp built by `tools/build_pyz.py`) and its `SHA256SUMS`, refuse a mismatch,
+then run `python brain.pyz setup --wizard`. The checksum proves the download is
+intact, not who published it: both files come from the same GitHub release. To
+verify a release yourself, rebuild it from the tag with
+`python tools/build_pyz.py --version <tag>` and compare the hash. The commands
+above keep using the current installer until the v2 bundle has been dogfooded.
+
 ### Clone or ask your agent
 
 With Git installed, clone this repository and run its guided setup:

@@ -59,7 +59,7 @@ Install the controller first and confirm the environment matches its directory. 
 
 ```powershell
 $auto = $env:BRAIN_AUTOMATION_DIR
-if (-not $auto) { $auto = Join-Path $env:USERPROFILE '.claude\vault-automation' }
+if (-not $auto) { $auto = (Get-Content (Join-Path $env:USERPROFILE '.agent-brain\config.json') | ConvertFrom-Json).automation_dir }
 powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\nightly-audit.ps1" -DryRun
 ```
 

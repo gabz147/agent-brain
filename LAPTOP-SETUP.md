@@ -91,30 +91,30 @@ are disabled for another home so tests cannot install software into your account
 | Chosen vault | Generic notes, contracts, indexes and Obsidian daily templates/settings |
 | Each selected agent's instructions file | Brain startup/writing rules, e.g. `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.copilot/copilot-instructions.md`, `~/.kiro/steering/agent-brain.md`, `~/.qwen/QWEN.md`, `~/.factory/AGENTS.md` |
 | One skills folder per selected agent | `obsidian-vault`, `handoff`, `source-to-vault` only; `~/.agents/skills` is shared by Codex and Copilot |
-| `~/.claude/vault-automation` | Shared writer/schema, adapter registry and first-checkpoint guide; used by every agent |
+| `~/.agent-brain/automation` | Shared writer/schema, adapter registry, private state and first-checkpoint guide; used by every agent. An existing `~/.claude/vault-automation` install stays where it is |
+| `~/.agent-brain/bin` | `brain` (macOS/Linux) and `brain.cmd` (Windows) launchers for controller commands; add to PATH if you like |
 | `~/.agent-brain/config.json` | The vault root, controller directory and interpreter, readable by any client or adapter |
 | `~/.claude/hooks/vault`, if selected | Claude startup brief, checkpoint reminder and validation adapters |
 | `~/.codex/hooks/vault` and `~/.codex/hooks.json`, if selected | The same three hooks for Codex; trust them once in `/hooks` |
-| Selected clients' configuration | Brain paths/interpreter merged with existing settings |
+| Selected clients' configuration | Hook entries merged with existing settings; Brain variables an earlier release injected are kept current, none are added |
 
-The shared controller retains its established `.claude/vault-automation` location
-for compatibility. Codex-only setup uses that folder but does not install Claude,
-its boot file, its skills or its hooks.
+New installs keep the shared controller in `~/.agent-brain/automation`. A home that
+already has `~/.claude/vault-automation` keeps using it, because its private state and
+receipts live there. Codex-only setup does not install Claude, its boot file, its skills or its hooks.
 
-Brain paths are stored in `~/.agent-brain/config.json`, and also in Claude's
-`settings.json.env` and Codex's `shell_environment_policy.set`; the controller
-and hook adapters read the environment first, then the config file. Shell-profile editing and `--persist-env` are
+Brain paths are stored in `~/.agent-brain/config.json`; the controller, hook
+adapters and boot rules read `BRAIN_*` environment variables first, then that file. Shell-profile editing and `--persist-env` are
 unnecessary for normal agent use. Restart your CLI to load its settings.
-For manual commands outside a client, explicitly supply your vault:
+For manual commands outside a client, use the launcher, which reads the same config:
 
 ```bash
-python3 "$HOME/.claude/vault-automation/vaultctl.py" --vault "$HOME/Documents/Brain" validate
+"$HOME/.agent-brain/bin/brain" validate
 ```
 
 Windows:
 
 ```powershell
-python "$env:USERPROFILE/.claude/vault-automation/vaultctl.py" --vault "$env:USERPROFILE/Documents/Brain" validate
+& "$env:USERPROFILE\.agent-brain\bin\brain.cmd" validate
 ```
 
 Use your actual custom vault path. Model choices, account tokens, trust approvals

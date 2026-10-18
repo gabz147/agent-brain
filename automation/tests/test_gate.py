@@ -193,7 +193,7 @@ class InstalledCodexHookTests(unittest.TestCase):
             # Garbage in fails open and leaves a diagnostic.
             broken = run("Stop", "not json")
             self.assertEqual((broken.returncode, broken.stdout), (0, ""))
-            self.assertIn("codex Stop", (home / ".claude/vault-automation/hook-errors.jsonl").read_text(encoding="utf-8"))
+            self.assertIn("codex Stop", (home / ".agent-brain/automation/hook-errors.jsonl").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
