@@ -96,6 +96,8 @@ def stale_clients(home, client):
 
 def toml_bytes(data):
     """Preserve parsed settings; original comments/formatting remain in the backup."""
+    if tomllib is None:
+        raise ValueError("Merging Codex config.toml needs Python 3.11+; on 3.10 config.json carries the paths and Codex settings are left alone")
     def value(v):
         if isinstance(v, dict):
             return "{" + ", ".join(json.dumps(k) + " = " + value(x) for k, x in v.items()) + "}"

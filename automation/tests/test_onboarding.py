@@ -150,10 +150,15 @@ class OnboardingTests(unittest.TestCase):
                 directory.mkdir(exist_ok=True)
                 if client == "claude":
                     (directory / "settings.json").write_text(json.dumps({"env": {"BRAIN_VAULT_ROOT": str(value)}}))
-                else:
+                elif tomllib is not None:
                     (directory / "config.toml").write_bytes(install.toml_bytes({"shell_environment_policy": {"set": {"BRAIN_VAULT_ROOT": str(value)}}}))
-            with self.assertRaisesRegex(ValueError, "different vaults"):
-                install.configured_vault(home, "both")
+            if tomllib is None:  # 3.10 cannot read Codex settings, so only Claude's vault is known
+                self.assertEqual(install.configured_vault(home, "both"), home / "One")
+                with self.assertRaisesRegex(ValueError, "3.11"):
+                    install.toml_bytes({"a": 1})
+            else:
+                with self.assertRaisesRegex(ValueError, "different vaults"):
+                    install.configured_vault(home, "both")
 
     def test_archive_rejects_unsafe_members_before_extracting(self):
         with tempfile.TemporaryDirectory() as tmp:

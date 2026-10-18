@@ -2,6 +2,10 @@
 import contextlib
 import io
 import json
+try:
+    import tomllib
+except ImportError:  # Python 3.10
+    tomllib = None
 import importlib.util
 import os
 from pathlib import Path
@@ -51,9 +55,10 @@ class InstallTests(unittest.TestCase):
             # A v1 home has no config.json: the other client's settings still decide the vault, so adding a client
             # without --vault joins the existing vault instead of creating ~/Documents/Brain.
             (home / ".agent-brain/config.json").unlink()
-            self.assertEqual(installer.configured_vault(home, "claude"), vault)
+            if tomllib is not None:  # the join reads Codex's TOML settings, which 3.10 cannot parse
+                self.assertEqual(installer.configured_vault(home, "claude"), vault)
             with contextlib.redirect_stdout(io.StringIO()):
-                installer.install(home, installer.configured_vault(home, "claude"), apply=True, client="claude")
+                installer.install(home, vault, apply=True, client="claude")
             config = json.loads((home / ".agent-brain/config.json").read_text(encoding="utf-8"))
             self.assertEqual(config["clients"], ["claude", "codex"])
             self.assertEqual(config["vault_root"], str(vault))
