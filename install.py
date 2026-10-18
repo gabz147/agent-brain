@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -187,8 +188,11 @@ def installation(home, vault, replace=False, client="both"):
     for name in clients:
         adapter = ADAPTERS[name]
         hooks = adapter["hooks"]
-        if hooks and hooks["format"] == "claude-settings-json":
+        if hooks:
             copy_tree(REPO / "hooks/vault", expand(hooks["scripts"], home))
+        if hooks and hooks["format"] == "codex-hooks-json":
+            shell_log = bool((read_config(home).get("hooks") or {}).get("shell_log"))
+            merge_codex_hooks(home, add, replace, adapter, shell_log)
         target = instructions_path(adapter, home)
         text = render_file(adapter)
         if target.exists():
@@ -267,18 +271,58 @@ def merge_claude(home, env, add, replace, adapter):
     snippet = json.loads((REPO / adapter["hooks"]["snippet"]).read_text(encoding="utf-8"))
     hooks = settings.setdefault("hooks", {})
     prune_retired_hooks(hooks)
-    for event, entries in snippet["hooks"].items():
+
+    def render(hook):
+        # Replace parsed fields, never interpolate a path into serialized JSON.
+        name = Path(hook["args"][0]).name
+        hook["command"] = sys.executable if hook["command"] == "python" else shutil.which(hook["command"]) or hook["command"]
+        hook["args"] = [str(scripts / name)]
+        return name
+    merge_hook_groups(hooks, snippet["hooks"], render, replace)
+    add(settings_path, (json.dumps(settings, indent=2, ensure_ascii=False) + "\n").encode(), merge=True)
+
+
+def shell_command(parts):
+    """One hook command line. Codex runs it with `$SHELL -lc` on POSIX and `cmd.exe /C "<line>"` on Windows,
+    where quoting keeps spaces and metacharacters literal but %VAR% would still expand, so that is refused."""
+    if os.name != "nt":
+        return shlex.join(parts)
+    for part in parts:
+        if any(c in part for c in '"%'):
+            raise ValueError(f"Hook path contains a character cmd.exe would expand ({part}); install the Codex hooks by hand")
+    return " ".join(f'"{part}"' for part in parts)
+
+
+def merge_codex_hooks(home, add, replace, adapter, shell_log=False):
+    """Agent Brain's Codex hooks merged into hooks.json, keeping every unrelated hook."""
+    target = expand(adapter["hooks"]["path"], home)
+    scripts = expand(adapter["hooks"]["scripts"], home)
+    data = json.loads(target.read_text(encoding="utf-8-sig")) if target.exists() else {}
+    if not isinstance(data, dict) or not isinstance(data.get("hooks", {}), dict):
+        raise ValueError(f"{target} and its hooks must be JSON objects")
+    snippet = json.loads((REPO / adapter["hooks"]["snippet"]).read_text(encoding="utf-8"))["hooks"]
+    if shell_log:
+        for group in snippet.get("PostToolUse", []):
+            group["matcher"] = group.get("matcher", "") + "|Bash"
+
+    def render(hook):
+        name = hook.pop("script")
+        hook["command"] = shell_command([sys.executable, str(scripts / name), *hook.pop("args", [])])
+        return name
+    merge_hook_groups(data.setdefault("hooks", {}), snippet, render, replace)
+    add(target, (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode(), merge=True)
+
+
+def merge_hook_groups(hooks, snippet, render, replace):
+    """Add each snippet group, or replace an isolated group holding our script; never discard another hook."""
+    for event, entries in snippet.items():
         existing = hooks.setdefault(event, [])
         if not isinstance(existing, list):
             raise ValueError(f"hooks.{event} must be an array")
         for entry in entries:
-            # Replace parsed fields, never interpolate a path into serialized JSON.
             entry = json.loads(json.dumps(entry))
             for hook in entry["hooks"]:
-                name = Path(hook["args"][0]).name
-                interpreter = sys.executable if hook["command"] == "python" else shutil.which(hook["command"]) or hook["command"]
-                hook["command"] = interpreter
-                hook["args"] = [str(scripts / name)]
+                name = render(hook)
             # Match only our adapter filenames; preserve all unrelated commands/groups.
             def matches(hook):
                 return isinstance(hook, dict) and (name in str(hook.get("command", ""))
@@ -297,7 +341,6 @@ def merge_claude(home, env, add, replace, adapter):
                     existing[existing.index(groups[0])] = entry
             else:
                 existing.append(entry)
-    add(settings_path, (json.dumps(settings, indent=2, ensure_ascii=False) + "\n").encode(), merge=True)
 
 
 def install(home, vault, apply=False, replace=False, client="both"):
@@ -594,6 +637,8 @@ def main():
         verify(home, vault)
         print(f"\nBrain files verified. Open this folder as a vault in Obsidian:\n{vault}")
         print("Restart each selected CLI, sign in, and approve its normal hook/access prompts.")
+        if any((ADAPTERS[name]["hooks"] or {}).get("format") == "codex-hooks-json" for name in selected(args.client)):
+            print("Codex: open /hooks in a new session and trust the three Agent Brain hooks; until then they are skipped.")
         print(f"Then follow the first-checkpoint prompt saved at:\n{home / '.claude/vault-automation/FIRST-CHECKPOINT.md'}")
         print("Online guide: https://github.com/gabz147/agent-brain/blob/main/FIRST-CHECKPOINT.md")
         print("Live agent behavior and Obsidian UI still need that check; file installation cannot certify them.")

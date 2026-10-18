@@ -23,8 +23,9 @@ Watch the note appear in Obsidian. Start another session and ask:
 If several agents are installed, use a different one for that second prompt.
 
 Also try a greeting in a fresh session. On Claude Code the short brief at the
-top of the session comes from the SessionStart hook, not from a read. On other agents,
-which have no hooks here yet, the instructions have them run `vaultctl.py session-brief`
+top of the session comes from the SessionStart hook, not from a read; Codex does the
+same once its hooks are trusted in `/hooks`. On other agents, which have no hooks here
+yet, the instructions have them run `vaultctl.py session-brief`
 once, and that is the only vault access a greeting should show. Beyond that, the
 greeting should not trigger vault reads or a checkpoint. A project task should load the map and relevant notes; priorities,
 daily history and contract sections should appear only when needed. Inspect the

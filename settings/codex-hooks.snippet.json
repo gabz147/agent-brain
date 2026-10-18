@@ -1,0 +1,23 @@
+{
+  "_comment": "Agent Brain hooks for ~/.codex/hooks.json. Merge each event array; do not replace an existing file wholesale. The installer turns each script entry into a command string with the actual Python and the hooks folder, and keeps every unrelated hook. Codex asks you to review and trust new hooks in /hooks before they run.",
+
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [{"type": "command", "script": "agent-hook.py", "args": ["codex", "SessionStart"], "timeout": 10}]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "apply_patch",
+        "hooks": [{"type": "command", "script": "agent-hook.py", "args": ["codex", "PostToolUse"], "timeout": 10}]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{"type": "command", "script": "agent-hook.py", "args": ["codex", "Stop"], "timeout": 30}]
+      }
+    ]
+  }
+}

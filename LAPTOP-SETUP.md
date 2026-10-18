@@ -46,7 +46,7 @@ Copy the command for your system from the [README](README.md#install).
    [FIRST-CHECKPOINT.md](FIRST-CHECKPOINT.md). A copy is saved beside the controller.
 
 Startup rules ask agents to checkpoint substantive work, findings, decisions and
-handoffs. Claude also gets a startup brief and a Stop-hook reminder. Other agents
+handoffs. Claude and Codex also get a startup brief and a Stop-hook reminder. Other agents
 run `vaultctl.py session-brief` once and checkpoint with `--source <agent> --model <id>`. Test writing and next-session recall with the guide;
 copied files alone do not prove agent behavior.
 
@@ -94,6 +94,7 @@ are disabled for another home so tests cannot install software into your account
 | `~/.claude/vault-automation` | Shared writer/schema, adapter registry and first-checkpoint guide; used by every agent |
 | `~/.agent-brain/config.json` | The vault root, controller directory and interpreter, readable by any client or adapter |
 | `~/.claude/hooks/vault`, if selected | Claude startup brief, checkpoint reminder and validation adapters |
+| `~/.codex/hooks/vault` and `~/.codex/hooks.json`, if selected | The same three hooks for Codex; trust them once in `/hooks` |
 | Selected clients' configuration | Brain paths/interpreter merged with existing settings |
 
 The shared controller retains its established `.claude/vault-automation` location

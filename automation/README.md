@@ -10,6 +10,7 @@ The Python controller is required for live vault writes and checkpoints. The Pow
 | `vault_sources.py` | Claude/Codex transcript fragments, real model attribution, and source-bound coverage |
 | `vault_capture.py` | Validates checkpoint proposals and records source-bound receipts; controller alone writes |
 | `vault_hooks.py` | Live Stop decision logic; a request never claims capture |
+| `vault_gate.py` | Transcript-free hook logic for any agent with a hooks manifest (Codex today): session baseline, post-tool validation and turn log, a Stop gate on logged writes, git and controller-commit deltas, emitted in the agent's dialect; fails open |
 | `vault_recall.py` | Read-only session brief, recall eval, consolidation digest and `(as of <date>)` fact freshness; no index |
 | `obsidian_read.py` | Optional read-only Obsidian CLI observations (links, backlinks, properties, local recovery history, write preflight); never writes |
 | `vault_adapters.py`, `adapters/*.json`, `BRAIN.md` | One data-only manifest per agent (instructions path and strategy, skills dirs, hooks, transcript adapter), validated against `adapters/schema.json`, plus the shared boot block each agent's file is rendered from |
