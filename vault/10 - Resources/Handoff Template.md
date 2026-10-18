@@ -2,7 +2,7 @@
 status: active
 project: meta
 type: reference
-updated_by: astra
+updated_by: human
 updated: September 23, 2026 at 6:39:19 AM (UTC-06:00)
 ---
 
@@ -43,4 +43,4 @@ _Last updated: <readable local date and time with timezone> by <verified model>_
 **Suggested skills:** <names, or none>
 ```
 
-Store the handoff in the vault, never OS temp. Keep deliverables in the user's project folders. Daily history stays append-only; this current-state block is intentionally refreshed as work advances. The heading keeps the template's em-dash: the boot rule against em-dashes covers published external prose, not vault formats.
+Store the handoff in the vault, never OS temp. Keep deliverables in the user's project folders. Daily history stays append-only; this current-state block is intentionally refreshed as work advances.

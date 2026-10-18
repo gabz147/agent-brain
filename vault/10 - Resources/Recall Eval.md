@@ -2,7 +2,7 @@
 status: active
 project: meta
 type: guide
-updated_by: opus 5.5
+updated_by: human
 updated: September 28, 2026 at 12:09:05 AM (UTC-06:00)
 ---
 

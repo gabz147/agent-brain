@@ -18,9 +18,9 @@ To make existing ISO timestamps readable after upgrading, preview
 the conversion. This preserves the original time, author and note body, and
 creates checked snapshots. Use `python3` on macOS/Linux.
 
-Use `install.py --doctor --client claude|codex|both` to check the chosen clients. Claude hooks need Node.js 22+. Python 3.11+ is required; the controller uses only the standard library. Obsidian is optional for agent work. The optional audit task requires Windows PowerShell and Task Scheduler; it never calls a model.
+Use `install.py --doctor --client claude|codex|both` to check the chosen clients. Python 3.11+ is required; the controller and the hook adapters use only the standard library. Node.js 22+ is needed only by the optional link checker. Obsidian is optional for agent work. The optional audit task requires Windows PowerShell and Task Scheduler; it never calls a model.
 
-For an upgrade, save copies of the installed boot files, skills, hooks, controller/schema, and relevant settings. Preserve source receipts and snapshot directories. Do not copy runtime state into this public repository. Pause or disable the audit task while its controller files are replaced, then restore its prior state. The background capture drain was removed: the installer drops the retired SessionEnd hook entry, and an existing `VaultQueueDrain` task should be removed (`Unregister-ScheduledTask -TaskName VaultQueueDrain`), then the runtime baseline re-recorded once.
+For an upgrade, save copies of the installed boot files, skills, hooks, controller/schema, and relevant settings. Preserve source receipts and snapshot directories. Do not copy runtime state into this public repository. Pause or disable the audit task while its controller files are replaced, then restore its prior state. The Node Stop launcher was replaced by `stop-vault-gate.py` and a SessionStart hook was added: the installer retires the old `stop-vault-gate.js` hook entry on upgrade and leaves that inert file in place. That changes the approved hook wiring, so an existing runtime baseline reports drift until you inspect the new settings and re-record it once with `vaultctl.py snapshot-runtime`. Upgrading only one of two installed clients is refused before any write; rerun with `--client both`. The background capture drain was removed: the installer drops the retired SessionEnd hook entry, and an existing `VaultQueueDrain` task should be removed (`Unregister-ScheduledTask -TaskName VaultQueueDrain`), then the runtime baseline re-recorded once.
 
 ## 2. Copy or merge the starter vault
 
@@ -44,7 +44,7 @@ $vaultCtl = Join-Path $env:BRAIN_AUTOMATION_DIR 'vaultctl.py'
 
 Use the confirmed custom paths instead of these defaults when needed. On macOS/Linux, export the same variables in the agent's environment. Existing apps/tasks may need a later restart to see new environment values; do not restart active user work without authorization.
 
-Optional `BRAIN_STATE_DIR` and `BRAIN_BACKUPS_DIR` override private storage. Keep both outside the Markdown vault and any public checkout. Set `BRAIN_PYTHON` if the hook/runner needs an explicit executable. The PostToolUse hook command in the settings snippet must also use the correct interpreter.
+The installer also writes `~/.agent-brain/config.json` with the vault root, controller directory, interpreter and selected clients. The controller and hook adapters read `BRAIN_*` variables first and that file second, so a client that cannot inject environment variables still finds the vault. Optional `BRAIN_STATE_DIR` and `BRAIN_BACKUPS_DIR` override private storage. Keep both outside the Markdown vault and any public checkout. Set `BRAIN_PYTHON` if the scheduled audit runner needs an explicit executable. Every hook `command` in the settings snippet must point at the correct Python interpreter; `install.py` substitutes it for you.
 
 Customize `vault-schema.json`'s `folder_projects` for the user's actual folders; an optional `project_allowlist` restricts otherwise valid kebab-case slugs. Keep the shared human schema block synchronized through reviewed hygiene repairs.
 
@@ -58,8 +58,9 @@ Copy `skills/obsidian-vault/`, `skills/handoff/` and `skills/source-to-vault/` i
 
 ## 5. Install Claude hook adapters
 
-Copy `hooks/vault/` to `~/.claude/hooks/vault/`. Merge the two arrays in `settings/vault-hooks.snippet.json` into the existing `hooks` object in `~/.claude/settings.json`. Replace `{{CLAUDE_DIR}}` inside each `args` entry with the absolute directory. Set `command` to the actual Python or Node executable. The direct-execution form needs no shell quoting and supports Windows without Git Bash. Claude Code 2.1.270+ is the tested minimum. Preserve unrelated hooks/settings, then parse the JSON to verify it.
+Copy `hooks/vault/` to `~/.claude/hooks/vault/`. Merge the three arrays (SessionStart, PostToolUse, Stop) in `settings/vault-hooks.snippet.json` into the existing `hooks` object in `~/.claude/settings.json`. Replace `{{CLAUDE_DIR}}` inside each `args` entry with the absolute directory. Set `command` to the actual Python executable. The direct-execution form needs no shell quoting and supports Windows without Git Bash. Claude Code 2.1.270+ is the tested minimum. Preserve unrelated hooks/settings, then parse the JSON to verify it.
 
+- SessionStart prints the session brief into context on startup and resume. It reads notes and never writes.
 - PostToolUse reports an invalid completed Markdown write with exit 2. It cannot undo the write; the shared controller prevents invalid writes before they happen.
 - Stop requests a source-bound checkpoint after substantive work. The request is not evidence that capture happened.
 

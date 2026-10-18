@@ -88,7 +88,7 @@ class PortableTests(unittest.TestCase):
         result = self.child([sys.executable, str(REPO / "hooks/vault/validate-vault-frontmatter.py")], {}, env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((missing / "hook-errors.jsonl").exists())
-        result = self.child(["node", str(REPO / "hooks/vault/stop-vault-gate.js")], {}, env)
+        result = self.child([sys.executable, str(REPO / "hooks/vault/stop-vault-gate.py")], {}, env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len((missing / "hook-errors.jsonl").read_text().splitlines()), 2)
 
@@ -96,16 +96,30 @@ class PortableTests(unittest.TestCase):
         transcript = self.base / "source.jsonl"
         rows = [
             {"type": "user", "origin": {"kind": "human"}, "uuid": "portable-turn", "message": {"content": "Explain a useful finding"}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "durable-1", "name": "Bash", "input": {"command": "git commit -m 'portable'"}}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "durable-1", "content": "committed"}]}},
             {"type": "assistant", "message": {"content": "Verified findings. " * 100}},
         ]
         transcript.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
-        result = self.child(["node", str(REPO / "hooks/vault/stop-vault-gate.js")],
+        result = self.child([sys.executable, str(REPO / "hooks/vault/stop-vault-gate.py")],
                             {"session_id": "portable", "transcript_path": str(transcript)})
         self.assertEqual(result.returncode, 2, result.stderr + result.stdout)
         self.assertIn(str(self.vault / "10 - Resources/Vault Workflow Contract.md"), result.stdout)
         self.assertIn(str(self.auto / "vaultctl.py"), result.stdout)
         self.assertIn('load only the "Daily checkpoints and coverage" section', result.stdout)
         self.assertTrue(list((self.state / "requested").glob("*.json")))
+
+    def test_session_brief_adapter_prints_continuity_and_fails_open(self):
+        result = self.child([sys.executable, str(REPO / "hooks/vault/session-brief.py")], {"source": "startup"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Brain: no sessions recorded yet.", result.stdout)
+        self.assertIn("navigation, not evidence", result.stdout)
+        self.assertLessEqual(len(result.stdout.encode("utf-8")), 720)
+        missing = self.base / "Uninstalled controller"
+        result = self.child([sys.executable, str(REPO / "hooks/vault/session-brief.py")], {}, dict(self.env, BRAIN_AUTOMATION_DIR=str(missing)))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("SessionStart brief", (missing / "hook-errors.jsonl").read_text(encoding="utf-8"))
 
     def test_one_client_and_two_client_parity(self):
         home = self.base / "Fresh home"

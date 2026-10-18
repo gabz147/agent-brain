@@ -2,7 +2,7 @@
 status: active
 project: meta
 type: guide
-updated_by: astra
+updated_by: human
 updated: 2026-09-22T17:54:31-06:00
 ---
 # Vault Actions

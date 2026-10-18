@@ -2,13 +2,13 @@
 status: active
 project: meta
 type: guide
-updated_by: astra
+updated_by: human
 updated: September 23, 2026 at 6:39:19 AM (UTC-06:00)
 ---
 
 # Vault Workflow Contract
 
-The shared writing and capture contract for [[Claude Code]] and [[Codex]], stored in [[Obsidian]]. [[VAULT-INDEX]] holds the profile and map; [[Active Priorities]] holds open work; [[Decisions]] holds deliberate choices; [[Dead Ends]] holds failed recurring approaches. [[Shared Obsidian Vault Skill]] describes retrieval. [[Vault Autonomy Pipeline]] records implementation and validation.
+The shared writing and capture contract for every participating agent, stored in Obsidian. [[VAULT-INDEX]] holds the profile and map; [[Active Priorities]] holds open work; [[Decisions]] holds deliberate choices; [[Dead Ends]] holds failed recurring approaches. [[Vault Autonomy Pipeline]] records implementation and validation.
 
 This portable contract holds the shared write mechanics and model-specific signatures; the two boot files keep a short identical block of critical rules. Installation and later source/configuration changes follow the user's actual authorization; this template grants no blanket approval.
 
@@ -18,17 +18,13 @@ Use the actual model that wrote the entry.
 
 | Runtime evidence | Signature |
 |---|---|
-| `gpt-6-astra` | `astra` |
-| `gpt-5.6-sol` | `sol` |
-| `gpt-5.6-terra` | `terra` |
-| `gpt-5.6-luna` | `luna` |
-| `claude-opus-5` | `opus 5` |
+| `claude-<family>-<major>-<minor>`, for example `claude-opus-5-5` | `<family> <major>.<minor>`, for example `opus 5.5` |
 | Other verified runtime ID | Canonical lowercase model label or its exact lowercase ID |
 | Runtime model unavailable | `unknown-model`, with the uncertainty stated |
 | Deterministic maintenance | `automation` |
 | Manual writing | `human` |
 
-Resolve model IDs from trusted runtime metadata, Codex `turn_context.model`, Claude `message.model`, or a child result's actual model usage. A configured model is a launch preference, not evidence of what ran. New model writes cannot use `claude` or `codex`; those remain valid historical signatures.
+Resolve model IDs from trusted runtime metadata, Codex `turn_context.model`, Claude `message.model`, or a child result's actual model usage. A configured model is a launch preference, not evidence of what ran. New model writes cannot use `claude` or `codex`; those remain valid historical signatures. `model_labels` in `vault-schema.json` may map a runtime ID to a short label; the template ships none.
 
 Four locations carry attribution: frontmatter `updated_by` records the last writing model; new folder-index descriptions and daily Index bullets end with `` `(model)` ``; new session headings end with `` `model` ``. Preserve historical entries and their author tags. When replacing a current index description, sign the replacement with its actual writer; never reattribute an unchanged description. A missing historical tag becomes `unknown-model`, never a guessed model.
 
@@ -46,7 +42,7 @@ Four locations carry attribution: frontmatter `updated_by` records the last writ
 - Updated: readable local write time, for example `September 23, 2026 at 6:20:14 AM (UTC-06:00)`; legacy ISO timestamps and `YYYY-MM-DD` dates remain valid. The writer uses the system clock and timezone.
 <!-- VAULT SCHEMA END -->
 
-Infer values from evidence. Starter folder defaults: 02 example-project; 01/08 personal; root/10 meta. Configure folder_projects in the machine schema for actual project folders. Project slugs accept kebab-case unless project_allowlist restricts them. Inbox defaults to personal unless content establishes a project; archive retains its original project. Content wins over folder defaults. Use active for ongoing work, completed only for finished work, idea for a proposal, parked for deliberately quiet work, archived only after authorized archiving.
+Infer values from evidence. Starter folder defaults: 02 example-project; 01 personal; root/10 meta. Configure folder_projects in the machine schema for actual project folders. Project slugs accept kebab-case unless project_allowlist restricts them. Inbox defaults to personal unless content establishes a project; archive retains its original project. Content wins over folder defaults. Use active for ongoing work, completed only for finished work, idea for a proposal, parked for deliberately quiet work, archived only after authorized archiving.
 
 Types describe document purpose: index maps notes, reference stores lookup material, guide gives a procedure, plan tracks strategy/work, log records events. Every dated daily note is `active/personal/log`.
 
@@ -62,7 +58,7 @@ Current claims require source evidence; chronology alone is not proof of current
 
 ## Shared writer
 
-Resolve angle-bracket paths from the environment: BRAIN_VAULT_ROOT defaults to ~/Documents/Brain; BRAIN_AUTOMATION_DIR defaults to ~/.claude/vault-automation; BRAIN_BACKUPS_DIR defaults to a sibling <vault name> Backups/versions directory. Both agents use the same controller:
+Resolve angle-bracket paths from the environment, or from `~/.agent-brain/config.json` when the environment is silent: BRAIN_VAULT_ROOT defaults to ~/Documents/Brain; BRAIN_AUTOMATION_DIR defaults to ~/.claude/vault-automation; BRAIN_BACKUPS_DIR defaults to a sibling <vault name> Backups/versions directory. Both agents use the same controller:
 
 ```powershell
 $vaultCtl = '<BRAIN_AUTOMATION_DIR>\vaultctl.py'
@@ -151,7 +147,7 @@ Obsidian's Daily Notes command uses `10 - Resources/Templates/Manual Daily Note 
 
 Deterministic hygiene scans all live notes for schema, daily headers, folder membership/signatures, skill parity, shared boot parity, the approved task/hook runtime baseline and priority aging. It repairs unambiguous missing metadata and index/aging mechanics; ambiguous semantic changes require evidence and reconciliation. Hygiene makes no model calls.
 
-There is no background, scheduled or retrospective model capture: the agent writes checkpoints live in its own session and the controller alone commits them. A session that ends without a checkpoint is not summarized automatically. Historical capture records in `outcomes.jsonl` keep their reported usage; missing usage or cost stays null, not a fabricated zero.
+There is no background, scheduled or retrospective model capture: the agent writes checkpoints live in its own session and the controller alone commits them. A session that ends without a checkpoint is not summarized automatically.
 
 Dated implementation/test evidence belongs in the day's daily session; the pipeline note keeps only current state. Record tested versus user-confirmed status explicitly. An internal hook error fails open and is logged; a scheduled audit failure is logged and retried on the next run. Keep the existing hidden launcher, Interactive task identity, five-minute idle/fullscreen guards and user pause toggle.
 

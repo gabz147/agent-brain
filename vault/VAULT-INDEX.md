@@ -2,7 +2,7 @@
 status: active
 project: meta
 type: index
-updated_by: astra
+updated_by: human
 updated: 2026-09-16
 ---
 
@@ -12,7 +12,7 @@ Read this map once when substantive work needs vault context. The boot file defi
 
 ## Vault location
 
-Use `BRAIN_VAULT_ROOT`, default `~/Documents/Brain`. The boot files stay outside the vault. An agent must have filesystem access to this location to participate.
+Use `BRAIN_VAULT_ROOT`, else `vault_root` in `~/.agent-brain/config.json`, default `~/Documents/Brain`. The boot files stay outside the vault. An agent must have filesystem access to this location to participate.
 
 ## Who I Am
 
@@ -43,8 +43,8 @@ Project folders carry a same-named index. Start there, then read relevant notes.
 - [[Decisions]] records deliberate choices. Read it before a potentially conflicting action; preserve original decision wording.
 - [[Dead Ends]] records failed recurring methods and verified alternatives. Search it before inventing a workaround.
 - [[Machine Inventory]] holds actual tasks, hooks, versions, and paths after installation.
-- [[Automation Costs]] explains reported usage and operational outcome records.
-- [[10 - Resources]] maps the contract, retrieval guide, recall eval, pipeline, handoff, and manual templates.
+- [[10 - Resources]] maps the contract, recall eval, pipeline, handoff, and manual templates.
+- [[02 - Example Project]] is a placeholder folder; rename it to a real project or delete it.
 
 ## My Preferences for Working with AI
 

@@ -4,7 +4,8 @@ Agent Brain loads context according to the task:
 
 | Task | Additional vault context |
 |---|---|
-| Greeting or self-contained question | None, unless it establishes something durable |
+| Session start, Claude hook or `session-brief` | A capped brief: latest Open line, last session headings, Active Now, recent hook errors |
+| Greeting or self-contained question | None beyond the brief, unless it establishes something durable |
 | Project work or recall | Root map once, then relevant project notes |
 | Status or continuation | Relevant priorities section and current project handoff |
 | Historical question | Daily Open/session headings, then complete matching sessions |
@@ -45,6 +46,16 @@ Restart the selected client to load the new policy. Test a greeting, a project
 request, and the write/recall prompts in [FIRST-CHECKPOINT.md](../FIRST-CHECKPOINT.md).
 Check actual tool reads. The tests verify file budgets and upgrade preservation;
 they do not prove a particular model follows the policy or measure its billing.
+
+## The session brief
+
+`vaultctl.py session-brief` prints at most 700 bytes of plain text: the newest
+daily note's Open line, its last two session headings, the Active Now bullets,
+and a count of fail-open hook errors from the last seven days. It reads notes
+and never writes. Claude's SessionStart hook injects it on startup and resume;
+Codex, which has no hooks here, is instructed to run it once at the start of
+substantive work. The brief is navigation
+for the model, not evidence: the notes it points at still have to be read.
 
 ## Compact checkpointing and optional vault actions
 

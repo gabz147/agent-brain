@@ -1,4 +1,6 @@
 """Real installer subprocess, fresh home, preservation, and portable source packets."""
+import contextlib
+import io
 import json
 import importlib.util
 import os
@@ -33,14 +35,72 @@ class InstallTests(unittest.TestCase):
             self.assertNotIn("in full at startup", text, path)
             self.assertNotIn("Checked at the start of every conversation", text, path)
 
+    def test_neutral_home_config_is_written_and_read_without_env(self):
+        spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")
+        installer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        with tempfile.TemporaryDirectory(prefix="brain-config-") as tmp:
+            home = Path(tmp).resolve() / "home"
+            vault = home / "Notes" / "My Brain"
+            with contextlib.redirect_stdout(io.StringIO()):
+                installer.install(home, vault, apply=True, client="codex")
+            config = json.loads((home / ".agent-brain/config.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["vault_root"], str(vault))
+            self.assertEqual(config["clients"], ["codex"])
+            self.assertEqual(config["automation_dir"], str(home / ".claude/vault-automation"))
+            # A v1 home has no config.json: the other client's settings still decide the vault, so adding a client
+            # without --vault joins the existing vault instead of creating ~/Documents/Brain.
+            (home / ".agent-brain/config.json").unlink()
+            self.assertEqual(installer.configured_vault(home, "claude"), vault)
+            with contextlib.redirect_stdout(io.StringIO()):
+                installer.install(home, installer.configured_vault(home, "claude"), apply=True, client="claude")
+            config = json.loads((home / ".agent-brain/config.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["clients"], ["claude", "codex"])
+            self.assertEqual(config["vault_root"], str(vault))
+            # With no BRAIN_* variables at all, the controller and the hook adapter resolve through the config.
+            env = {k: v for k, v in os.environ.items() if not k.startswith("BRAIN_") and k not in ("VAULT_AUTOMATION_DIR", "VAULT_AUTOMATION")}
+            env.update(HOME=str(home), USERPROFILE=str(home), PYTHONIOENCODING="utf-8")
+            probe = subprocess.run([sys.executable, "-c", "import vault_core; print(vault_core.DEFAULT_VAULT)"],
+                                   cwd=str(home / ".claude/vault-automation"), capture_output=True, text=True, env=env, timeout=30)
+            self.assertEqual(probe.stdout.strip(), str(vault), probe.stderr)
+            note = vault / "00 - Inbox/Config probe.md"
+            note.write_text("# no metadata\n", encoding="utf-8")
+            hook = subprocess.run([sys.executable, str(home / ".claude/hooks/vault/validate-vault-frontmatter.py")],
+                                  input=json.dumps({"tool_input": {"file_path": str(note)}}), capture_output=True, text=True, env=env, timeout=30)
+            self.assertEqual(hook.returncode, 2, hook.stdout + hook.stderr)
+            self.assertIn("Missing opening frontmatter", hook.stderr)
+
+    def test_stale_other_client_is_refused_before_any_write(self):
+        spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")
+        installer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        with tempfile.TemporaryDirectory(prefix="brain-stale-") as tmp:
+            home = Path(tmp).resolve() / "home"
+            with contextlib.redirect_stdout(io.StringIO()):
+                installer.install(home, home / "Brain", apply=True, client="both")
+            self.assertEqual(installer.stale_clients(home, "claude"), [])
+            older = home / ".codex/skills/handoff/SKILL.md"
+            older.write_text(older.read_text(encoding="utf-8") + "\nolder release\n", encoding="utf-8")
+            self.assertEqual(installer.stale_clients(home, "claude"), ["codex"])
+            self.assertEqual(installer.stale_clients(home, "both"), [])
+            result = subprocess.run([sys.executable, str(REPO / "install.py"), "--home", str(home), "--client", "claude", "--apply", "--replace-workflow"],
+                                    capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("rerun with --client both", result.stderr)
+            self.assertNotIn("WRITE", result.stdout)
+            (home / ".agent-brain/config.json").write_text("not json", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "config.json is not valid JSON"):
+                installer.read_config(home)
+
     def test_upgrade_prunes_only_the_retired_session_end_hook(self):
         spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")
         installer = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(installer)
         retired = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/vault/session-end-enqueue.js"]}
         other = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/other-session-end.js"]}
-        stop = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/vault/stop-vault-gate.js"]}
-        hooks = {"SessionEnd": [{"hooks": [retired]}, {"hooks": [other, dict(retired)]}], "Stop": [{"hooks": [stop]}]}
+        old_stop = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/vault/stop-vault-gate.js"]}
+        stop = {"type": "command", "command": "python", "args": ["/home/x/.claude/hooks/vault/stop-vault-gate.py"]}
+        hooks = {"SessionEnd": [{"hooks": [retired]}, {"hooks": [other, dict(retired)]}], "Stop": [{"hooks": [old_stop]}, {"hooks": [stop]}]}
         installer.prune_retired_hooks(hooks)
         self.assertEqual(hooks, {"SessionEnd": [{"hooks": [other]}], "Stop": [{"hooks": [stop]}]})
         only_retired = {"SessionEnd": [{"hooks": [retired]}]}

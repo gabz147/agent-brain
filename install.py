@@ -21,6 +21,7 @@ for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8")
 
 REPO = Path(__file__).resolve().parent
+CONFIG_VERSION = 1
 BLOCK = re.compile(r"<!-- SHARED VAULT RULES START -->.*?<!-- SHARED VAULT RULES END -->", re.S)
 SKILLS = ("obsidian-vault", "handoff", "source-to-vault")
 
@@ -34,6 +35,60 @@ def selected(client):
 def environment(home, vault):
     return {"BRAIN_VAULT_ROOT": str(vault), "BRAIN_AUTOMATION_DIR": str(home / ".claude/vault-automation"),
             "BRAIN_PYTHON": sys.executable}
+
+
+def config_bytes(home, vault, clients, existing):
+    """The neutral home's config.json: Brain paths any client or adapter can read without environment injection."""
+    data = dict(existing)
+    known = data.get("clients") if isinstance(data.get("clients"), list) else []
+    data.update({"version": CONFIG_VERSION, "vault_root": str(vault), "automation_dir": str(home / ".claude/vault-automation"),
+                 "python": sys.executable, "clients": sorted({*map(str, known), *clients})})
+    return (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def read_config(home):
+    path = home / ".agent-brain/config.json"
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except ValueError as exc:
+        raise ValueError(f"{path} is not valid JSON ({exc}); delete it and rerun, setup regenerates it") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must be a JSON object; delete it and rerun, setup regenerates it")
+    return data
+
+
+def installed_clients(home):
+    """Clients whose Brain skills or boot block are already present under this home."""
+    found = []
+    for name, boot in (("claude", "CLAUDE.md"), ("codex", "AGENTS.md")):
+        root = home / ("." + name)
+        boot_text = (root / boot).read_text(encoding="utf-8-sig") if (root / boot).is_file() else ""
+        if (root / "skills/obsidian-vault/SKILL.md").exists() or BLOCK.search(boot_text):
+            found.append(name)
+    return found
+
+
+def stale_clients(home, client):
+    """Installed clients left out of this selection whose copies differ from this package.
+
+    Upgrading only one of two installed clients would leave mirrored skills and boot blocks
+    unequal, which the installed hygiene check reports after every file is written."""
+    stale = []
+    for name in installed_clients(home):
+        if name in selected(client):
+            continue
+        root = home / ("." + name)
+        boot = "CLAUDE.md" if name == "claude" else "AGENTS.md"
+        skills_same = all((root / "skills" / skill / "SKILL.md").is_file()
+                          and (root / "skills" / skill / "SKILL.md").read_bytes() == (REPO / "skills" / skill / "SKILL.md").read_bytes()
+                          for skill in SKILLS)
+        block = BLOCK.search((root / boot).read_text(encoding="utf-8-sig")) if (root / boot).is_file() else None
+        package = BLOCK.search((REPO / "boot" / boot).read_text(encoding="utf-8")).group()
+        if not skills_same or block is None or block.group() != package:
+            stale.append(name)
+    return stale
 
 
 def toml_bytes(data):
@@ -108,6 +163,7 @@ def installation(home, vault, replace=False, client="both"):
                 continue
             add(auto / path.name, path.read_bytes())
     add(auto / "FIRST-CHECKPOINT.md", (REPO / "FIRST-CHECKPOINT.md").read_bytes())
+    add(home / ".agent-brain/config.json", config_bytes(home, vault, {*clients, *installed_clients(home)}, read_config(home)), merge=True)
     if "claude" in clients:
         copy_tree(REPO / "hooks/vault", home / ".claude/hooks/vault")
     for name in clients:
@@ -145,8 +201,9 @@ def installation(home, vault, replace=False, client="both"):
 
 
 # Brain adapters that earlier releases installed and this release retires.
-# session-end-enqueue.js only fed the removed background model-capture drain.
-RETIRED_HOOKS = ("session-end-enqueue.js",)
+# session-end-enqueue.js only fed the removed background model-capture drain;
+# stop-vault-gate.js was the Node launcher replaced by stop-vault-gate.py.
+RETIRED_HOOKS = ("session-end-enqueue.js", "stop-vault-gate.js")
 
 
 def prune_retired_hooks(hooks):
@@ -157,9 +214,10 @@ def prune_retired_hooks(hooks):
             continue
         kept_groups = []
         for group in groups:
-            entries = group.get("hooks", []) if isinstance(group, dict) else []
+            entries = group.get("hooks") if isinstance(group, dict) else None
+            entries = entries if isinstance(entries, list) else []
             kept = [h for h in entries if not (isinstance(h, dict) and any(
-                name in str(part) for name in RETIRED_HOOKS for part in [h.get("command", ""), *h.get("args", [])]))]
+                name in str(part) for name in RETIRED_HOOKS for part in [h.get("command", ""), *(h.get("args") or [])]))]
             if entries and not kept:
                 continue
             if len(kept) != len(entries):
@@ -191,18 +249,22 @@ def merge_claude(home, env, add, replace):
             entry = json.loads(json.dumps(entry))
             for hook in entry["hooks"]:
                 name = Path(hook["args"][0]).name
-                interpreter = sys.executable if hook["command"] == "python" else shutil.which("node") or "node"
+                interpreter = sys.executable if hook["command"] == "python" else shutil.which(hook["command"]) or hook["command"]
                 hook["command"] = interpreter
                 hook["args"] = [str(home / ".claude/hooks/vault" / name)]
             # Match only our adapter filenames; preserve all unrelated commands/groups.
             def matches(hook):
-                return name in hook.get("command", "") or any(name in a for a in hook.get("args", []))
-            matching = [h for group in existing for h in group.get("hooks", [])
-                        if matches(h)]
+                return isinstance(hook, dict) and (name in str(hook.get("command", ""))
+                                                   or any(isinstance(a, str) and name in a for a in (hook.get("args") or [])))
+
+            def entries_of(group):
+                hooks_list = group.get("hooks") if isinstance(group, dict) else None
+                return hooks_list if isinstance(hooks_list, list) else []
+            matching = [h for group in existing for h in entries_of(group) if matches(h)]
             if matching:
                 if matching != entry["hooks"]:
                     # Only replace an isolated, recognized Brain hook group. Never discard other hooks.
-                    groups = [g for g in existing if any(matches(h) for h in g.get("hooks", []))]
+                    groups = [g for g in existing if any(matches(h) for h in entries_of(g))]
                     if not replace or len(groups) != 1 or len(groups[0].get("hooks", [])) != 1:
                         raise ValueError(f"Existing {event} vault hook differs; review and use --replace-workflow, or merge a combined hook group manually")
                     existing[existing.index(groups[0])] = entry
@@ -311,15 +373,13 @@ def executable(name):
 
 def doctor(client, include_clients=True):
     problems = []
-    names = (["node"] if "claude" in selected(client) else []) + (list(selected(client)) if include_clients else [])
+    names = list(selected(client)) if include_clients else []
     print(f"Python {sys.version.split()[0]}: {sys.executable}")
     for name in names:
         try:
             result = subprocess.run(executable(name) + ["--version"], capture_output=True, text=True, encoding="utf-8", timeout=20)
             if result.returncode:
                 raise ValueError(f"{name} --version failed: {result.stderr.strip()}")
-            if name == "node" and int(result.stdout.strip().lstrip("v").split(".")[0]) < 22:
-                raise ValueError("Node.js 22+ is required for the Claude hook runtime")
             if name == "claude":
                 version = re.search(r"(\d+)\.(\d+)\.(\d+)", result.stdout)
                 if not version or tuple(map(int, version.groups())) < (2, 1, 270):
@@ -328,8 +388,6 @@ def doctor(client, include_clients=True):
         except (ValueError, OSError, subprocess.TimeoutExpired) as exc:
             problems.append(name)
             print(f"MISSING {name}: {exc}")
-    if "node" in problems:
-        print("Install Node.js LTS: https://nodejs.org/en/download then reopen your terminal.")
     for name in selected(client):
         if name in problems:
             print(f"Install {name}: " + ("https://code.claude.com/docs/en/setup" if name == "claude" else "https://github.com/openai/codex#installing-and-running-codex-cli"))
@@ -356,8 +414,12 @@ def install_client(name):
 
 
 def configured_vault(home, client):
+    """The vault config.json and every installed client already agree on, so a newly added client joins it."""
     paths = set()
-    for name in selected(client):
+    root = read_config(home).get("vault_root")
+    if isinstance(root, str) and root:
+        paths.add(Path(root).expanduser().resolve())
+    for name in selected("both"):
         path = home / ("." + name) / ("settings.json" if name == "claude" else "config.toml")
         if not path.exists():
             continue
@@ -365,11 +427,11 @@ def configured_vault(home, client):
         data = json.loads(text) if name == "claude" else tomllib.loads(text)
         if not isinstance(data, dict):
             raise ValueError(f"{name} settings must be an object")
-        env = data.get("env", {}) if name == "claude" else data.get("shell_environment_policy", {}).get("set", {})
-        if env.get("BRAIN_VAULT_ROOT"):
+        env = (data.get("env") or {}) if name == "claude" else ((data.get("shell_environment_policy") or {}).get("set") or {})
+        if isinstance(env, dict) and isinstance(env.get("BRAIN_VAULT_ROOT"), str) and env["BRAIN_VAULT_ROOT"]:
             paths.add(Path(env["BRAIN_VAULT_ROOT"]).expanduser().resolve())
     if len(paths) > 1:
-        raise ValueError("Selected clients use different vaults. Choose the intended one with --vault.")
+        raise ValueError("config.json and the installed clients point at different vaults. Choose the intended one with --vault.")
     return next(iter(paths), home / "Documents/Brain")
 
 
@@ -404,7 +466,9 @@ def main():
         if not sys.stdin.isatty():
             parser.error("Interactive setup needs a terminal. Use --client claude|codex|both and --apply for scripted installation.")
         print("Agent Brain: a private Obsidian vault for your terminal agent.\nObsidian should already be installed. No GitHub login is needed.")
-        answer = input("Choose your agent: 1 Claude Code, 2 Codex, 3 Both [1]: ").strip() or "1"
+        present = installed_clients(home)
+        default = "3" if len(present) == 2 else "2" if present == ["codex"] else "1"
+        answer = input(f"Choose your agent: 1 Claude Code, 2 Codex, 3 Both [{default}]: ").strip() or default
         if answer not in ("1", "2", "3"):
             parser.error("Choose 1, 2, or 3; rerun setup.")
         args.client = {"1": "claude", "2": "codex", "3": "both"}[answer]
@@ -420,17 +484,19 @@ def main():
             vault = Path(answer).expanduser().resolve()
     if args.persist_env and (os.name != "nt" or home != Path.home().resolve()):
         parser.error("--persist-env requires Windows and the current user's home")
-    if any(root == vault or vault in root.parents or root in vault.parents for root in (REPO, home / ".claude", home / ".codex")):
+    if any(root == vault or vault in root.parents or root in vault.parents for root in (REPO, home / ".claude", home / ".codex", home / ".agent-brain")):
         parser.error("Vault must be separate from the checkout and client directories")
     if args.doctor:
         return 1 if doctor(args.client) else 0
     if args.verify:
         verify(home, vault)
         return 0
+    stale = stale_clients(home, args.client)
+    if stale:
+        raise ValueError(f"{' and '.join(stale)} already has an older Brain release installed under this home; "
+                         f"rerun with --client both so both clients stay identical, or remove that client's copies first")
     if args.wizard:
         problems = doctor(args.client)
-        if "node" in problems:
-            return 1
         for name in problems:
             if home != Path.home().resolve():
                 raise ValueError("Install missing clients separately before testing an isolated --home")

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+from pathlib import Path
 import re
 
 from vault_core import (MONTHS, VaultError, atomic_json, format_note_time, frontmatter, is_daily,
@@ -354,3 +355,115 @@ def fact_freshness(vault, max_age_days=90):
             "handoffs": handoffs,
             "convention": "Suffix a fact that can change with (as of YYYY-MM-DD) or (as of Month D, YYYY); "
                           "re-verify before relying on a stale one."}
+
+
+# -------------------------------------------------------------- session brief
+
+BRIEF_CAP = 700
+BRIEF_LINE = 160
+HOOK_ERROR_DAYS = 7
+
+
+def _clip_to(text, limit):
+    """Clip to a UTF-8 byte budget, since the brief's cap is in bytes."""
+    text = " ".join(text.split())
+    if len(text.encode("utf-8")) <= limit:
+        return text
+    while text and len(text.encode("utf-8")) > limit - 3:
+        text = text[:-1]
+    return text + "…"
+
+
+def latest_daily(vault):
+    """The newest dated daily note: day, Open line and session headings, read without the bodies."""
+    dailies = [p for p in vault.notes() if is_daily(p)]
+    if not dailies:
+        return None
+    path = max(dailies, key=lambda p: p.stem)  # stems are ISO dates; month folders sort by month, not year
+    open_line, sessions = None, []
+    for _, line in _unfenced_lines(read_text(path)):
+        if line.startswith("**Open for tomorrow:**"):
+            open_line = line[len("**Open for tomorrow:**"):].strip()
+        elif re.match(r"^## Session \d+\b", line):
+            sessions.append(line[3:].strip())
+    return {"day": path.stem, "open": open_line, "sessions": sessions}
+
+
+def active_now(vault):
+    """Actionable bullets under Active Now, without their touched markers."""
+    info = vault.inspect("Active Priorities.md")
+    if info["text"] is None:
+        return []
+    section = re.search(r"^## Active Now\r?\n(.*?)(?=^## |\Z)", info["text"], re.S | re.M)
+    items = []
+    for line in (section.group(1).splitlines() if section else []):
+        if line.startswith("- ") and line.strip() != "- None":
+            items.append(re.sub(r"\s*`touched: \d{4}-\d{2}-\d{2}`", "", line[2:]).strip())
+    return items
+
+
+def recent_hook_errors(automation_dir, days=HOOK_ERROR_DAYS):
+    """Fail-open hook errors nobody would otherwise see."""
+    path = Path(automation_dir) / "hook-errors.jsonl"
+    if not path.exists():
+        return 0
+    since = now() - dt.timedelta(days=days)
+    count = 0
+    for line in read_text(path).splitlines():
+        try:
+            at = dt.datetime.fromisoformat(json.loads(line)["at"])
+            if at.tzinfo is None:
+                at = at.astimezone()
+            if at >= since:
+                count += 1
+        except (ValueError, KeyError, TypeError):
+            continue
+    return count
+
+
+def session_brief(vault, automation_dir=None, cap=BRIEF_CAP):
+    """Plain-text continuity for the start of a session: navigation, never evidence. Reads only; never raises."""
+    if not (vault.root / "VAULT-INDEX.md").is_file():
+        return f"Brain: no vault at {vault.root}; run the Agent Brain setup."
+    lines = []  # (priority, text); the lowest priority is dropped first under the cap
+
+    def add(priority, text):
+        lines.append((priority, _clip_to(text, BRIEF_LINE)))
+
+    try:
+        daily, failure = latest_daily(vault), None
+    except Exception as exc:
+        daily, failure = None, exc
+    if failure is not None:
+        add(9, f"Brain: could not read the latest daily note ({type(failure).__name__}: {failure}); check it before relying on history.")
+    elif daily is None:
+        add(9, "Brain: no sessions recorded yet.")
+    else:
+        add(9, f"Brain: last day {daily['day']}" + (f"; open: {daily['open']}" if daily["open"] else ""))
+        for index, heading in enumerate(reversed(daily["sessions"][-2:])):
+            add(6 - index, ("Last session: " if index == 0 else "Before that: ") + heading)
+    try:
+        items = active_now(vault)
+    except Exception:
+        items = []
+    if items:
+        add(5, "Active Now: " + " · ".join(_clip_to(item, 80) for item in items[:5]))
+    if automation_dir:
+        try:
+            errors = recent_hook_errors(automation_dir)
+        except Exception:
+            errors = 0
+        if errors:
+            add(7, f"Hook errors: {errors} in the last {HOOK_ERROR_DAYS} days; see {Path(automation_dir) / 'hook-errors.jsonl'}")
+    add(8, "Read VAULT-INDEX.md once before substantive work; checkpoint through vaultctl.py before handing back. This brief is navigation, not evidence.")
+    kept = set(range(len(lines)))
+
+    def size():
+        return len("\n".join(lines[i][1] for i in sorted(kept)).encode("utf-8"))
+
+    for i in sorted(range(len(lines)), key=lambda i: lines[i][0]):
+        if size() <= cap:
+            break
+        if lines[i][0] < 8:
+            kept.discard(i)
+    return "\n".join(lines[i][1] for i in sorted(kept))

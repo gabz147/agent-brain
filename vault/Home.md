@@ -2,7 +2,7 @@
 status: active
 project: meta
 type: index
-updated_by: astra
+updated_by: human
 updated: 2026-09-16
 ---
 # Brain

@@ -10,7 +10,7 @@ The Python controller is required for live vault writes and checkpoints. The Pow
 | `vault_sources.py` | Claude/Codex transcript fragments, real model attribution, and source-bound coverage |
 | `vault_capture.py` | Validates checkpoint proposals and records source-bound receipts; controller alone writes |
 | `vault_hooks.py` | Live Stop decision logic; a request never claims capture |
-| `vault_recall.py` | Read-only recall eval, consolidation digest and `(as of <date>)` fact freshness; no index |
+| `vault_recall.py` | Read-only session brief, recall eval, consolidation digest and `(as of <date>)` fact freshness; no index |
 | `obsidian_read.py` | Optional read-only Obsidian CLI observations (links, backlinks, properties, local recovery history, write preflight); never writes |
 | `vault_hygiene.py`, `vault_runtime.py` | Deterministic schema/index/priority checks, boot/skill parity, and approved runtime drift checks |
 | `invoke-vault-job.ps1`, `nightly-audit.ps1` | Guarded scheduled audit entry point; only verified audit results advance the day stamp |
@@ -28,19 +28,19 @@ python vaultctl.py checkpoint --summary --source codex --session '<id>' --transc
 python vaultctl.py checkpoint --summary --source codex --session '<id>' --transcript '<actual.jsonl>' --trivial '<reason>'
 python vaultctl.py validate
 python vaultctl.py hygiene
-python vaultctl.py costs
 python vaultctl.py recall-eval [--record]
 python vaultctl.py consolidate-context [--days 7] [--mark YYYY-MM-DD]
 python vaultctl.py fact-freshness [--max-age-days 90]
+python vaultctl.py session-brief
 ```
 
 Use `--source claude` for Claude sessions. See the vault's `Vault Workflow Contract.md` for JSON formats and restore. A concurrent hash mismatch requires fresh reads and a rebuilt operation; never overwrite the other writer's edit. Existing daily sessions are immutable.
 
-## Checkpoints and costs
+## Checkpoints
 
 Capture is live only. The agent writes each checkpoint in its own session through `checkpoint`; there is no background, scheduled or retrospective model capture. The earlier hourly drain (`VaultQueueDrain`, `drain-queue.ps1`, `vault_queue.py` and the SessionEnd enqueue hook) was removed because it spent the user's plan usage on unattended model runs while they were away. A session that ends without a checkpoint is not summarized automatically; checkpoint it later from its transcript if needed.
 
-`already_covered` needs a matching complete daily section; `trivial` needs source evidence and an honest reason. Exit 0, note names, timestamps, unrelated edits, and prose claims cannot certify success. `vaultctl.py costs` summarizes any historical capture records in `state-v2/outcomes.jsonl`; it is not a subscription bill.
+`already_covered` needs a matching complete daily section; `trivial` needs source evidence and an honest reason. Exit 0, note names, timestamps, unrelated edits, and prose claims cannot certify success.
 
 Upgrading from a release with the drain: the installer removes the retired SessionEnd hook entry. Remove an existing `VaultQueueDrain` task yourself (`Unregister-ScheduledTask -TaskName VaultQueueDrain`); left in place it can no longer start a model and only logs an error. Leftover queue/spool files can be deleted.
 
@@ -80,7 +80,7 @@ python "$auto\vaultctl.py" snapshot-runtime
 python "$auto\vaultctl.py" hygiene
 ```
 
-The baseline is private at `<BRAIN_STATE_DIR>/runtime-contract.json`. Core-only installations do not require a scheduled-task baseline. Runtime checks compare the actual hooks and this task without repairing them. After upgrading from a release with the drain, remove `VaultQueueDrain` and re-record the baseline once, since the approved runtime changed. Do not re-record a baseline just to hide unexplained drift.
+The baseline is private at `<BRAIN_STATE_DIR>/runtime-contract.json`. Core-only installations do not require a scheduled-task baseline. Runtime checks compare the actual hooks and this task without repairing them. After upgrading from a release with the drain, remove `VaultQueueDrain` and re-record the baseline once, since the approved runtime changed. The release that replaced the Node Stop launcher and added the SessionStart hook also changed the approved hook wiring; inspect the new settings, then re-record once. Do not re-record a baseline just to hide unexplained drift.
 
 The audit defers with input less than five minutes ago, fullscreen foreground, an unavailable presence probe, or a pause toggle. `-Force` skips only the daily audit stamp. Keep Interactive identity; SYSTEM/S4U cannot observe the user's input session correctly. Keep the VBS launcher to avoid console flashes.
 

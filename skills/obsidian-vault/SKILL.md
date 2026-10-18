@@ -4,7 +4,7 @@ description: "Search, recall, continue, audit or update the user's shared Obsidi
 ---
 # Shared Obsidian Vault
 
-Resolve `<BRAIN_VAULT_ROOT>` and `<BRAIN_AUTOMATION_DIR>` from the environment, defaulting to `~/Documents/Brain` and `~/.claude/vault-automation`. Use `BRAIN_PYTHON`, otherwise `python3` on macOS/Linux or `python` on Windows. Angle-bracket paths are placeholders, not literal directories. The boot's loading policy and guarantees apply; `10 - Resources/Vault Workflow Contract.md` holds write mechanics.
+Resolve `<BRAIN_VAULT_ROOT>` and `<BRAIN_AUTOMATION_DIR>` from the environment, else from `~/.agent-brain/config.json` (`vault_root`, `automation_dir`), defaulting to `~/Documents/Brain` and `~/.claude/vault-automation`. Use `BRAIN_PYTHON`, otherwise `python3` on macOS/Linux or `python` on Windows. Angle-bracket paths are placeholders, not literal directories. The boot's loading policy and guarantees apply; `10 - Resources/Vault Workflow Contract.md` holds write mechanics.
 
 ## Retrieve
 

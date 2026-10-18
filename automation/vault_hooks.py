@@ -96,8 +96,12 @@ def signals(rows):
                 shells.append(command)
             if any(durable_command(piece) for piece in pieces):
                 durable.append(command)
+    # A long answer alone is a reply, not work: prose counts only alongside real tool use,
+    # which is several tool calls or a delegated agent.
+    delegated = any(call.get("name") in ("Agent", "Task") for call in calls.values())
     return {"writes": writes, "mutating_shells": len(shells), "durable": len(durable), "text_chars": text_chars,
-            "substantive": bool(writes or durable or len(shells) >= 3 or text_chars >= 1500)}
+            "tool_calls": len(calls), "delegated": delegated,
+            "substantive": bool(writes or durable or len(shells) >= 3 or (text_chars >= 1500 and (len(calls) >= 5 or delegated)))}
 
 
 def pending_agents(rows, current_ms):

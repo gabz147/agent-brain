@@ -185,8 +185,6 @@ class OnboardingTests(unittest.TestCase):
             self.assertFalse((home / ".claude/settings.json").exists())
 
     def test_installed_claude_hooks_run_directly_with_special_paths(self):
-        if not shutil.which("node"):
-            self.skipTest("Hook check requires Node")
         with tempfile.TemporaryDirectory(prefix="brain hook ") as tmp:
             home = Path(tmp).resolve() / "Someone's $notes"
             vault = home / "Brain"

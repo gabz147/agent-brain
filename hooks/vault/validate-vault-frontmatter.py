@@ -6,7 +6,11 @@ import os
 from pathlib import Path
 import sys
 
-AUTOMATION = Path(os.environ.get("BRAIN_AUTOMATION_DIR") or os.environ.get("VAULT_AUTOMATION_DIR") or Path.home() / ".claude" / "vault-automation").expanduser()
+try:
+    from brain_paths import automation_dir
+    AUTOMATION = automation_dir()
+except Exception:  # a partial install still resolves the legacy default
+    AUTOMATION = Path(os.environ.get("BRAIN_AUTOMATION_DIR") or os.environ.get("VAULT_AUTOMATION_DIR") or Path.home() / ".claude" / "vault-automation").expanduser()
 sys.path.insert(0, str(AUTOMATION))
 try:
     from vault_core import SCHEMA, Vault, VaultError, frontmatter, is_daily, now, read_text, validate

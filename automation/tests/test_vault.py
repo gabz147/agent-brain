@@ -86,7 +86,7 @@ class SchemaTests(Fixture):
         self.assertTrue(core.validate(HEADER.replace("project: personal", "project: meta"), "01 - Daily Notes/2026-09-05.md"))
 
     def test_model_labels(self):
-        self.assertEqual(core.model_label("gpt-6-astra"), "astra")
+        self.assertEqual(core.model_label("gpt-6-astra"), "gpt-6-astra")  # no shipped label map: the exact lowercase id
         self.assertEqual(core.model_label("claude-opus-5"), "opus 5")
         self.assertEqual(core.model_label("claude-sonnet-4-6"), "sonnet 4.6")
         for model in (None, "codex", "claude"):
@@ -318,6 +318,17 @@ class HookTests(Fixture):
         self.assertIn('"Daily checkpoints and coverage"', text)
         self.assertNotIn("Read and reconcile", text)
 
+    def test_long_answer_counts_only_beside_real_tool_use(self):
+        rows = [{"type": "user", "origin": {"kind": "human"}, "uuid": "t", "message": {"content": "Explain this"}},
+                {"type": "assistant", "message": {"content": [{"type": "text", "text": "A long answer. " * 200}]}}]
+        self.assertFalse(hooks.signals(rows)["substantive"])
+        for n in range(5):
+            rows.append({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": f"r{n}", "name": "Bash", "input": {"command": "cat notes.md"}}]}})
+            rows.append({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": f"r{n}", "content": "text"}]}})
+        evidence = hooks.signals(rows)
+        self.assertEqual(evidence["tool_calls"], 5)
+        self.assertTrue(evidence["substantive"])
+
     def test_topic_write_is_not_checkpoint_completion(self):
         payload = self.gate_fixture(vault_write=True)
         self.assertEqual(hooks.stop_gate(payload, self.vault, self.directory)[0], 2)
@@ -464,7 +475,7 @@ class RecallMeasurementTests(Fixture):
 class RuntimeContractTests(unittest.TestCase):
     def test_runtime_hash_covers_only_vault_hooks(self):
         import vault_runtime
-        gate = {"type": "command", "command": "node C:\\Users\\me\\.claude\\hooks\\vault\\stop-vault-gate.js"}
+        gate = {"type": "command", "command": "python C:\\Users\\me\\.claude\\hooks\\vault\\stop-vault-gate.py"}
         base = {"Stop": [{"hooks": [gate]}], "PostToolUse": [{"matcher": "Read", "hooks": [{"type": "command", "command": "node other.js"}]}]}
         changed = json.loads(json.dumps(base))
         changed["PostToolUse"][0]["hooks"][0]["command"] = "node another.js"
