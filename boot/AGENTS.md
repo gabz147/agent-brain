@@ -24,4 +24,4 @@ This loading policy replaces older blanket startup/compaction reads in Brain not
 - Hooks fail open on internal errors. Checkpoints are live only; nothing captures sessions with a model in the background.
 <!-- SHARED VAULT RULES END -->
 
-Codex has no hooks: run `vaultctl.py session-brief` once for continuity, checkpoint directly, and verify the runtime model from trusted metadata or this session's `turn_context.model` in `~/.codex/sessions/`.
+Codex has no hooks: run `vaultctl.py session-brief` once for continuity, checkpoint directly, and verify the runtime model from this session's `turn_context.model` in `~/.codex/sessions/`.
