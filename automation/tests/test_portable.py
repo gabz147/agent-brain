@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import vault_adapters
 import vault_core as core
 from vault_hygiene import parity
 
@@ -121,14 +122,28 @@ class PortableTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertIn("SessionStart brief", (missing / "hook-errors.jsonl").read_text(encoding="utf-8"))
 
-    def test_one_client_and_two_client_parity(self):
+    def test_one_two_and_n_agent_parity(self):
         home = self.base / "Fresh home"
-        for client, boot in ((".claude", "CLAUDE.md"), (".codex", "AGENTS.md")):
-            root = home / client
-            root.mkdir(parents=True)
-            shutil.copy2(REPO / "boot" / boot, root / boot)
-            shutil.copytree(REPO / "skills", root / "skills")
-            self.assertEqual(parity(home), [])
-        changed = home / ".codex/skills/handoff/SKILL.md"
+        adapters = vault_adapters.load()
+        self.assertEqual(parity(home), ["No installed client boot files"])
+        # One agent, two, then every adapter: each copy is checked against one rendering.
+        for count, name in enumerate(adapters, 1):
+            adapter = adapters[name]
+            target = vault_adapters.instructions_path(adapter, home)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(vault_adapters.render_file(adapter), encoding="utf-8")
+            for directory in vault_adapters.skill_dirs([name], home, adapters):
+                if not directory.exists():
+                    shutil.copytree(REPO / "skills", directory)
+            self.assertEqual(parity(home), [], f"{count} agents")
+        changed = home / ".agents/skills/handoff/SKILL.md"
         changed.write_text(changed.read_text(encoding="utf-8") + "\nChanged copy\n", encoding="utf-8")
-        self.assertIn("Skill mirror mismatch: handoff", parity(home))
+        self.assertEqual(parity(home).count("Skill mirror mismatch: handoff"), 1)
+        changed.write_bytes((REPO / "skills/handoff/SKILL.md").read_bytes())
+        # Another agent's tail in this agent's block is drift, and so is a missing block.
+        kiro = vault_adapters.instructions_path(adapters["kiro"], home)
+        kiro.write_text(vault_adapters.render_file(adapters["qwen"]), encoding="utf-8")
+        self.assertEqual(parity(home), ["Boot shared-rule block differs from this release: kiro"])
+        claude = vault_adapters.instructions_path(adapters["claude"], home)
+        claude.write_text("My own rules.\n", encoding="utf-8")
+        self.assertIn("Missing shared-rule block: " + str(claude), parity(home))

@@ -33,7 +33,7 @@ class ReleaseGuards(unittest.TestCase):
         template = stop_template()
         self.assertTrue(template.startswith("Vault checkpoint requested for session {session_id}."))
         headings = set(re.findall(r"^## (.+)$", CONTRACT.read_text(encoding="utf-8"), re.M))
-        sources = [REPO / "boot/CLAUDE.md", REPO / "boot/AGENTS.md", REPO / "SKILL.md", *sorted((REPO / "skills").glob("*/SKILL.md"))]
+        sources = [REPO / "boot/BRAIN.md", REPO / "SKILL.md", *sorted((REPO / "skills").glob("*/SKILL.md"))]
         texts = [template] + [path.read_text(encoding="utf-8") for path in sources]
         named = {name for text in texts for pattern in SECTION_REFERENCES for name in pattern.findall(text)}
         self.assertGreaterEqual(named, {"Daily checkpoints and coverage", "Shared writer", "Related notes and ledgers", "Read and reconcile"})

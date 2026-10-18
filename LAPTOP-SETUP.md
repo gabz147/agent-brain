@@ -1,8 +1,9 @@
 # Set up Agent Brain
 
 Agent Brain is a standalone public vault workflow. You need this repository only.
-It installs a generic Obsidian vault and three related skills for Claude Code,
-Codex, or both, without anyone's personal notes or unrelated skills.
+It installs a generic Obsidian vault and three related skills for any agent with
+an adapter in `automation/adapters/` (Claude Code, Codex CLI, GitHub Copilot CLI,
+Kiro CLI, Qwen Code, Factory Droid), without anyone's personal notes or unrelated skills.
 
 For setup through an agent, open this checkout and ask it to follow
 [SKILL.md](SKILL.md).
@@ -35,7 +36,7 @@ change or model call. Vendor installers have their own platform requirements.
 
 Copy the command for your system from the [README](README.md#install).
 
-1. Choose Claude Code, Codex, or both.
+1. Choose your agents by number or id; separate several with commas.
 2. Accept the default vault folder (`~/Documents/Brain`) or choose another.
 3. Resolve missing prerequisites. If offered, approve the official CLI installer.
    Sign-in happens separately when you start the client.
@@ -45,8 +46,8 @@ Copy the command for your system from the [README](README.md#install).
    [FIRST-CHECKPOINT.md](FIRST-CHECKPOINT.md). A copy is saved beside the controller.
 
 Startup rules ask agents to checkpoint substantive work, findings, decisions and
-handoffs. Claude also gets a Stop-hook reminder. Codex uses the instructions and
-shared writer directly. Test writing and next-session recall with the guide;
+handoffs. Claude also gets a startup brief and a Stop-hook reminder. Other agents
+run `vaultctl.py session-brief` once and checkpoint with `--source <agent> --model <id>`. Test writing and next-session recall with the guide;
 copied files alone do not prove agent behavior.
 
 ## Download and inspect
@@ -67,8 +68,8 @@ Windows PowerShell:
 python install.py --wizard
 ```
 
-For explicit noninteractive setup, preview then apply. Substitute `claude` or
-`both` for `codex`, and use `python` on Windows:
+For explicit noninteractive setup, preview then apply. Substitute any adapter id,
+a comma list such as `codex,kiro`, `both` or `all` for `codex`, and use `python` on Windows:
 
 ```bash
 python3 install.py --doctor --client codex
@@ -88,10 +89,9 @@ are disabled for another home so tests cannot install software into your account
 | Location | Content |
 |---|---|
 | Chosen vault | Generic notes, contracts, indexes and Obsidian daily templates/settings |
-| `~/.claude/CLAUDE.md`, if selected | Claude Brain startup/writing rules |
-| `~/.codex/AGENTS.md`, if selected | Codex Brain startup/writing rules |
-| Selected clients' `skills/` folders | `obsidian-vault`, `handoff`, `source-to-vault` only |
-| `~/.claude/vault-automation` | Shared writer/schema and first-checkpoint guide; used by either client |
+| Each selected agent's instructions file | Brain startup/writing rules, e.g. `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.copilot/copilot-instructions.md`, `~/.kiro/steering/agent-brain.md`, `~/.qwen/QWEN.md`, `~/.factory/AGENTS.md` |
+| One skills folder per selected agent | `obsidian-vault`, `handoff`, `source-to-vault` only; `~/.agents/skills` is shared by Codex and Copilot |
+| `~/.claude/vault-automation` | Shared writer/schema, adapter registry and first-checkpoint guide; used by every agent |
 | `~/.agent-brain/config.json` | The vault root, controller directory and interpreter, readable by any client or adapter |
 | `~/.claude/hooks/vault`, if selected | Claude startup brief, checkpoint reminder and validation adapters |
 | Selected clients' configuration | Brain paths/interpreter merged with existing settings |

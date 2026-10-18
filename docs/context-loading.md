@@ -22,10 +22,11 @@ apply. A smaller context does not mean skipping an explicitly requested review.
 From the repository root, run `python` on Windows or `python3` on macOS/Linux:
 
 ```bash
-python3 -c "from pathlib import Path; paths = ['boot/CLAUDE.md', 'boot/AGENTS.md', 'vault/VAULT-INDEX.md']; [print(p, len(Path(p).read_bytes()), 'UTF-8 bytes') for p in paths]"
+python3 -c "import sys; sys.path.insert(0, 'automation'); import vault_adapters as a; [print(n, len(a.render_file(m).encode()), 'UTF-8 bytes') for n, m in a.load().items()]"
+python3 -c "from pathlib import Path; print('vault/VAULT-INDEX.md', len(Path('vault/VAULT-INDEX.md').read_bytes()), 'UTF-8 bytes')"
 ```
 
-Tests cap each boot file at 3,600 bytes and boot plus starter map at 6,000 bytes. The old blanket startup read
+Tests cap each agent's rendered boot file at 3,600 bytes and boot plus starter map at 6,000 bytes. The old blanket startup read
 about 24 KB plus yesterday's daily note. Writes and checkpoints load their contract sections on demand.
 
 Bytes divided by four is only a rough token estimate. These figures exclude the

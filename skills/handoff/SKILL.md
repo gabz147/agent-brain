@@ -15,4 +15,4 @@ Include current verified state, one next action, necessary user inputs/decisions
 
 Sign with the verified runtime model (for example `opus 5.5`), preserve historical authorship, and commit through the shared writer. Reconcile the project's index and Active Priorities, then append a daily checkpoint with a verified source receipt.
 
-Both Claude and Codex copies of this skill are byte-identical. Detailed mechanics live only in the vault templates and contract.
+Every installed copy of this skill is byte-identical. Detailed mechanics live only in the vault templates and contract.

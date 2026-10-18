@@ -1,0 +1,22 @@
+{
+  "id": "codex",
+  "display": "Codex CLI",
+  "detect": {"dirs": ["~/.codex"], "binaries": ["codex"], "env": ["CODEX_HOME"]},
+  "instructions": {
+    "path": "~/.codex/AGENTS.md",
+    "strategy": "marker-block",
+    "tail": "Codex CLI: no brief is injected, so run `vaultctl.py session-brief` once for continuity. Checkpoint on this session's rollout in `~/.codex/sessions/` and take the model from its `turn_context.model`."
+  },
+  "skills": ["~/.agents/skills"],
+  "legacy_skills": ["~/.codex/skills"],
+  "settings": {"format": "codex-config-toml", "path": "~/.codex/config.toml"},
+  "hooks": null,
+  "home_env": "CODEX_HOME",
+  "home_dir": "~/.codex",
+  "min_version": null,
+  "install": {"posix": "https://chatgpt.com/codex/install.sh", "windows": "https://chatgpt.com/codex/install.ps1"},
+  "docs": "https://github.com/openai/codex#installing-and-running-codex-cli",
+  "transcript_adapter": "codex-rollout",
+  "verified_version": null,
+  "notes": "User skills are $HOME/.agents/skills per developers.openai.com/codex/skills (checked 2026-10-18); earlier releases installed ~/.codex/skills, which is refreshed in place when present and never created. Hooks arrive in milestone 3."
+}

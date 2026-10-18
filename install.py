@@ -1,4 +1,4 @@
-"""Set up a private Obsidian Brain for Claude Code, Codex, or both."""
+"""Set up a private Obsidian Brain for any terminal agent with an adapter in automation/adapters."""
 import argparse
 import datetime as dt
 import hashlib
@@ -25,14 +25,31 @@ for stream in (sys.stdout, sys.stderr):
 
 REPO = Path(__file__).resolve().parent
 CONFIG_VERSION = 1
-BLOCK = re.compile(r"<!-- SHARED VAULT RULES START -->.*?<!-- SHARED VAULT RULES END -->", re.S)
-SKILLS = ("obsidian-vault", "handoff", "source-to-vault")
+sys.path.insert(0, str(REPO / "automation"))
+from vault_adapters import (SKILLS, SUPPORTED_STRATEGIES, detected, expand, installed_block,  # noqa: E402
+                            instructions_path, is_installed, load, merge_block, render_block, render_file, skill_dirs)
+
+ADAPTERS = load(REPO / "automation/adapters")
 
 
-def selected(client):
-    if client not in ("claude", "codex", "both"):
-        raise ValueError("Choose claude, codex, or both")
-    return ("claude", "codex") if client == "both" else (client,)
+def selected(client, home=None):
+    """Adapter ids for --client: one id, a comma list, both (claude,codex) or all (every detected agent)."""
+    if client == "both":
+        return ("claude", "codex")
+    if client == "all":
+        found = tuple(name for name, adapter in ADAPTERS.items() if detected(adapter, home or Path.home()))
+        if not found:
+            raise ValueError("No supported agent was detected; name one with --client (" + ", ".join(ADAPTERS) + ")")
+        return found
+    names = tuple(dict.fromkeys(part.strip() for part in str(client).split(",") if part.strip()))
+    unknown = [name for name in names if name not in ADAPTERS]
+    if not names or unknown:
+        raise ValueError("Choose " + ", ".join(ADAPTERS) + ", a comma-separated list, both or all")
+    for name in names:
+        strategy = ADAPTERS[name]["instructions"]["strategy"]
+        if strategy not in SUPPORTED_STRATEGIES:
+            raise ValueError(f"{ADAPTERS[name]['display']} needs the {strategy} strategy, which this release does not install yet")
+    return names
 
 
 def environment(home, vault):
@@ -63,14 +80,8 @@ def read_config(home):
 
 
 def installed_clients(home):
-    """Clients whose Brain skills or boot block are already present under this home."""
-    found = []
-    for name, boot in (("claude", "CLAUDE.md"), ("codex", "AGENTS.md")):
-        root = home / ("." + name)
-        boot_text = (root / boot).read_text(encoding="utf-8-sig") if (root / boot).is_file() else ""
-        if (root / "skills/obsidian-vault/SKILL.md").exists() or BLOCK.search(boot_text):
-            found.append(name)
-    return found
+    """Agents whose Brain boot block, or Brain skills in a dir only they read, are already present under this home."""
+    return [name for name, adapter in ADAPTERS.items() if is_installed(adapter, home, ADAPTERS)]
 
 
 def stale_clients(home, client):
@@ -78,18 +89,19 @@ def stale_clients(home, client):
 
     Upgrading only one of two installed clients would leave mirrored skills and boot blocks
     unequal, which the installed hygiene check reports after every file is written."""
+    chosen = selected(client)
+    refreshed = set(skill_dirs(chosen, home, ADAPTERS))
     stale = []
     for name in installed_clients(home):
-        if name in selected(client):
+        if name in chosen:
             continue
-        root = home / ("." + name)
-        boot = "CLAUDE.md" if name == "claude" else "AGENTS.md"
-        skills_same = all((root / "skills" / skill / "SKILL.md").is_file()
-                          and (root / "skills" / skill / "SKILL.md").read_bytes() == (REPO / "skills" / skill / "SKILL.md").read_bytes()
-                          for skill in SKILLS)
-        block = BLOCK.search((root / boot).read_text(encoding="utf-8-sig")) if (root / boot).is_file() else None
-        package = BLOCK.search((REPO / "boot" / boot).read_text(encoding="utf-8")).group()
-        if not skills_same or block is None or block.group() != package:
+        adapter = ADAPTERS[name]
+        copies = [expand(d, home) for d in adapter["skills"] + adapter.get("legacy_skills", [])]
+        copies = [d for d in copies if d not in refreshed and (d / SKILLS[0] / "SKILL.md").exists()]
+        skills_same = all((d / skill / "SKILL.md").is_file()
+                          and (d / skill / "SKILL.md").read_bytes() == (REPO / "skills" / skill / "SKILL.md").read_bytes()
+                          for d in copies for skill in SKILLS)
+        if not skills_same or installed_block(adapter, home) != render_block(adapter):
             stale.append(name)
     return stale
 
@@ -167,31 +179,37 @@ def installation(home, vault, replace=False, client="both"):
             if path.name == "vault-schema.json" and (auto / path.name).exists():
                 continue
             add(auto / path.name, path.read_bytes())
+    for path in sorted((REPO / "automation/adapters").glob("*.json")):
+        add(auto / "adapters" / path.name, path.read_bytes())
+    add(auto / "BRAIN.md", (REPO / "boot/BRAIN.md").read_bytes())
     add(auto / "FIRST-CHECKPOINT.md", (REPO / "FIRST-CHECKPOINT.md").read_bytes())
     add(home / ".agent-brain/config.json", config_bytes(home, vault, {*clients, *installed_clients(home)}, read_config(home)), merge=True)
-    if "claude" in clients:
-        copy_tree(REPO / "hooks/vault", home / ".claude/hooks/vault")
     for name in clients:
-        boot = "CLAUDE.md" if name == "claude" else "AGENTS.md"
-        target = home / ("." + name) / boot
-        text = (REPO / "boot" / boot).read_text(encoding="utf-8")
-        if target.exists() and target.read_text(encoding="utf-8-sig") != text:
+        adapter = ADAPTERS[name]
+        hooks = adapter["hooks"]
+        if hooks and hooks["format"] == "claude-settings-json":
+            copy_tree(REPO / "hooks/vault", expand(hooks["scripts"], home))
+        target = instructions_path(adapter, home)
+        text = render_file(adapter)
+        if target.exists():
             existing = target.read_text(encoding="utf-8-sig")
-            if len(BLOCK.findall(existing)) > 1:
-                raise ValueError(f"Multiple shared boot blocks need manual reconciliation: {target}")
-            block = BLOCK.search(text).group()
-            text = BLOCK.sub(lambda _: block, existing) if BLOCK.search(existing) else existing.rstrip() + "\n\n" + text
+            try:
+                text = merge_block(existing, adapter)
+            except ValueError as exc:
+                raise ValueError(f"{exc}: {target}") from exc
             if text != existing and not replace:
                 conflicts.append(str(target))
                 continue
         add(target, text.encode("utf-8"))
+    for directory in skill_dirs(clients, home, ADAPTERS):
         for skill in SKILLS:
-            copy_tree(REPO / "skills" / skill, home / ("." + name) / "skills" / skill)
+            copy_tree(REPO / "skills" / skill, directory / skill)
 
-    if "claude" in clients:
-        merge_claude(home, env, add, replace)
-    if "codex" in clients and tomllib is not None:
-        target = home / ".codex/config.toml"
+    formats = {ADAPTERS[name]["settings"]["format"]: ADAPTERS[name] for name in clients if ADAPTERS[name].get("settings")}
+    if "claude-settings-json" in formats:
+        merge_claude(home, env, add, replace, formats["claude-settings-json"])
+    if "codex-config-toml" in formats and tomllib is not None:
+        target = expand(formats["codex-config-toml"]["settings"]["path"], home)
         original = target.read_text(encoding="utf-8-sig") if target.exists() else ""
         config = tomllib.loads(original)
         policy = config.setdefault("shell_environment_policy", {})
@@ -234,15 +252,19 @@ def prune_retired_hooks(hooks):
             del hooks[event]
 
 
-def merge_claude(home, env, add, replace):
-    settings_path = home / ".claude/settings.json"
+def merge_claude(home, env, add, replace, adapter):
+    settings_path = expand(adapter["settings"]["path"], home)
+    scripts = expand(adapter["hooks"]["scripts"], home) if adapter.get("hooks") else None
     settings = json.loads(settings_path.read_text(encoding="utf-8-sig")) if settings_path.exists() else {}
     if not isinstance(settings, dict) or not isinstance(settings.get("hooks", {}), dict):
         raise ValueError("Claude settings and hooks must be JSON objects")
     if not isinstance(settings.get("env", {}), dict):
         raise ValueError("Claude settings.env must be an object")
     settings.setdefault("env", {}).update(env)
-    snippet = json.loads((REPO / "settings/vault-hooks.snippet.json").read_text(encoding="utf-8"))
+    if scripts is None:
+        add(settings_path, (json.dumps(settings, indent=2, ensure_ascii=False) + "\n").encode(), merge=True)
+        return
+    snippet = json.loads((REPO / adapter["hooks"]["snippet"]).read_text(encoding="utf-8"))
     hooks = settings.setdefault("hooks", {})
     prune_retired_hooks(hooks)
     for event, entries in snippet["hooks"].items():
@@ -256,7 +278,7 @@ def merge_claude(home, env, add, replace):
                 name = Path(hook["args"][0]).name
                 interpreter = sys.executable if hook["command"] == "python" else shutil.which(hook["command"]) or hook["command"]
                 hook["command"] = interpreter
-                hook["args"] = [str(home / ".claude/hooks/vault" / name)]
+                hook["args"] = [str(scripts / name)]
             # Match only our adapter filenames; preserve all unrelated commands/groups.
             def matches(hook):
                 return isinstance(hook, dict) and (name in str(hook.get("command", ""))
@@ -381,28 +403,40 @@ def doctor(client, include_clients=True):
     names = list(selected(client)) if include_clients else []
     print(f"Python {sys.version.split()[0]}: {sys.executable}")
     for name in names:
+        adapter = ADAPTERS[name]
         try:
-            result = subprocess.run(executable(name) + ["--version"], capture_output=True, text=True, encoding="utf-8", timeout=20)
+            binaries = adapter["detect"]["binaries"]
+            found = None
+            for binary in binaries:
+                try:
+                    found = executable(binary)
+                    break
+                except ValueError:
+                    continue
+            if found is None:
+                raise ValueError(f"{' or '.join(binaries) or name} is not installed or is missing from PATH")
+            result = subprocess.run(found + ["--version"], capture_output=True, text=True, encoding="utf-8", timeout=20)
             if result.returncode:
                 raise ValueError(f"{name} --version failed: {result.stderr.strip()}")
-            if name == "claude":
+            floor = adapter.get("min_version")
+            if floor:
                 version = re.search(r"(\d+)\.(\d+)\.(\d+)", result.stdout)
-                if not version or tuple(map(int, version.groups())) < (2, 1, 270):
-                    raise ValueError("Update Claude Code to 2.1.270+ for the tested direct-execution hooks")
+                if not version or tuple(map(int, version.groups())) < tuple(map(int, floor.split("."))):
+                    raise ValueError(f"Update {adapter['display']} to {floor}+, the tested minimum for its Brain hooks")
             print(f"OK {name}: {result.stdout.strip()}")
         except (ValueError, OSError, subprocess.TimeoutExpired) as exc:
             problems.append(name)
             print(f"MISSING {name}: {exc}")
-    for name in selected(client):
+    for name in names:
         if name in problems:
-            print(f"Install {name}: " + ("https://code.claude.com/docs/en/setup" if name == "claude" else "https://github.com/openai/codex#installing-and-running-codex-cli"))
+            print(f"Install {ADAPTERS[name]['display']}: {ADAPTERS[name].get('docs', 'see its official documentation')}")
     return problems
 
 
 def install_client(name):
     """Run only the selected client's official native installer, after opt-in."""
     windows = os.name == "nt"
-    url = ("https://claude.ai/install." if name == "claude" else "https://chatgpt.com/codex/install.") + ("ps1" if windows else "sh")
+    url = ADAPTERS[name]["install"]["windows" if windows else "posix"]
     print(f"Running the official {name} installer from {url}")
     with tempfile.TemporaryDirectory(prefix="brain-cli-") as temporary:
         script = Path(temporary) / ("install.ps1" if windows else "install.sh")
@@ -424,15 +458,18 @@ def configured_vault(home, client):
     root = read_config(home).get("vault_root")
     if isinstance(root, str) and root:
         paths.add(Path(root).expanduser().resolve())
-    for name in selected("both"):
-        path = home / ("." + name) / ("settings.json" if name == "claude" else "config.toml")
-        if not path.exists() or (name == "codex" and tomllib is None):
+    for name, adapter in ADAPTERS.items():
+        settings = adapter.get("settings")
+        if not settings:
+            continue
+        path, toml = expand(settings["path"], home), settings["format"] == "codex-config-toml"
+        if not path.exists() or (toml and tomllib is None):
             continue
         text = path.read_text(encoding="utf-8-sig")
-        data = json.loads(text) if name == "claude" else tomllib.loads(text)
+        data = tomllib.loads(text) if toml else json.loads(text)
         if not isinstance(data, dict):
             raise ValueError(f"{name} settings must be an object")
-        env = (data.get("env") or {}) if name == "claude" else ((data.get("shell_environment_policy") or {}).get("set") or {})
+        env = ((data.get("shell_environment_policy") or {}).get("set") or {}) if toml else (data.get("env") or {})
         if isinstance(env, dict) and isinstance(env.get("BRAIN_VAULT_ROOT"), str) and env["BRAIN_VAULT_ROOT"]:
             paths.add(Path(env["BRAIN_VAULT_ROOT"]).expanduser().resolve())
     if len(paths) > 1:
@@ -461,26 +498,40 @@ def main():
     parser.add_argument("--apply", action="store_true", help="Write the previewed files")
     parser.add_argument("--replace-workflow", action="store_true", help="Back up and replace package files; merge boot rules, preserve real notes/state/schema")
     parser.add_argument("--persist-env", action="store_true", help="Set Windows user BRAIN paths; use only for the current user's real installation")
-    parser.add_argument("--client", choices=("claude", "codex", "both"), default="both")
-    parser.add_argument("--wizard", action="store_true", help="Choose a client and vault, check prerequisites, preview and confirm installation")
+    parser.add_argument("--client", default="both", help="Agent id (" + ", ".join(ADAPTERS) + "), a comma list, both (claude,codex) or all detected")
+    parser.add_argument("--wizard", action="store_true", help="Choose agents and a vault, check prerequisites, preview and confirm installation")
+    parser.add_argument("--render", metavar="AGENT", help="Print the instructions file this release installs for one agent, for a manual merge; writes nothing")
     parser.add_argument("--doctor", action="store_true", help="Check prerequisites without writing")
     parser.add_argument("--verify", action="store_true", help="Check the installed vault and workflow without reinstalling")
     args = parser.parse_args()
     home = args.home.expanduser().resolve()
+    if args.render:
+        if args.render not in ADAPTERS:
+            parser.error("Unknown agent; choose " + ", ".join(ADAPTERS))
+        sys.stdout.write(render_file(ADAPTERS[args.render]))
+        return 0
     if args.wizard:
         if not sys.stdin.isatty():
-            parser.error("Interactive setup needs a terminal. Use --client claude|codex|both and --apply for scripted installation.")
+            parser.error("Interactive setup needs a terminal. Use --client <agent>[,<agent>] and --apply for scripted installation.")
         print("Agent Brain: a private Obsidian vault for your terminal agent.\nObsidian should already be installed. No GitHub login is needed.")
-        present = installed_clients(home)
-        default = "3" if len(present) == 2 else "2" if present == ["codex"] else "1"
-        answer = input(f"Choose your agent: 1 Claude Code, 2 Codex, 3 Both [{default}]: ").strip() or default
-        if answer not in ("1", "2", "3"):
-            parser.error("Choose 1, 2, or 3; rerun setup.")
-        args.client = {"1": "claude", "2": "codex", "3": "both"}[answer]
+        names = list(ADAPTERS)
+        present = installed_clients(home) or [n for n in names if detected(ADAPTERS[n], home)] or ["claude"]
+        default = ",".join(str(names.index(n) + 1) for n in present)
+        menu = ", ".join(f"{i} {ADAPTERS[n]['display']}" for i, n in enumerate(names, 1))
+        answer = input(f"Choose your agents ({menu}; comma-separate several) [{default}]: ").strip() or default
+        picks = [part.strip() for part in answer.split(",") if part.strip()]
+        try:
+            args.client = ",".join(names[int(p) - 1] if p.isdigit() and 0 < int(p) <= len(names) else p for p in picks)
+            selected(args.client, home)
+        except ValueError as exc:
+            parser.error(f"{exc}; rerun setup.")
+    args.client = ",".join(selected(args.client, home))
     if home == Path.home().resolve():
-        for name, variable in (("claude", "CLAUDE_CONFIG_DIR"), ("codex", "CODEX_HOME")):
-            value = os.environ.get(variable)
-            if name in selected(args.client) and value and Path(value).expanduser().resolve() != home / ("." + name):
+        for name in selected(args.client):
+            adapter = ADAPTERS[name]
+            variable = adapter.get("home_env")
+            value = os.environ.get(variable) if variable else None
+            if value and Path(value).expanduser().resolve() != expand(adapter["home_dir"], home):
                 raise ValueError(f"{variable} points to a nonstandard client directory. Use the manual INSTALL.md steps; no standard-profile files were changed.")
     vault = (args.vault or configured_vault(home, args.client)).expanduser().resolve()
     if args.wizard:
@@ -489,7 +540,8 @@ def main():
             vault = Path(answer).expanduser().resolve()
     if args.persist_env and (os.name != "nt" or home != Path.home().resolve()):
         parser.error("--persist-env requires Windows and the current user's home")
-    if any(root == vault or vault in root.parents or root in vault.parents for root in (REPO, home / ".claude", home / ".codex", home / ".agent-brain")):
+    roots = [REPO, home / ".agent-brain", home / ".agents", *(expand(a["home_dir"], home) for a in ADAPTERS.values() if a.get("home_dir"))]
+    if any(root == vault or vault in root.parents or root in vault.parents for root in roots):
         parser.error("Vault must be separate from the checkout and client directories")
     if args.doctor:
         return 1 if doctor(args.client) else 0
@@ -498,20 +550,25 @@ def main():
         return 0
     stale = stale_clients(home, args.client)
     if stale:
+        together = [name for name in ADAPTERS if name in selected(args.client) or name in stale]
+        together = "both" if together == ["claude", "codex"] else ",".join(together)
         raise ValueError(f"{' and '.join(stale)} already has an older Brain release installed under this home; "
-                         f"rerun with --client both so both clients stay identical, or remove that client's copies first")
+                         f"rerun with --client {together} so every agent stays identical, or remove that agent's copies first")
     if args.wizard:
         problems = doctor(args.client)
         for name in problems:
             if home != Path.home().resolve():
                 raise ValueError("Install missing clients separately before testing an isolated --home")
+            if not ADAPTERS[name].get("install"):
+                print(f"Install {ADAPTERS[name]['display']} from {ADAPTERS[name].get('docs', 'its official documentation')}, then rerun setup.")
+                return 1
             if input(f"Install {name} using its official native installer? [y/N]: ").strip().lower() != "y":
                 return 1
             install_client(name)
         if problems and doctor(args.client):
             print("Reopen your terminal to refresh PATH, then rerun this setup.")
             return 1
-        print(f"\nClients: {args.client}\nVault: {vault}\nOnly three Brain skills, boot rules, writer and selected-client configuration will be installed.")
+        print(f"\nAgents: {args.client}\nVault: {vault}\nOnly three Brain skills, boot rules, writer and selected-agent configuration will be installed.")
         try:
             install(home, vault, client=args.client)
         except ValueError as exc:
