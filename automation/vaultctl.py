@@ -241,6 +241,29 @@ def attested_checkpoint(vault, args, payload):
     return receipt
 
 
+class HookResult(tuple):
+    """(exit code, stdout, stderr) printed verbatim, in the agent's hook dialect."""
+
+
+def hook_mode(vault, agent, event):
+    try:
+        import vault_adapters
+        import vault_gate
+        config = {}
+        try:
+            config = json.loads(read_text(Path.home() / ".agent-brain/config.json"))
+        except (OSError, RuntimeError, ValueError):
+            pass
+        adapter = vault_adapters.load()[agent]
+        return HookResult(vault_gate.hook(agent, event, json.loads(sys.stdin.read() or "{}"), adapter, vault, config))
+    except Exception as exc:  # a hook never blocks or continues a session on an internal error
+        try:
+            append_jsonl(DEFAULT_AUTOMATION / "hook-errors.jsonl", {"at": now().isoformat(), "hook": f"{agent} {event}", "error": str(exc)[:800]}, vault.state)
+        except Exception:
+            pass
+        return HookResult((0, "", ""))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--vault", default=str(DEFAULT_VAULT))
@@ -260,6 +283,9 @@ def main(argv=None):
     commit.add_argument("--reason", required=True)
     check = sub.add_parser("validate")
     check.add_argument("paths", nargs="*")
+    check.add_argument("--hook", metavar="AGENT", help="Post-tool hook mode: read the agent's payload on stdin, validate the notes it wrote, log the write; fails open")
+    gate = sub.add_parser("gate", help="Stop hook mode: read the agent's payload on stdin and request a checkpoint for an unrecorded delta; fails open")
+    gate.add_argument("--agent", required=True)
     maintenance = sub.add_parser("hygiene", help="Records state-v2/hygiene-latest.json and an outcomes row even without --fix; only --fix edits notes")
     maintenance.add_argument("--fix", action="store_true")
     maintenance.add_argument("--no-parity", action="store_true")
@@ -316,6 +342,8 @@ def main(argv=None):
     if args.command == "commit":
         payload = load_input(args.input)
         return vault.commit(payload["operations"], model_label(args.model), args.reason, payload.get("transaction_id"))
+    if args.command == "gate" or (args.command == "validate" and args.hook):
+        return hook_mode(vault, args.agent if args.command == "gate" else args.hook, "Stop" if args.command == "gate" else "PostToolUse")
     if args.command == "validate":
         paths = [vault.path(path) for path in args.paths] if args.paths else vault.notes()
         issues = [{"path": str(path), "problems": validate(read_text(path), path)} for path in paths]
@@ -375,6 +403,11 @@ if __name__ == "__main__":
     sys.stdin.reconfigure(encoding="utf-8")
     try:
         result = main()
+        if isinstance(result, HookResult):
+            code, out, err = result
+            sys.stdout.write(out + ("\n" if out and not out.endswith("\n") else ""))
+            sys.stderr.write(err)
+            sys.exit(code)
         print(result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, separators=(",", ":")))
         sys.exit(2 if isinstance(result, dict) and result.get("outcome") in ("invalid", "needs_review") else 0)
     except Exception as exc:

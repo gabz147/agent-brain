@@ -1,22 +1,51 @@
 {
   "id": "codex",
   "display": "Codex CLI",
-  "detect": {"dirs": ["~/.codex"], "binaries": ["codex"], "env": ["CODEX_HOME"]},
+  "detect": {
+    "dirs": [
+      "~/.codex"
+    ],
+    "binaries": [
+      "codex"
+    ],
+    "env": [
+      "CODEX_HOME"
+    ]
+  },
   "instructions": {
     "path": "~/.codex/AGENTS.md",
     "strategy": "marker-block",
-    "tail": "Codex CLI: no brief is injected, so run `vaultctl.py session-brief` once for continuity. Checkpoint on this session's rollout in `~/.codex/sessions/` and take the model from its `turn_context.model`."
+    "tail": "Codex CLI: once its hooks are trusted in `/hooks`, the startup brief and checkpoint reminder arrive by hook; otherwise run `vaultctl.py session-brief` once. Checkpoint on this session's rollout in `~/.codex/sessions/`, model from its `turn_context.model`."
   },
-  "skills": ["~/.agents/skills"],
-  "legacy_skills": ["~/.codex/skills"],
-  "settings": {"format": "codex-config-toml", "path": "~/.codex/config.toml"},
-  "hooks": null,
+  "skills": [
+    "~/.agents/skills"
+  ],
+  "legacy_skills": [
+    "~/.codex/skills"
+  ],
+  "settings": {
+    "format": "codex-config-toml",
+    "path": "~/.codex/config.toml"
+  },
+  "hooks": {
+    "format": "codex-hooks-json",
+    "path": "~/.codex/hooks.json",
+    "snippet": "settings/codex-hooks.snippet.json",
+    "scripts": "~/.codex/hooks/vault",
+    "gate_output": "json-decision-block",
+    "paths": [
+      "apply_patch:tool_input.command"
+    ]
+  },
   "home_env": "CODEX_HOME",
   "home_dir": "~/.codex",
   "min_version": null,
-  "install": {"posix": "https://chatgpt.com/codex/install.sh", "windows": "https://chatgpt.com/codex/install.ps1"},
+  "install": {
+    "posix": "https://chatgpt.com/codex/install.sh",
+    "windows": "https://chatgpt.com/codex/install.ps1"
+  },
   "docs": "https://github.com/openai/codex#installing-and-running-codex-cli",
   "transcript_adapter": "codex-rollout",
   "verified_version": null,
-  "notes": "User skills are $HOME/.agents/skills per developers.openai.com/codex/skills (checked 2026-10-18); earlier releases installed ~/.codex/skills, which is refreshed in place when present and never created. Hooks arrive in milestone 3."
+  "notes": "User skills are $HOME/.agents/skills per developers.openai.com/codex/skills (checked 2026-10-18); earlier releases installed ~/.codex/skills, which is refreshed in place when present and never created. Hooks per developers.openai.com/codex/hooks (checked 2026-10-18): ~/.codex/hooks.json, enabled by default ([features].hooks), each new hook needs trust in /hooks; SessionStart plain stdout becomes developer context, PostToolUse apply_patch carries the patch in tool_input.command, Stop needs JSON {decision: block} on exit 0 and turns the reason into a continuation prompt; the payload carries model."
 }

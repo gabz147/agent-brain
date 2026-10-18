@@ -64,7 +64,17 @@ Copy `hooks/vault/` to `~/.claude/hooks/vault/`. Merge the three arrays (Session
 - PostToolUse reports an invalid completed Markdown write with exit 2. It cannot undo the write; the shared controller prevents invalid writes before they happen.
 - Stop requests a source-bound checkpoint after substantive work. The request is not evidence that capture happened.
 
-Internal hook failures fail open and are logged. Codex does not use these Claude hooks; it checkpoints directly through the shared writer. There is no background capture: a session that ends without a checkpoint is not summarized automatically.
+Internal hook failures fail open and are logged. There is no background capture: a session that ends without a checkpoint is not summarized automatically.
+
+## 5b. Install Codex hook adapters
+
+Copy `hooks/vault/` to `~/.codex/hooks/vault/` and merge the three arrays in `settings/codex-hooks.snippet.json` into `~/.codex/hooks.json`, keeping unrelated hooks. Codex takes a shell command string: replace each `script`/`args` pair with `command` set to the quoted Python executable, the script's absolute path and its two arguments (`codex <Event>`). Codex runs it with `$SHELL -lc` on macOS/Linux and `cmd.exe /C` on Windows, where a path containing `%` or `"` cannot be quoted safely. Hooks are on by default (`[features].hooks`); Codex lists new or changed hooks for review, so open `/hooks` once and trust the three Agent Brain entries.
+
+- SessionStart (startup, resume) prints the session brief, which Codex adds as developer context, and records the session's git baseline.
+- PostToolUse on `apply_patch` validates vault notes the patch touched (exit 2 with the problems on stderr) and appends the write to the session's turn log under the private state directory. Shell commands are logged only when `~/.agent-brain/config.json` sets `"hooks": {"shell_log": true}` before setup, which adds `Bash` to the matcher at the cost of one Python start per command.
+- Stop runs `vault_gate.py`, which needs no transcript: logged writes, git HEAD/remote/dirty-count changes since the baseline, and controller commits since the session's last receipt each count, and a long answer counts only beside five logged tool calls. It asks at most once per ten minutes and never twice for the same delta, as JSON `{"decision": "block", "reason": ...}`, which Codex turns into a continuation prompt. The request is not evidence of capture.
+
+`vaultctl.py gate --agent <id>` and `vaultctl.py validate --hook <id>` run the same logic from a payload on stdin, in the agent's hook dialect.
 
 ## 6. Verify the core in an isolated fixture
 

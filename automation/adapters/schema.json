@@ -1,69 +1,247 @@
 {
   "description": "One agent adapter. A JSON Schema subset checked by vault_adapters.validate without a dependency: type, required, properties, additionalProperties, enum, pattern, items, minItems. Paths start with ~/ and resolve against the installing home.",
   "type": "object",
-  "required": ["id", "display", "detect", "instructions", "skills", "hooks", "transcript_adapter", "verified_version", "notes"],
+  "required": [
+    "id",
+    "display",
+    "detect",
+    "instructions",
+    "skills",
+    "hooks",
+    "transcript_adapter",
+    "verified_version",
+    "notes"
+  ],
   "additionalProperties": false,
   "properties": {
-    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,39}$"},
-    "display": {"type": "string", "pattern": "^\\S.{0,39}$"},
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,39}$"
+    },
+    "display": {
+      "type": "string",
+      "pattern": "^\\S.{0,39}$"
+    },
     "detect": {
       "type": "object",
-      "required": ["dirs", "binaries", "env"],
+      "required": [
+        "dirs",
+        "binaries",
+        "env"
+      ],
       "additionalProperties": false,
       "properties": {
-        "dirs": {"type": "array", "items": {"type": "string", "pattern": "^~/"}},
-        "binaries": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"}},
-        "env": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"}}
+        "dirs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^~/"
+          }
+        },
+        "binaries": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+$"
+          }
+        },
+        "env": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          }
+        }
       }
     },
     "instructions": {
       "type": "object",
-      "required": ["path", "strategy", "tail"],
+      "required": [
+        "path",
+        "strategy",
+        "tail"
+      ],
       "additionalProperties": false,
       "properties": {
-        "path": {"type": ["string", "null"], "pattern": "^~/.+\\.(md|mdc|yml|yaml)$|^\\.goosehints$"},
-        "strategy": {"type": "string", "enum": ["marker-block", "rules-file", "project-only", "yaml-read-list"]},
-        "tail": {"type": "string", "pattern": "^\\S[^\\n]{0,399}$"}
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^~/.+\\.(md|mdc|yml|yaml)$|^\\.goosehints$"
+        },
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "marker-block",
+            "rules-file",
+            "project-only",
+            "yaml-read-list"
+          ]
+        },
+        "tail": {
+          "type": "string",
+          "pattern": "^\\S[^\\n]{0,399}$"
+        }
       }
     },
-    "skills": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^~/.+/skills$"}},
-    "legacy_skills": {"type": "array", "items": {"type": "string", "pattern": "^~/.+/skills$"}},
+    "skills": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^~/.+/skills$"
+      }
+    },
+    "legacy_skills": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^~/.+/skills$"
+      }
+    },
     "settings": {
-      "type": ["object", "null"],
-      "required": ["format", "path"],
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "format",
+        "path"
+      ],
       "additionalProperties": false,
       "properties": {
-        "format": {"type": "string", "enum": ["claude-settings-json", "codex-config-toml"]},
-        "path": {"type": "string", "pattern": "^~/"}
+        "format": {
+          "type": "string",
+          "enum": [
+            "claude-settings-json",
+            "codex-config-toml"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^~/"
+        }
       }
     },
     "hooks": {
-      "type": ["object", "null"],
-      "required": ["format", "path", "snippet", "scripts", "gate_output"],
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "format",
+        "path",
+        "snippet",
+        "scripts",
+        "gate_output"
+      ],
       "additionalProperties": false,
       "properties": {
-        "format": {"type": "string", "enum": ["claude-settings-json"]},
-        "path": {"type": "string", "pattern": "^~/"},
-        "snippet": {"type": "string", "pattern": "^settings/[a-z0-9.-]+\\.json$"},
-        "scripts": {"type": "string", "pattern": "^~/"},
-        "gate_output": {"type": "string", "enum": ["exit2-stdout-async", "json-decision-block", "json-decision-deny", "json-followup", "exit1-stderr", "none"]}
+        "format": {
+          "type": "string",
+          "enum": [
+            "claude-settings-json",
+            "codex-hooks-json"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^~/"
+        },
+        "snippet": {
+          "type": "string",
+          "pattern": "^settings/[a-z0-9.-]+\\.json$"
+        },
+        "scripts": {
+          "type": "string",
+          "pattern": "^~/"
+        },
+        "gate_output": {
+          "type": "string",
+          "enum": [
+            "exit2-stdout-async",
+            "json-decision-block",
+            "json-decision-deny",
+            "json-followup",
+            "exit1-stderr",
+            "none"
+          ]
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(apply_patch:)?[a-z_]+(\\[\\])?(\\.[a-z_]+(\\[\\])?)*$"
+          }
+        }
       }
     },
-    "home_env": {"type": ["string", "null"], "pattern": "^[A-Z][A-Z0-9_]*$"},
-    "home_dir": {"type": ["string", "null"], "pattern": "^~/"},
-    "min_version": {"type": ["string", "null"], "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "home_env": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[A-Z][A-Z0-9_]*$"
+    },
+    "home_dir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^~/"
+    },
+    "min_version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
     "install": {
-      "type": ["object", "null"],
-      "required": ["posix", "windows"],
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "posix",
+        "windows"
+      ],
       "additionalProperties": false,
       "properties": {
-        "posix": {"type": "string", "pattern": "^https://"},
-        "windows": {"type": "string", "pattern": "^https://"}
+        "posix": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "windows": {
+          "type": "string",
+          "pattern": "^https://"
+        }
       }
     },
-    "docs": {"type": "string", "pattern": "^https://"},
-    "transcript_adapter": {"type": ["string", "null"], "enum": ["claude-jsonl", "codex-rollout", null]},
-    "verified_version": {"type": ["string", "null"]},
-    "notes": {"type": "string"}
+    "docs": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "transcript_adapter": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "claude-jsonl",
+        "codex-rollout",
+        null
+      ]
+    },
+    "verified_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "notes": {
+      "type": "string"
+    }
   }
 }
