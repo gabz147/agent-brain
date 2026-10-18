@@ -8,7 +8,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 CONTRACT = REPO / "vault/10 - Resources/Vault Workflow Contract.md"
 # Sizes after the October 2026 context audit, plus 5%. Raise a cap only with a measured reason.
-CAPS = {"skills/obsidian-vault/SKILL.md": 4300,  # +95 on 2026-10-18 for the transcript-free checkpoint form "skills/handoff/SKILL.md": 1793,
+CAPS = {"skills/obsidian-vault/SKILL.md": 4360,  # +95 on 2026-10-18 for the transcript-free checkpoint form, +60 for Job notes "skills/handoff/SKILL.md": 1793,
         "skills/source-to-vault/SKILL.md": 4260,
         # 2026-10-18: v2 trimmed the Contract from 20,178 to about 13,400 bytes, agent-neutral; cap is that plus 5%.
         "vault/10 - Resources/Vault Workflow Contract.md": 14100}

@@ -72,7 +72,7 @@ hooks; setup installs them together from this one repository.
 | Component | Purpose |
 |---|---|
 | Starter vault | A blank profile, priorities, decisions, project index, daily notes and native Home dashboard |
-| Obsidian templates | Configured Daily Notes and Templates on a fresh vault |
+| Obsidian templates | Configured Daily Notes, Templates, a Job template for recurring tasks and link repair on rename, on a fresh vault |
 | `obsidian-vault` | Retrieve context and maintain notes using shared writing rules |
 | `handoff` | Leave a usable continuation point for the next session |
 | `source-to-vault` | Turn reviewed source material into traceable notes |

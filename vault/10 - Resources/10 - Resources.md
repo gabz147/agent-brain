@@ -14,4 +14,4 @@ updated: 2026-09-16
 - [[Vault Autonomy Pipeline]]: live capture, optional scheduled audit, operational evidence, and recovery. `(human)`
 - [[Recall Eval]]: known-answer questions for `recall-eval`; retrieval misses are measured, not guessed. `(human)`
 - [[Handoff Template]]: one current, runnable resume block in a durable tracking note. `(human)`
-- [[Templates]]: Obsidian's dedicated manual daily template. `(human)`
+- [[Templates]]: Obsidian's manual daily template and the Job template for recurring tasks. `(human)`
