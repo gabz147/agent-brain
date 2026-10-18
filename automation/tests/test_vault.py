@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+CONTRIB = Path(__file__).resolve().parents[2] / "contrib" / "windows-audit"
 import vault_core as core
 import vault_capture as capture
 import vault_sources as sources
@@ -474,6 +475,7 @@ class RecallMeasurementTests(Fixture):
 
 class RuntimeContractTests(unittest.TestCase):
     def test_runtime_hash_covers_only_vault_hooks(self):
+        sys.path.insert(0, str(CONTRIB))
         import vault_runtime
         gate = {"type": "command", "command": "python C:\\Users\\me\\.claude\\hooks\\vault\\stop-vault-gate.py"}
         base = {"Stop": [{"hooks": [gate]}], "PostToolUse": [{"matcher": "Read", "hooks": [{"type": "command", "command": "node other.js"}]}]}
@@ -485,7 +487,7 @@ class RuntimeContractTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "nt", "PowerShell job runner")
     def test_job_log_rotates_past_128_kb(self):
         import re
-        script = (Path(core.__file__).parent / "invoke-vault-job.ps1").read_text(encoding="utf-8")
+        script = (CONTRIB / "invoke-vault-job.ps1").read_text(encoding="utf-8")
         function = re.search(r"function Write-JobLog \{.*?\n\}", script, re.S).group(0)
         with tempfile.TemporaryDirectory() as tmp:
             log = Path(tmp) / "audit.log"

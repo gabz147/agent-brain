@@ -235,8 +235,11 @@ def hygiene(vault, fix=False, check_parity=True, home=None):
     if check_parity:
         report["issues"].extend({"path": "boot/skills", "problem": problem} for problem in parity(home or Path.home()))
         if vault.root == DEFAULT_VAULT.resolve():
-            from vault_runtime import BASELINE, check_runtime
-            if BASELINE.exists():  # Scheduled tasks are optional; baseline is recorded at installation.
+            try:  # the runtime baseline is an optional contrib/windows-audit tool
+                from vault_runtime import BASELINE, check_runtime
+            except ImportError:
+                BASELINE = None
+            if BASELINE is not None and BASELINE.exists():  # Scheduled tasks are optional; baseline is recorded at installation.
                 report["issues"].extend({"path": "runtime", "problem": problem} for problem in check_runtime())
     contract = "10 - Resources/Vault Workflow Contract.md"
     if contract in texts:

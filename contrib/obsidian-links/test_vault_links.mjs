@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { auditVault } from '../vault_links.mjs';
+import { auditVault } from './vault_links.mjs';
 
 const file = path => ({path, name: path.split('/').at(-1), basename: path.split('/').at(-1).replace(/\.md$/, ''), extension: 'md'});
 const files = ['Home.md', 'A.md', 'one/Duplicate.md', 'two/Duplicate.md', 'Lonely.md', '09 - Archive/Old Memory/Frozen.md'].map(file);

@@ -190,7 +190,8 @@ class InstallTests(unittest.TestCase):
             settings.write_text(json.dumps({"model": "existing-model", "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "unrelated-hook"}]}]}}))
             run(args + ["--apply"])
             auto = home / ".agent-brain/automation"
-            self.assertTrue((auto / "vault_links.mjs").is_file())
+            self.assertTrue((auto / "vault_links.py").is_file())
+            self.assertFalse((auto / "nightly-audit.ps1").exists())  # optional tools live in contrib/
             self.assertTrue((vault / "Home.md").is_file())
             self.assertTrue((vault / "10 - Resources/Vault Actions.md").is_file())
             self.assertIn("bases", json.loads((vault / ".obsidian/core-plugins.json").read_text()))

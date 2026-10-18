@@ -3,7 +3,7 @@ status: active
 project: meta
 type: guide
 updated_by: human
-updated: 2026-09-22T17:54:31-06:00
+updated: October 18, 2026 at 12:30:04.613644 PM (UTC-06:00)
 ---
 # Vault Actions
 
@@ -11,19 +11,17 @@ On demand only; no weekly reviews or new schedule. Follow [[Vault Workflow Contr
 
 ## Check links
 
-With Node 22+ and Obsidian open on a dedicated `--remote-debugging-port=9333`, run:
+Run the built-in read-only audit; it needs only Python:
 
 ```text
-node <BRAIN_AUTOMATION_DIR>/vault_links.mjs --vault <BRAIN_VAULT_ROOT>
+python <BRAIN_AUTOMATION_DIR>/vaultctl.py links
 ```
 
-Resolve the placeholders from your environment or ~/.agent-brain/config.json, defaulting to ~/.agent-brain/automation (older installs: ~/.claude/vault-automation) and ~/Documents/Brain; quote paths with spaces. The checker also honors BRAIN_VAULT_ROOT. It verifies the open vault and completed indexing, using Obsidian's own link parser. Default output is counts plus 20 findings; --json returns the complete report, --port selects a different debug port.
+Resolve the placeholder from your environment or ~/.agent-brain/config.json, defaulting to ~/.agent-brain/automation (older installs: ~/.claude/vault-automation); `brain links` does the same. Default output is counts plus 20 findings per kind; --full returns everything. It reports missing targets, ambiguous names (with the file Obsidian would pick), unmatched headings or blocks, and orphan candidates in folders 02-07 and 10. Archive is excluded as a source; archived targets can resolve.
 
-Launch Obsidian with that flag using your normal application executable. If it is already running without the flag, save work and reopen it; never force-close it. Keep a single vault window on that port. No permanent service or external index is required.
+For Obsidian's own resolution, the native CLI (Obsidian 1.12.7+) gives a quick file-link view without a debug port: `python <BRAIN_AUTOMATION_DIR>/obsidian_read.py link-audit` or `backlinks "<vault-relative.md>"`. The debug-port checker that uses Obsidian's parser for headings and blocks is optional, in the repository's contrib/obsidian-links.
 
-With the native CLI enabled (Obsidian 1.12.7+), a quicker file-link view needs no debug port: `python <BRAIN_AUTOMATION_DIR>/obsidian_read.py link-audit` (unresolved links and orphans) or `backlinks "<vault-relative.md>"`. It reads Obsidian's file-link cache only; use the checker above for headings and blocks.
-
-Report missing files/blocks, ambiguous names, headings needing review and orphan candidates. Archive is excluded as a source; archived targets can resolve, but their fragments are not inspected. External URLs/files are not fetched. Heading formatting/nesting and intentional orphans need review. Never create stubs, merge/delete notes or rewrite history automatically.
+Report findings for review: external URLs/files are not fetched, heading formatting and intentional orphans need judgment. Never create stubs, merge/delete notes or rewrite history automatically.
 
 ## Triage inbox
 

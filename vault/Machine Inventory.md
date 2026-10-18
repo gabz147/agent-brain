@@ -3,7 +3,7 @@ status: active
 project: meta
 type: reference
 updated_by: human
-updated: 2026-09-07
+updated: October 18, 2026 at 12:30:04.613644 PM (UTC-06:00)
 ---
 
 # Machine Inventory
@@ -18,7 +18,7 @@ Record what is actually installed, scheduled, hooked, and listening on this mach
 
 | Task | Trigger | Action | Owner note |
 |---|---|---|---|
-| `VaultNightlyAudit` (optional) | 03:30 daily + logon delayed 10 minutes | `wscript.exe run-hidden.vbs nightly-audit.ps1` | [[Vault Autonomy Pipeline]] |
+| `VaultNightlyAudit` (optional, contrib/windows-audit) | 03:30 daily + logon delayed 10 minutes | `wscript.exe run-hidden.vbs nightly-audit.ps1` | [[Vault Autonomy Pipeline]] |
 
 ## Agent hooks
 
@@ -34,7 +34,7 @@ _[Add the rest of your hooks, MCP servers, and skills of note.]_ Codex uses live
 
 ## Obsidian
 
-- Vault: `BRAIN_VAULT_ROOT`. Optional community plugin `agent-pulse` provides the status orb, automation toggle, and soft refresh.
+- Vault: `BRAIN_VAULT_ROOT`. Optional community plugin `agent-pulse` (contrib/agent-pulse) provides the status orb, automation toggle, and soft refresh.
 - Manual Daily Notes: monthly date path and dedicated human template; record real UI verification after setup.
 
 ## Ports

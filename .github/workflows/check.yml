@@ -35,7 +35,7 @@ jobs:
           cmp dist/brain.pyz dist/again.pyz
           python dist/brain.pyz test
       - name: Read-only native link audit fixtures
-        run: node automation/tests/test_vault_links.mjs
+        run: node contrib/obsidian-links/test_vault_links.mjs
       - name: Official native CLI installers (no login or model calls)
         run: python -c "import install; install.install_client('claude'); install.install_client('codex')"
       - name: Check both real CLIs

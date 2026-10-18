@@ -241,6 +241,28 @@ def attested_checkpoint(vault, args, payload):
     return receipt
 
 
+CONTRACT = "10 - Resources/Vault Workflow Contract.md"
+
+
+def contract_sections(vault, names):
+    """The vault's own Contract, one `## ` section at a time; with no names, the section list with line ranges."""
+    text = read_text(vault.path(CONTRACT))
+    lines = text.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith("## ")]
+    sections = {lines[s][3:].strip(): (s, (starts[k + 1] if k + 1 < len(starts) else len(lines))) for k, s in enumerate(starts)}
+    if not names:
+        return "Contract sections (vaultctl.py help write \"<section>\"):\n" + "\n".join(
+            f"- {name} (lines {a + 1}-{b})" for name, (a, b) in sections.items())
+    chosen = []
+    for name in names:
+        match = next((key for key in sections if key.lower() == name.strip().lower()), None)
+        if match is None:
+            raise VaultError(f"No Contract section {name!r}; sections: " + ", ".join(sections))
+        a, b = sections[match]
+        chosen.append("\n".join(lines[a:b]).rstrip())
+    return "\n\n".join(chosen)
+
+
 class HookResult(tuple):
     """(exit code, stdout, stderr) printed verbatim, in the agent's hook dialect."""
 
@@ -300,6 +322,11 @@ def main(argv=None):
     freshness = sub.add_parser("fact-freshness", help="Stale (as of <date>) facts; read-only")
     sub.add_parser("session-brief", help="Plain-text startup continuity: Open line, last sessions, Active Now, recent hook errors; read-only")
     freshness.add_argument("--max-age-days", type=int, default=90)
+    links = sub.add_parser("links", help="Read-only wikilink audit: missing targets, ambiguous names, unmatched headings/blocks, orphan candidates")
+    links.add_argument("--full", action="store_true", help="Every finding, not the first 20 per kind")
+    helper = sub.add_parser("help", help="`help write [section ...]`: list the Contract's sections, or print the named ones")
+    helper.add_argument("topic", choices=("write",))
+    helper.add_argument("sections", nargs="*")
     context = sub.add_parser("checkpoint-context", help="Event days and times of the current transcript turn")
     context.add_argument("--source", choices=("claude", "codex"), required=True)
     context.add_argument("--session", required=True)
@@ -362,6 +389,11 @@ def main(argv=None):
         return fact_freshness(vault, max_age_days=args.max_age_days)
     if args.command == "session-brief":
         return session_brief(vault, DEFAULT_AUTOMATION)
+    if args.command == "links":
+        from vault_links import audit
+        return audit(vault, full=args.full)
+    if args.command == "help":
+        return contract_sections(vault, args.sections)
     if args.command == "checkpoint-context":
         units = live_units(args)
         return {"source": args.source, "session_id": args.session, "turn_key": units[-1]["turn_key"],
@@ -394,7 +426,10 @@ def main(argv=None):
         append_jsonl(vault.state / "outcomes.jsonl", result, vault.state)
         return result
     if args.command == "snapshot-runtime":
-        from vault_runtime import write_baseline
+        try:
+            from vault_runtime import write_baseline
+        except ImportError:
+            raise VaultError("The runtime baseline is optional: copy contrib/windows-audit/ into the controller folder first")
         return write_baseline()
 
 

@@ -33,9 +33,9 @@ paths for your chosen agents, creates the vault, and checks the installed
 workflow. Then open the printed folder in Obsidian, restart/sign into your CLI,
 and follow [your first checkpoint](FIRST-CHECKPOINT.md).
 
-Missing Python? See [prerequisites and troubleshooting](LAPTOP-SETUP.md).
+Missing Python? See [prerequisites and troubleshooting](docs/setup.md#prerequisites).
 Prefer to inspect the download first? Use the
-[download-and-inspect method](LAPTOP-SETUP.md#download-and-inspect).
+[download-and-inspect method](docs/setup.md#download-and-inspect).
 
 ### Release bundle (preview)
 
@@ -114,15 +114,15 @@ Brief replies need not become notes.
 ## Platforms and optional features
 
 The core installer, vault writer and live checkpoints support **Windows, macOS
-and Linux**, with Claude-only, Codex-only and combined installations. Your chosen
+and Linux**, for any one agent or any mix. Your chosen
 CLI must also support your OS/version. WSL is a separate Linux installation.
 
 Checkpoints are live only: the agent writes them inside its own session, and
 nothing in this package starts a model call in the background. The former
 optional Windows retrospective-capture drain was removed because it spent plan
-usage on unattended runs. An optional Windows audit task (no model calls) is
-described in [optional scheduling](automation/README.md).
-[Agent Pulse](plugins/agent-pulse/README.md) is an optional Obsidian indicator.
+usage on unattended runs. A scheduled `hygiene --fix` (no model calls) is a one-line
+entry in [your OS's scheduler](docs/scheduling.md); a guarded Windows audit task, a
+debug-port link checker and the Agent Pulse indicator are optional, in [contrib/](contrib/README.md).
 
 This installs a template, not a cloud sync service. Keep actual notes and runtime
 state outside this public repository. Configure your own private backup or
@@ -132,8 +132,9 @@ Obsidian Sync separately if wanted.
 
 Rerun the same setup command to review an update. Differing workflow files need
 explicit replacement and get local backups. Existing notes, vault settings,
-custom schema, queues and receipts remain intact. Selected clients retain their
-configured vault unless you choose a different path.
+custom schema, queues and receipts remain intact. Installed agents keep their
+configured vault unless you choose a different path, and an existing controller
+folder stays where it is.
 
 Timestamp upgrades also preview a checked migration of the contract's known
 legacy timestamp schema rule. The writer snapshots that change; custom wording is left
@@ -145,8 +146,9 @@ block are preserved; reconcile any separate full-startup requirement manually.
 See [context loading and measurement](docs/context-loading.md) for the budget,
 upgrade behavior and a reproducible size check.
 
-- [Setup and troubleshooting](LAPTOP-SETUP.md)
-- [Advanced installation and upgrades](INSTALL.md)
+- [Setup, troubleshooting, manual installation and upgrades](docs/setup.md)
+- [Per-agent notes](docs/agents/), generated from `automation/adapters/`
+- [Scheduling hygiene](docs/scheduling.md) and optional extras in [contrib/](contrib/README.md)
 - [First checkpoint and recall](FIRST-CHECKPOINT.md)
 - [Automation reference](automation/README.md)
 - [Graphics and prompts](docs/graphics/README.md)
