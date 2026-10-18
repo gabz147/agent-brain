@@ -119,39 +119,35 @@ def recent_review(text, today=None):
 
 
 def parity(home):
+    """Each installed agent's block and skill copies against one canonical rendering: O(agents), any number of them."""
+    import vault_adapters as adapters_module
     home = Path(home)
-    issues = []
-    clients = [(home / ".codex", "AGENTS.md"), (home / ".claude", "CLAUDE.md")]
-    # A client participates when its boot file is installed. A single-client
-    # installation still checks its skills without demanding another client.
-    clients = [(root, boot) for root, boot in clients
-               if (root / "skills/obsidian-vault/SKILL.md").exists()
-               or ((root / boot).exists() and "<!-- SHARED VAULT RULES START -->" in read_text(root / boot))]
-    if not clients:
+    try:
+        adapters = adapters_module.load()
+        body = adapters_module.block_body()
+    except (adapters_module.AdapterError, OSError) as exc:
+        return [str(exc)]
+    # An agent participates when its block is installed; a single-agent
+    # installation checks only its own copies without demanding another agent.
+    installed = [a for a in adapters.values() if adapters_module.is_installed(a, home, adapters)]
+    if not installed:
         return ["No installed client boot files"]
-    for skill in ("obsidian-vault", "handoff", "source-to-vault"):
-        copies = []
-        for root, _ in clients:
-            path = root / "skills" / skill / "SKILL.md"
-            if not path.exists():
-                issues.append("Missing installed skill: " + str(path))
-            else:
-                copies.append(path.read_bytes())
-        if len(copies) == 2 and copies[0] != copies[1]:
-            issues.append("Skill mirror mismatch: " + skill)
-    blocks = []
-    for root, boot in clients:
-        path = root / boot
-        if not path.is_file():
-            issues.append("Missing shared-rule block: " + str(path))
-            continue
-        match = re.search(r"<!-- SHARED VAULT RULES START -->\s*(.*?)\s*<!-- SHARED VAULT RULES END -->", read_text(path), re.S)
-        if not match:
-            issues.append("Missing shared-rule block: " + str(path))
-        else:
-            blocks.append(match.group(1))
-    if len(blocks) == 2 and blocks[0] != blocks[1]:
-        issues.append("Boot shared-rule blocks differ")
+    issues, reference, mismatched = [], {}, set()
+    for adapter in installed:
+        dirs = [adapters_module.expand(d, home) for d in adapter["skills"] + adapter.get("legacy_skills", [])]
+        for skill in adapters_module.SKILLS:
+            copies = [d / skill / "SKILL.md" for d in dirs if (d / skill / "SKILL.md").is_file()]
+            if not copies:
+                issues.append(f"Missing installed skill: {skill} for {adapter['id']}")
+            for path in copies:
+                if reference.setdefault(skill, path.read_bytes()) != path.read_bytes() and skill not in mismatched:
+                    mismatched.add(skill)
+                    issues.append("Skill mirror mismatch: " + skill)
+        block = adapters_module.installed_block(adapter, home)
+        if block is None:
+            issues.append("Missing shared-rule block: " + str(adapters_module.instructions_path(adapter, home)))
+        elif block.replace("\r\n", "\n") != adapters_module.render_block(adapter, body):
+            issues.append(f"Boot shared-rule block differs from this release: {adapter['id']}")
     return issues
 
 

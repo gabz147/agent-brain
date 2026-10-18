@@ -94,11 +94,14 @@ class OnboardingTests(unittest.TestCase):
                     install.install(home, vault, apply=True, client=client)
                     install.verify(home, vault)
                 for name in install.selected(client):
-                    skills = home / ("." + name) / "skills"
-                    self.assertEqual({p.name for p in skills.iterdir()}, set(install.SKILLS))
+                    for skills in install.skill_dirs([name], home, install.ADAPTERS):
+                        self.assertEqual({p.name for p in skills.iterdir()}, set(install.SKILLS))
+                # Codex reads $HOME/.agents/skills; this release never creates the legacy ~/.codex/skills.
+                self.assertFalse((home / ".codex/skills").exists())
                 if client != "both":
                     self.assertEqual(other_boot.read_text(), "My unrelated startup instructions.\n")
-                    self.assertFalse((home / ("." + other) / "skills").exists())
+                    for skills in install.skill_dirs([other], home, install.ADAPTERS):
+                        self.assertFalse(skills.exists())
                 if client == "codex":
                     self.assertFalse((home / ".claude/settings.json").exists())
                     self.assertFalse((home / ".claude/hooks").exists())

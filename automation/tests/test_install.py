@@ -17,22 +17,22 @@ import unittest
 import zipfile
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "automation"))
+import vault_adapters  # noqa: E402
 
 
 class InstallTests(unittest.TestCase):
     def test_startup_context_budget(self):
         # Byte budgets are deterministic across clients/tokenizers and need no dependency.
         index = (REPO / "vault/VAULT-INDEX.md").read_bytes()
-        blocks = []
-        for name in ("CLAUDE.md", "AGENTS.md"):
-            boot = (REPO / "boot" / name).read_bytes()
+        self.assertLessEqual(len(vault_adapters.block_body().encode()), 2400, "shared block body")
+        for name, adapter in vault_adapters.load().items():
+            boot = vault_adapters.render_file(adapter).encode("utf-8")
             self.assertLessEqual(len(boot), 3600, name)
             self.assertLessEqual(len(boot) + len(index), 6000, name + " plus starter map")
             text = boot.decode("utf-8")
-            blocks.append(re.search(r"<!-- SHARED VAULT RULES START -->.*?<!-- SHARED VAULT RULES END -->", text, re.S).group())
             self.assertIn("Greetings and self-contained questions: no vault reads", text)
             self.assertIn("replaces older blanket startup/compaction reads", text)
-        self.assertEqual(*blocks)
         for path in ("vault/VAULT-INDEX.md", "vault/Active Priorities.md", "skills/obsidian-vault/SKILL.md"):
             text = (REPO / path).read_text(encoding="utf-8")
             self.assertNotIn("fully at startup", text, path)
@@ -84,7 +84,7 @@ class InstallTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 installer.install(home, home / "Brain", apply=True, client="both")
             self.assertEqual(installer.stale_clients(home, "claude"), [])
-            older = home / ".codex/skills/handoff/SKILL.md"
+            older = home / ".agents/skills/handoff/SKILL.md"
             older.write_text(older.read_text(encoding="utf-8") + "\nolder release\n", encoding="utf-8")
             self.assertEqual(installer.stale_clients(home, "claude"), ["codex"])
             self.assertEqual(installer.stale_clients(home, "both"), [])
@@ -184,14 +184,14 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(before, {p: p.read_bytes() for p in home.rglob("*") if p.is_file() and "state-v2" not in p.parts})
             for skill in ("obsidian-vault", "handoff", "source-to-vault"):
                 self.assertEqual((home / f".claude/skills/{skill}/SKILL.md").read_bytes(),
-                                 (home / f".codex/skills/{skill}/SKILL.md").read_bytes())
+                                 (home / f".agents/skills/{skill}/SKILL.md").read_bytes())
 
             note = vault / "VAULT-INDEX.md"
             note.write_text(note.read_text(encoding="utf-8") + "\nUser's retained note.\n", encoding="utf-8")
             original = note.read_bytes()
             boot = home / ".codex/AGENTS.md"
             legacy = "Old rule. Fully read yesterday's daily note at startup.\n" * 150
-            boot.write_text(boot.read_text(encoding="utf-8").replace("Evidence only.", legacy) + "\nCustom client rule.\n", encoding="utf-8")
+            boot.write_text(boot.read_text(encoding="utf-8").replace("Evidence only:", legacy) + "\nCustom client rule.\n", encoding="utf-8")
             previous_boot = boot.read_bytes()
             queue = auto / "queue.jsonl"
             queue.write_text('pending source\n')
@@ -202,7 +202,7 @@ class InstallTests(unittest.TestCase):
             run(args + ["--apply", "--replace-workflow"])
             self.assertEqual(note.read_bytes(), original)
             self.assertIn("Custom client rule.", boot.read_text(encoding="utf-8"))
-            self.assertIn("Evidence only.", boot.read_text(encoding="utf-8"))
+            self.assertIn("Evidence only:", boot.read_text(encoding="utf-8"))
             self.assertNotIn(legacy, boot.read_text(encoding="utf-8"))
             self.assertLessEqual(len(boot.read_bytes()), 3700)
             self.assertEqual(schema.read_bytes(), previous_schema)
@@ -211,7 +211,7 @@ class InstallTests(unittest.TestCase):
 
             source = home / "source.txt"
             source.write_text("A verified source fixture.", encoding="utf-8")
-            helper = home / ".codex/skills/source-to-vault/scripts/source_packet.py"
+            helper = home / ".agents/skills/source-to-vault/scripts/source_packet.py"
             packet_args = [sys.executable, str(helper), str(source), "--output"]
             run(packet_args + [str(vault / "packets")], success=False, env=env)
             output = home / "project/packets"

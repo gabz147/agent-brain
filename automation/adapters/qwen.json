@@ -1,0 +1,21 @@
+{
+  "id": "qwen",
+  "display": "Qwen Code",
+  "detect": {"dirs": ["~/.qwen"], "binaries": ["qwen"], "env": []},
+  "instructions": {
+    "path": "~/.qwen/QWEN.md",
+    "strategy": "marker-block",
+    "tail": "Qwen Code: no brief is injected, so run `vaultctl.py session-brief` once for continuity. Checkpoint with `--source qwen --model <runtime model id>` and the summary flags."
+  },
+  "skills": ["~/.qwen/skills"],
+  "settings": null,
+  "hooks": null,
+  "home_env": null,
+  "home_dir": "~/.qwen",
+  "min_version": null,
+  "install": null,
+  "docs": "https://qwenlm.github.io/qwen-code-docs/",
+  "transcript_adapter": null,
+  "verified_version": null,
+  "notes": "Global context ~/.qwen/QWEN.md (default context.fileName) and personal skills ~/.qwen/skills per qwenlm.github.io docs, checked 2026-10-18. A custom context.fileName needs the block copied by hand. Hooks (settings.json) are not wired yet."
+}

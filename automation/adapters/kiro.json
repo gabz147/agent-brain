@@ -1,0 +1,21 @@
+{
+  "id": "kiro",
+  "display": "Kiro CLI",
+  "detect": {"dirs": ["~/.kiro"], "binaries": ["kiro-cli", "kiro"], "env": []},
+  "instructions": {
+    "path": "~/.kiro/steering/agent-brain.md",
+    "strategy": "rules-file",
+    "tail": "Kiro CLI: no brief is injected, so run `vaultctl.py session-brief` once for continuity. Checkpoint with `--source kiro --model <runtime model id>` and the summary flags."
+  },
+  "skills": ["~/.kiro/skills"],
+  "settings": null,
+  "hooks": null,
+  "home_env": null,
+  "home_dir": "~/.kiro",
+  "min_version": null,
+  "install": null,
+  "docs": "https://kiro.dev/docs/cli/",
+  "transcript_adapter": null,
+  "verified_version": null,
+  "notes": "Global steering ~/.kiro/steering/*.md, always included by default, and global skills ~/.kiro/skills per kiro.dev/docs, checked 2026-10-18. Hooks (~/.kiro/hooks/<name>.json) are not wired yet."
+}

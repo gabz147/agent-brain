@@ -1,0 +1,27 @@
+{
+  "id": "claude",
+  "display": "Claude Code",
+  "detect": {"dirs": ["~/.claude"], "binaries": ["claude"], "env": ["CLAUDE_CONFIG_DIR"]},
+  "instructions": {
+    "path": "~/.claude/CLAUDE.md",
+    "strategy": "marker-block",
+    "tail": "Claude Code: verify the runtime model from trusted metadata or this transcript's `message.model`. A Stop-hook reminder does not establish capture."
+  },
+  "skills": ["~/.claude/skills"],
+  "settings": {"format": "claude-settings-json", "path": "~/.claude/settings.json"},
+  "hooks": {
+    "format": "claude-settings-json",
+    "path": "~/.claude/settings.json",
+    "snippet": "settings/vault-hooks.snippet.json",
+    "scripts": "~/.claude/hooks/vault",
+    "gate_output": "exit2-stdout-async"
+  },
+  "home_env": "CLAUDE_CONFIG_DIR",
+  "home_dir": "~/.claude",
+  "min_version": "2.1.270",
+  "install": {"posix": "https://claude.ai/install.sh", "windows": "https://claude.ai/install.ps1"},
+  "docs": "https://code.claude.com/docs/en/setup",
+  "transcript_adapter": "claude-jsonl",
+  "verified_version": "2.1.270",
+  "notes": "Hooks: SessionStart brief (startup|resume), PostToolUse frontmatter check, Stop gate with asyncRewake and exit 2. Tested minimum 2.1.270 for direct-execution hook args."
+}

@@ -1,0 +1,21 @@
+{
+  "id": "factory",
+  "display": "Factory Droid",
+  "detect": {"dirs": ["~/.factory"], "binaries": ["droid"], "env": []},
+  "instructions": {
+    "path": "~/.factory/AGENTS.md",
+    "strategy": "marker-block",
+    "tail": "Factory Droid: no brief is injected, so run `vaultctl.py session-brief` once for continuity. Checkpoint with `--source factory --model <runtime model id>` and the summary flags."
+  },
+  "skills": ["~/.factory/skills"],
+  "settings": null,
+  "hooks": null,
+  "home_env": null,
+  "home_dir": "~/.factory",
+  "min_version": null,
+  "install": null,
+  "docs": "https://docs.factory.ai/cli/getting-started/overview",
+  "transcript_adapter": null,
+  "verified_version": null,
+  "notes": "Personal instructions in ~/.factory/ (AGENTS.md) and personal skills ~/.factory/skills per docs.factory.ai, checked 2026-10-18. Hooks (~/.factory/hooks.json) are not wired yet."
+}

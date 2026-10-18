@@ -2,15 +2,16 @@
 
 ![Agent Brain: your notes, your agent, your memory.](docs/graphics/brain-cover.png)
 
-Give **Claude Code, Codex, or both** a private Obsidian vault they can maintain
-and recall across sessions. One public setup with only the skills and tools
+Give **your terminal coding agent** (Claude Code, Codex CLI, GitHub Copilot CLI,
+Kiro CLI, Qwen Code or Factory Droid, any mix) a private Obsidian vault it can
+maintain and recall across sessions. One public setup with only the skills and tools
 needed for the Brain workflow. Your notes stay on your computer.
 
 ## Install
 
 Have **Obsidian** and **Python 3.10+** installed. Guided setup checks these,
-lets you choose a CLI and vault folder, and offers the official installer if
-your chosen CLI is missing. Nothing else is required.
+lets you choose your agents and vault folder, and offers the official installer
+if Claude Code or Codex is missing. Nothing else is required.
 You do not need Git, a GitHub account, or another repository.
 
 All three Brain workflow skills and their supporting tools are included here.
@@ -28,7 +29,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/gabz147/agent-brain/main/boo
 ```
 
 Setup previews its changes and asks before applying them. It configures Brain
-paths for your chosen clients, creates the vault, and checks the installed
+paths for your chosen agents, creates the vault, and checks the installed
 workflow. Then open the printed folder in Obsidian, restart/sign into your CLI,
 and follow [your first checkpoint](FIRST-CHECKPOINT.md).
 

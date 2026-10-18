@@ -1,6 +1,6 @@
 ---
 name: agent-brain
-description: "Set up or update Agent Brain, the standalone shared Obsidian memory workflow for Claude Code, Codex, or both. Use when installing the system from this repository."
+description: "Set up or update Agent Brain, the standalone shared Obsidian memory workflow for any terminal coding agent with an adapter (Claude Code, Codex and others). Use when installing the system from this repository."
 ---
 
 # Set up Agent Brain
@@ -22,7 +22,7 @@ choices that remain unknown. Default vault: `~/Documents/Brain`.
 Run the repository's installer with Python 3.10+ (`python` on Windows,
 `python3` on macOS/Linux). For a user-operated terminal, `install.py --wizard`
 provides guided setup. In an agent tool without interactive input, use explicit
-arguments: `--client claude|codex|both` and, if chosen, `--vault <path>`.
+arguments: `--client <agent>[,<agent>]` (ids in `automation/adapters/`, or `both`) and, if chosen, `--vault <path>`.
 Run `--doctor`, preview the plan, then use `--apply` within the user's setup
 authorization. Missing CLI installation and account login follow the setup
 guide; do not claim file installation also authenticated a client.

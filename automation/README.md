@@ -12,7 +12,8 @@ The Python controller is required for live vault writes and checkpoints. The Pow
 | `vault_hooks.py` | Live Stop decision logic; a request never claims capture |
 | `vault_recall.py` | Read-only session brief, recall eval, consolidation digest and `(as of <date>)` fact freshness; no index |
 | `obsidian_read.py` | Optional read-only Obsidian CLI observations (links, backlinks, properties, local recovery history, write preflight); never writes |
-| `vault_hygiene.py`, `vault_runtime.py` | Deterministic schema/index/priority checks, boot/skill parity, and approved runtime drift checks |
+| `vault_adapters.py`, `adapters/*.json`, `BRAIN.md` | One data-only manifest per agent (instructions path and strategy, skills dirs, hooks, transcript adapter), validated against `adapters/schema.json`, plus the shared boot block each agent's file is rendered from |
+| `vault_hygiene.py`, `vault_runtime.py` | Deterministic schema/index/priority checks, boot/skill parity against one rendering per installed agent, and approved runtime drift checks |
 | `invoke-vault-job.ps1`, `nightly-audit.ps1` | Guarded scheduled audit entry point; only verified audit results advance the day stamp |
 | `user-busy.ps1`, `run-hidden.vbs` | Interactive idle/fullscreen/pause guards and a windowless launcher |
 | `tests/` | Temporary-vault regression tests; no paid model calls |
