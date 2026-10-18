@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import datetime as dt
 import json
 from pathlib import Path
 import re
@@ -166,6 +167,16 @@ SUMMARY_FLAGS = (("done", "What Got Done"), ("next", "What's Still In Progress")
                  ("touched", "Notes Touched"), ("profile", "Profile Updates"))
 
 
+def event_time(value):
+    """3:42 PM, 3:42 pm or 15:42 as the daily heading's 3:42 PM; anything else is left for validation to name."""
+    for form in ("%I:%M %p", "%H:%M"):
+        try:
+            return dt.datetime.strptime(value.strip().upper(), form).strftime("%I:%M %p").lstrip("0")
+        except ValueError:
+            pass
+    return value
+
+
 def flags_payload(args):
     """The checkpoint JSON an agent would otherwise write, built from repeatable flags."""
     if args.input:
@@ -174,7 +185,7 @@ def flags_payload(args):
         raise VaultError("The summary flags need --topic and at least one --done")
     sections = {heading: list(getattr(args, flag)) for flag, heading in SUMMARY_FLAGS if getattr(args, flag)}
     day = {"topic": args.topic, "sections": sections}
-    for key, value in (("day", args.day), ("time", args.time), ("open_next", args.open)):
+    for key, value in (("day", args.day), ("time", args.time and event_time(args.time)), ("open_next", args.open)):
         if value:
             day[key] = value
     return {"reason": args.reason or "Checkpoint: " + args.topic, "days": [day], "operations": []}
@@ -200,23 +211,33 @@ def attested_checkpoint(vault, args, payload):
         raise VaultError("Without --transcript, pass --model with the verified runtime model id (and --source as the agent id)")
     signer = model_label(args.model)
     agent = args.source or "agent"
-    session = args.session or now().strftime("s-%Y%m%d-%H%M%S")
     payload = copy.deepcopy(payload)
     stamp = now()
+    today = stamp.date().isoformat()
     for entry in payload.get("days", []):
-        entry.setdefault("day", stamp.date().isoformat())
-        entry.setdefault("time", stamp.strftime("%I:%M %p").lstrip("0"))
+        entry.setdefault("day", today)
+    # A retry of the same flags must find the same receipt, so the id binds the
+    # agent's content and day, never the clock time or a generated session.
+    session = args.session or "day-" + (payload["days"][0]["day"] if payload.get("days") else today)
     prepared = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     capture_id = "attested-" + sha((source_key(agent, session) + ":" + prepared).encode())
+    for entry in payload.get("days", []):
+        entry.setdefault("time", stamp.strftime("%I:%M %p").lstrip("0"))
     proposal = {"disposition": payload.get("disposition", "captured"), "reason": payload.get("reason", "Attested checkpoint"),
                 "evidence": payload.get("evidence") or [workspace_evidence(agent, args.model)],
                 "days": payload.get("days", []), "operations": payload.get("operations", []), "anchors": payload.get("anchors", [])}
     receipt = next((r for r in verified_receipts(vault, agent, session) if r["id"] == capture_id), None)
     if receipt is None:
         receipt = apply_proposal(vault, proposal, signer, [], agent, session, capture_id, tier="attested", model_source="self-report")
-    atomic_json(vault.state / "live" / (source_key(agent, session) + ".json"),
-                {"turn_key": capture_id, "receipt_id": receipt["id"], "status": receipt["disposition"],
-                 "completed_at": now().isoformat(), "through": None})
+    live = vault.state / "live" / (source_key(agent, session) + ".json")
+    try:
+        transcript_ack = live.exists() and json.loads(read_text(live)).get("through") is not None
+    except (OSError, ValueError):
+        transcript_ack = False
+    # A claim never replaces the Stop gate's transcript-bound acknowledgment.
+    if not transcript_ack:
+        atomic_json(live, {"turn_key": capture_id, "receipt_id": receipt["id"], "status": receipt["disposition"],
+                           "completed_at": now().isoformat(), "through": None})
     return receipt
 
 
@@ -270,7 +291,7 @@ def main(argv=None):
         command.add_argument("--" + flag, action="append", metavar="TEXT", help=f"One bullet under {heading}; repeatable")
     command.add_argument("--open", help="Replace the day's Open for tomorrow line")
     command.add_argument("--day", help="Event day YYYY-MM-DD; default today, or the transcript's day")
-    command.add_argument("--time", help="Event time like 3:42 PM; default now, or the transcript's last event")
+    command.add_argument("--time", help="Event time like 3:42 PM or 15:42; default now, or the transcript's last event")
     command.add_argument("--reason", help="Why this checkpoint exists; default from --topic")
     restore = sub.add_parser("restore")
     restore.add_argument("snapshot")

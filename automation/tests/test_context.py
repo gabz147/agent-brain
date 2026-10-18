@@ -1,7 +1,9 @@
 """Context output stays small without weakening the shared writer."""
+import datetime as dt
 import json
 import subprocess
 import sys
+from unittest import mock
 
 from test_vault import Fixture, HEADER, SECTIONS
 import vault_core as core
@@ -129,6 +131,39 @@ class ContextTests(Fixture):
             main(base + ["--transcript", str(self.transcript()), "--topic", "x", "--done", "y"])
         with self.assertRaises(core.VaultError):
             main(base + ["--source", "opencode", "--model", "codex", "--topic", "x", "--done", "y"])
+
+    def test_attested_retry_later_with_default_time_and_session_appends_nothing(self):
+        base = ["--vault", str(self.vault.root), "--state", str(self.vault.state), "--backups", str(self.vault.backups), "checkpoint"]
+        flags = ["--source", "opencode", "--model", "gpt-5.6", "--topic", "Retry", "--done", "Wrote the adapter"]
+        zone = dt.timezone(dt.timedelta(hours=-6))
+        with mock.patch("vaultctl.now", return_value=dt.datetime(2026, 9, 6, 15, 1, tzinfo=zone)):
+            first = main(base + flags)
+        daily = self.vault.path(core.daily_path("2026-09-06"))
+        before = daily.read_bytes()
+        self.assertIn("## Session 1 — 3:01 PM: Retry", before.decode())
+        with mock.patch("vaultctl.now", return_value=dt.datetime(2026, 9, 6, 15, 9, tzinfo=zone)):
+            self.assertEqual(main(base + flags)["id"], first["id"])
+        self.assertEqual(before, daily.read_bytes())
+        # The next day is a new checkpoint, and a 24-hour --time is accepted.
+        with mock.patch("vaultctl.now", return_value=dt.datetime(2026, 9, 7, 9, 0, tzinfo=zone)):
+            self.assertNotEqual(main(base + flags + ["--time", "15:42"])["id"], first["id"])
+        self.assertIn("## Session 1 — 3:42 PM: Retry", self.vault.path(core.daily_path("2026-09-07")).read_text(encoding="utf-8"))
+
+    def test_attested_open_and_ack_never_override_later_or_transcript_state(self):
+        base = ["--vault", str(self.vault.root), "--state", str(self.vault.state), "--backups", str(self.vault.backups), "checkpoint"]
+        agent = ["--source", "opencode", "--model", "gpt-5.6", "--day", "2026-09-06"]
+        main(base + agent + ["--topic", "Late", "--done", "Late work", "--time", "5:00 PM", "--open", "Later handoff"])
+        main(base + agent + ["--topic", "Early", "--done", "Early work", "--time", "9:00 AM", "--open", "Earlier handoff"])
+        text = self.vault.path(core.daily_path("2026-09-06")).read_text(encoding="utf-8")
+        self.assertIn("**Open for tomorrow:** Later handoff", text)
+        self.assertNotIn("Earlier handoff", text.split("## Session")[0])
+        live = self.vault.state / "live" / (sources.source_key("claude", "real-session") + ".json")
+        live.parent.mkdir(parents=True, exist_ok=True)
+        ack = {"turn_key": "t", "receipt_id": "r", "status": "captured", "completed_at": "x", "through": 42}
+        live.write_text(json.dumps(ack), encoding="utf-8")
+        main(base + ["--source", "claude", "--session", "real-session", "--model", "opus", "--topic", "Claim",
+                     "--done", "No transcript here", "--day", "2026-09-06"])
+        self.assertEqual(json.loads(live.read_text(encoding="utf-8")), ack)
 
     def test_real_cli_summary_keeps_complete_verified_receipt_and_retry(self):
         transcript = self.transcript()
