@@ -26,6 +26,7 @@ python vaultctl.py inspect '02 - Example Project/Example.md'
 python vaultctl.py commit --model '<verified-runtime-id>' --reason '<actual change>' --input '<operations.json>'
 python vaultctl.py checkpoint --summary --source codex --session '<id>' --transcript '<actual.jsonl>' --input '<checkpoint.json>'
 python vaultctl.py checkpoint --summary --source codex --session '<id>' --transcript '<actual.jsonl>' --trivial '<reason>'
+python vaultctl.py checkpoint --summary --source <agent> --model '<verified-runtime-id>' --topic '<topic>' --done '<outcome>' --next '<remaining>' --open '<next action>'
 python vaultctl.py validate
 python vaultctl.py hygiene
 python vaultctl.py recall-eval [--record]
@@ -34,7 +35,7 @@ python vaultctl.py fact-freshness [--max-age-days 90]
 python vaultctl.py session-brief
 ```
 
-Use `--source claude` for Claude sessions. See the vault's `Vault Workflow Contract.md` for JSON formats and restore. A concurrent hash mismatch requires fresh reads and a rebuilt operation; never overwrite the other writer's edit. Existing daily sessions are immutable.
+Use `--source claude` for Claude sessions. The flag form is for any agent without a transcript; its receipt is marked `attested`. See the vault's `Vault Workflow Contract.md` for JSON formats and restore. A concurrent hash mismatch requires fresh reads and a rebuilt operation; never overwrite the other writer's edit. Existing daily sessions are immutable.
 
 ## Checkpoints
 

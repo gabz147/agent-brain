@@ -7,7 +7,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 CONTRACT = REPO / "vault/10 - Resources/Vault Workflow Contract.md"
 # Sizes after the October 2026 context audit, plus 5%. Raise a cap only with a measured reason.
-CAPS = {"skills/obsidian-vault/SKILL.md": 4205, "skills/handoff/SKILL.md": 1793,
+CAPS = {"skills/obsidian-vault/SKILL.md": 4300,  # +95 on 2026-10-18 for the transcript-free checkpoint form "skills/handoff/SKILL.md": 1793,
         "skills/source-to-vault/SKILL.md": 4260, "vault/10 - Resources/Vault Workflow Contract.md": 20428}
 STOP_TEMPLATE_CAP = 1246
 BANNED = ("keep queueing", "drain when you resume", "durable spool", "scheduled capture")

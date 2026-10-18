@@ -97,7 +97,13 @@ python $vaultCtl checkpoint --summary --source codex --session '<actual-id>' --t
 python $vaultCtl checkpoint --summary --source codex --session '<actual-id>' --transcript '<actual-jsonl-path>' --trivial '<reason>'
 ```
 
-Use `--source claude` for Claude. Every source-local day in the batch needs its own `days` entry. Sections left out become `- None`; `open_next` is optional and replaces the Open line only when given. Input fields:
+Use `--source claude` for Claude. Agents without a transcript, which is any client other than claude or codex, checkpoint with flags and no JSON:
+
+```powershell
+python $vaultCtl checkpoint --summary --source <agent> --model <verified-runtime-id> --topic '<topic>' --done '<outcome>' --next '<remaining>' --touched '[[Note]]' --open '<next action>'
+```
+
+Repeat a flag for several bullets. The controller stamps today's local day and time unless `--day` and `--time` are given, signs with the model named, and records an `attested` receipt with `model_source: self-report`: the agent's own claim plus cheap git facts, never transcript bytes. `--trivial` works the same way. Transcript receipts are the stronger tier and are used whenever a transcript exists. Every source-local day in the batch needs its own `days` entry. Sections left out become `- None`; `open_next` is optional and replaces the Open line only when given. Input fields:
 
 ```json
 {

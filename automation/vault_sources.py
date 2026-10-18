@@ -6,12 +6,14 @@ import json
 from pathlib import Path
 import re
 
-from vault_core import VaultError, atomic_json, file_lock, model_label, now, read_text, sha
+from vault_core import VaultError, atomic_json, file_lock, iso_normalize, model_label, now, read_text, sha
+
+AGENT_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
 
 
 def local_stamp(value):
     try:
-        stamp = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        stamp = dt.datetime.fromisoformat(iso_normalize(value))
         if stamp.tzinfo is None:
             stamp = stamp.replace(tzinfo=dt.timezone.utc)
         return stamp.astimezone()
@@ -158,8 +160,9 @@ def stream_units(path, provider, session_id=None, fragment_chars=16000):
 
 
 def source_key(provider, session_id):
-    if provider not in ("claude", "codex") or not session_id:
-        raise VaultError("Provider and source session id are required")
+    """Receipts are keyed by agent id and session: claude and codex for transcripts, any lowercase id otherwise."""
+    if not isinstance(provider, str) or not AGENT_ID.fullmatch(provider) or not session_id:
+        raise VaultError("An agent id (lowercase, such as claude, codex or opencode) and a session id are required")
     return sha((provider + ":" + session_id).encode())
 
 

@@ -10,7 +10,10 @@ import stat
 import subprocess
 import sys
 import tempfile
-import tomllib
+try:
+    import tomllib
+except ImportError:  # Python 3.10: Codex settings are left alone, config.json carries the paths
+    tomllib = None
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -99,7 +102,7 @@ class OnboardingTests(unittest.TestCase):
                 if client == "codex":
                     self.assertFalse((home / ".claude/settings.json").exists())
                     self.assertFalse((home / ".claude/hooks").exists())
-                if client == "claude":
+                if client == "claude" or tomllib is None:
                     self.assertEqual(config.read_text(), original)
                 else:
                     data = tomllib.loads(config.read_text(encoding="utf-8"))
@@ -147,10 +150,15 @@ class OnboardingTests(unittest.TestCase):
                 directory.mkdir(exist_ok=True)
                 if client == "claude":
                     (directory / "settings.json").write_text(json.dumps({"env": {"BRAIN_VAULT_ROOT": str(value)}}))
-                else:
+                elif tomllib is not None:
                     (directory / "config.toml").write_bytes(install.toml_bytes({"shell_environment_policy": {"set": {"BRAIN_VAULT_ROOT": str(value)}}}))
-            with self.assertRaisesRegex(ValueError, "different vaults"):
-                install.configured_vault(home, "both")
+            if tomllib is None:  # 3.10 cannot read Codex settings, so only Claude's vault is known
+                self.assertEqual(install.configured_vault(home, "both"), home / "One")
+                with self.assertRaisesRegex(ValueError, "3.11"):
+                    install.toml_bytes({"a": 1})
+            else:
+                with self.assertRaisesRegex(ValueError, "different vaults"):
+                    install.configured_vault(home, "both")
 
     def test_archive_rejects_unsafe_members_before_extracting(self):
         with tempfile.TemporaryDirectory() as tmp:

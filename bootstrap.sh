@@ -3,13 +3,13 @@
 set -eu
 brain_python=''
 for candidate in python3 python; do
-  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null; then
     brain_python="$candidate"
     break
   fi
 done
 if [ -z "$brain_python" ]; then
-  echo 'Install Python 3.11+ from https://www.python.org/downloads/ (or your Linux package manager), reopen Terminal, and rerun this command.' >&2
+  echo 'Install Python 3.10+ from https://www.python.org/downloads/ (or your Linux package manager), reopen Terminal, and rerun this command.' >&2
   exit 1
 fi
 brain_script=$(mktemp "${TMPDIR:-/tmp}/agent-brain.XXXXXX")
