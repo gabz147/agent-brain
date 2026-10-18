@@ -3,7 +3,7 @@
 <!-- SHARED VAULT RULES START -->
 ## Load context when needed
 
-Paths come from `BRAIN_VAULT_ROOT` and `BRAIN_AUTOMATION_DIR`, else `vault_root` and `automation_dir` in `~/.agent-brain/config.json` (defaults `~/Documents/Brain`, `~/.claude/vault-automation`). Python: `BRAIN_PYTHON`, else `python3` (macOS/Linux) or `python` (Windows). `vaultctl.py` means the one in the automation dir.
+Paths come from `BRAIN_VAULT_ROOT` and `BRAIN_AUTOMATION_DIR`, else `vault_root` and `automation_dir` in `~/.agent-brain/config.json` (defaults `~/Documents/Brain`, `~/.agent-brain/automation`; older installs `~/.claude/vault-automation`). Python: `BRAIN_PYTHON`, else config `python`, else `python3` (macOS/Linux) or `python` (Windows). `vaultctl.py` means the one in the automation dir; the `brain` launcher in `~/.agent-brain/bin` runs the same commands.
 
 - Greetings and self-contained questions: no vault reads or checkpoint unless they establish something durable.
 - Project work or recall: read `VAULT-INDEX.md` once, then only relevant notes (filenames before body search; skip `.obsidian` and Archive); read chosen evidence fully.

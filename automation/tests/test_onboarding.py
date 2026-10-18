@@ -105,14 +105,8 @@ class OnboardingTests(unittest.TestCase):
                 if client == "codex":
                     self.assertFalse((home / ".claude/settings.json").exists())
                     self.assertFalse((home / ".claude/hooks").exists())
-                if client == "claude" or tomllib is None:
-                    self.assertEqual(config.read_text(), original)
-                else:
-                    data = tomllib.loads(config.read_text(encoding="utf-8"))
-                    self.assertEqual(data["approval_policy"], "on-request")
-                    self.assertEqual(data["model"], "my-model")
-                    self.assertEqual(data["shell_environment_policy"]["set"]["CUSTOM"], "retained")
-                    self.assertEqual(data["shell_environment_policy"]["set"]["BRAIN_VAULT_ROOT"], str(vault))
+                # Every tier reads config.json: Codex settings without Brain variables are left byte-for-byte alone.
+                self.assertEqual(config.read_text(), original)
                 self.assertEqual(install.configured_vault(home, client), vault)
                 self.assertEqual(install.installation(home, vault, client=client), {})
                 note = vault / "VAULT-INDEX.md"
@@ -125,7 +119,7 @@ class OnboardingTests(unittest.TestCase):
                 self.assertEqual(install.installation(home, vault), {})
                 if client != "both":
                     self.assertIn("My unrelated startup instructions.", other_boot.read_text(encoding="utf-8"))
-                self.assertTrue((home / ".claude/vault-automation/FIRST-CHECKPOINT.md").is_file())
+                self.assertTrue((home / ".agent-brain/automation/FIRST-CHECKPOINT.md").is_file())
 
     def test_wizard_decline_and_apply(self):
         with tempfile.TemporaryDirectory(prefix="brain wizard ") as tmp:
@@ -182,7 +176,7 @@ class OnboardingTests(unittest.TestCase):
         with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
             for name in ("install.py", "FIRST-CHECKPOINT.md"):
                 archive.write(REPO / name, "brain/" + name)
-            for directory in ("automation", "boot", "skills", "settings", "vault"):
+            for directory in ("automation", "bin", "boot", "hooks", "skills", "settings", "vault"):
                 for path in (REPO / directory).rglob("*"):
                     if path.is_file() and "__pycache__" not in path.parts:
                         archive.write(path, "brain/" + path.relative_to(REPO).as_posix())
@@ -202,13 +196,16 @@ class OnboardingTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 install.install(home, vault, apply=True, client="claude")
             settings = json.loads((home / ".claude/settings.json").read_text(encoding="utf-8"))
-            env = dict(os.environ, **settings["env"], PYTHONIOENCODING="utf-8")
+            # No Brain variables are injected: the hooks find everything through config.json under this home.
+            self.assertNotIn("env", settings)
+            env = {k: v for k, v in os.environ.items() if not k.startswith("BRAIN_") and k not in ("VAULT_AUTOMATION_DIR", "VAULT_AUTOMATION")}
+            env.update(HOME=str(home), USERPROFILE=str(home), PYTHONIOENCODING="utf-8")
             self.assertNotIn("SessionEnd", settings["hooks"])  # retired with the background drain
             for event in ("Stop", "PostToolUse"):
                 hook = settings["hooks"][event][0]["hooks"][0]
                 result = subprocess.run([hook["command"], *hook["args"]], input="{}", capture_output=True, text=True, env=env, timeout=20)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertFalse((home / ".claude/vault-automation/hook-errors.jsonl").exists())
+            self.assertFalse((home / ".agent-brain/automation/hook-errors.jsonl").exists())
 
 
 if __name__ == "__main__":

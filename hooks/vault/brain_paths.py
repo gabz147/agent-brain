@@ -1,7 +1,8 @@
 """Find the installed controller for the hook adapters.
 
 Order: BRAIN_AUTOMATION_DIR (or the legacy VAULT_AUTOMATION_DIR), then the
-neutral home's ~/.agent-brain/config.json, then the legacy default directory.
+neutral home's ~/.agent-brain/config.json, then ~/.agent-brain/automation, then the
+legacy ~/.claude/vault-automation.
 Never raises: an unreadable config simply does not take part.
 """
 import json
@@ -22,4 +23,7 @@ def automation_dir():
     if not value:
         configured = config().get("automation_dir")
         value = configured if isinstance(configured, str) and configured else None
-    return Path(value or Path.home() / ".claude" / "vault-automation").expanduser()
+    if not value:
+        neutral = Path.home() / ".agent-brain" / "automation"
+        value = neutral if (neutral / "vaultctl.py").is_file() else Path.home() / ".claude" / "vault-automation"
+    return Path(value).expanduser()

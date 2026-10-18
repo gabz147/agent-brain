@@ -1,0 +1,13 @@
+#!/bin/sh
+# Agent Brain launcher: `brain <command>` runs the installed controller (vaultctl.py) with the
+# first Python 3.10+ it finds. Setup writes this file with the controller's folder filled in.
+brain_default='{{AUTOMATION_DIR}}'
+brain_dir="${BRAIN_AUTOMATION_DIR:-$brain_default}"
+for candidate in "${BRAIN_PYTHON:-}" python3 python; do
+  [ -n "$candidate" ] || continue
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null; then
+    exec "$candidate" "$brain_dir/vaultctl.py" "$@"
+  fi
+done
+echo 'Agent Brain needs Python 3.10+ on PATH (python3 or python): https://www.python.org/downloads/' >&2
+exit 127

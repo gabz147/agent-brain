@@ -51,11 +51,14 @@ class InstallTests(unittest.TestCase):
             config = json.loads((home / ".agent-brain/config.json").read_text(encoding="utf-8"))
             self.assertEqual(config["vault_root"], str(vault))
             self.assertEqual(config["clients"], ["codex"])
-            self.assertEqual(config["automation_dir"], str(home / ".claude/vault-automation"))
-            # A v1 home has no config.json: the other client's settings still decide the vault, so adding a client
-            # without --vault joins the existing vault instead of creating ~/Documents/Brain.
+            self.assertEqual(config["automation_dir"], str(home / ".agent-brain/automation"))
+            # Every tier reads config.json, so client settings receive no Brain variables.
+            self.assertFalse((home / ".codex/config.toml").exists())
+            # A v1 home has no config.json: the other client's injected settings still decide the vault, so adding
+            # a client without --vault joins the existing vault instead of creating ~/Documents/Brain.
             (home / ".agent-brain/config.json").unlink()
             if tomllib is not None:  # the join reads Codex's TOML settings, which 3.10 cannot parse
+                (home / ".codex/config.toml").write_bytes(installer.toml_bytes({"shell_environment_policy": {"set": {"BRAIN_VAULT_ROOT": str(vault)}}}))
                 self.assertEqual(installer.configured_vault(home, "claude"), vault)
             with contextlib.redirect_stdout(io.StringIO()):
                 installer.install(home, vault, apply=True, client="claude")
@@ -66,7 +69,7 @@ class InstallTests(unittest.TestCase):
             env = {k: v for k, v in os.environ.items() if not k.startswith("BRAIN_") and k not in ("VAULT_AUTOMATION_DIR", "VAULT_AUTOMATION")}
             env.update(HOME=str(home), USERPROFILE=str(home), PYTHONIOENCODING="utf-8")
             probe = subprocess.run([sys.executable, "-c", "import vault_core; print(vault_core.DEFAULT_VAULT)"],
-                                   cwd=str(home / ".claude/vault-automation"), capture_output=True, text=True, env=env, timeout=30)
+                                   cwd=str(home / ".agent-brain/automation"), capture_output=True, text=True, env=env, timeout=30)
             self.assertEqual(probe.stdout.strip(), str(vault), probe.stderr)
             note = vault / "00 - Inbox/Config probe.md"
             note.write_text("# no metadata\n", encoding="utf-8")
@@ -74,6 +77,31 @@ class InstallTests(unittest.TestCase):
                                   input=json.dumps({"tool_input": {"file_path": str(note)}}), capture_output=True, text=True, env=env, timeout=30)
             self.assertEqual(hook.returncode, 2, hook.stdout + hook.stderr)
             self.assertIn("Missing opening frontmatter", hook.stderr)
+
+    def test_existing_controller_stays_put_and_injected_paths_stay_current(self):
+        spec = importlib.util.spec_from_file_location("brain_install_home", REPO / "install.py")
+        installer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        with tempfile.TemporaryDirectory(prefix="brain-legacy-") as tmp:
+            home = Path(tmp).resolve() / "home"
+            legacy = home / ".claude/vault-automation"
+            legacy.mkdir(parents=True)
+            (legacy / "vaultctl.py").write_text("# v1 controller\n", encoding="utf-8")
+            (legacy / "state-v2").mkdir()
+            settings = home / ".claude/settings.json"
+            settings.write_text(json.dumps({"env": {"BRAIN_VAULT_ROOT": str(home / "Old"), "OTHER": "kept"}}), encoding="utf-8")
+            self.assertEqual(installer.automation_dir(home), legacy)
+            with contextlib.redirect_stdout(io.StringIO()):
+                installer.install(home, home / "Brain", apply=True, replace=True, client="claude")
+            self.assertTrue((legacy / "vault_gate.py").is_file())
+            self.assertTrue((legacy / "state-v2").is_dir())
+            self.assertFalse((home / ".agent-brain/automation").exists())
+            self.assertEqual(json.loads((home / ".agent-brain/config.json").read_text(encoding="utf-8"))["automation_dir"], str(legacy))
+            env = json.loads(settings.read_text(encoding="utf-8"))["env"]
+            # An injected value is kept in step with the config; nothing new is added.
+            self.assertEqual(env, {"BRAIN_VAULT_ROOT": str(home / "Brain"), "OTHER": "kept"})
+            launcher = home / ".agent-brain/bin" / ("brain.cmd" if os.name == "nt" else "brain")
+            self.assertIn(str(legacy), launcher.read_text(encoding="utf-8"))
 
     def test_stale_other_client_is_refused_before_any_write(self):
         spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")
@@ -161,7 +189,7 @@ class InstallTests(unittest.TestCase):
             settings.parent.mkdir(parents=True)
             settings.write_text(json.dumps({"model": "existing-model", "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "unrelated-hook"}]}]}}))
             run(args + ["--apply"])
-            auto = home / ".claude/vault-automation"
+            auto = home / ".agent-brain/automation"
             self.assertTrue((auto / "vault_links.mjs").is_file())
             self.assertTrue((vault / "Home.md").is_file())
             self.assertTrue((vault / "10 - Resources/Vault Actions.md").is_file())

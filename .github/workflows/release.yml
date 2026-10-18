@@ -1,0 +1,24 @@
+name: Release bundle
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Build brain.pyz and its SHA256SUMS
+        run: python tools/build_pyz.py --version "$GITHUB_REF_NAME" --output dist/brain.pyz --sums dist/SHA256SUMS
+      - name: Run the suite from the bundle
+        run: python dist/brain.pyz test
+      - name: Publish the release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/brain.pyz dist/SHA256SUMS --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes "brain.pyz is a reproducible build of this tag (python tools/build_pyz.py --version $GITHUB_REF_NAME). SHA256SUMS checks integrity of the download, not who published it."

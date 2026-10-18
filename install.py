@@ -53,16 +53,49 @@ def selected(client, home=None):
     return names
 
 
+LEGACY_AUTOMATION = ".claude/vault-automation"
+
+
+def automation_dir(home):
+    """Where the controller lives: config.json's choice, else an existing legacy install, else the neutral home.
+
+    State and receipts live beside the controller, so an existing install is never moved."""
+    configured = read_config(home).get("automation_dir")
+    if isinstance(configured, str) and configured and (Path(configured).expanduser() / "vaultctl.py").is_file():
+        return Path(configured).expanduser()
+    if (home / LEGACY_AUTOMATION / "vaultctl.py").is_file():
+        return home / LEGACY_AUTOMATION
+    return home / ".agent-brain/automation"
+
+
 def environment(home, vault):
-    return {"BRAIN_VAULT_ROOT": str(vault), "BRAIN_AUTOMATION_DIR": str(home / ".claude/vault-automation"),
+    return {"BRAIN_VAULT_ROOT": str(vault), "BRAIN_AUTOMATION_DIR": str(automation_dir(home)),
             "BRAIN_PYTHON": sys.executable}
+
+
+def launcher_bytes(name, auto):
+    """bin/brain (POSIX sh, path in single quotes) or bin/brain.cmd (cmd.exe), with the controller folder filled in."""
+    text = (REPO / "bin" / name).read_text(encoding="utf-8").replace("\r\n", "\n")
+    if name.endswith(".cmd"):
+        if any(c in str(auto) for c in '"%'):
+            raise ValueError(f"The controller folder contains a character cmd.exe would expand: {auto}")
+        return text.replace("{{AUTOMATION_DIR}}", str(auto)).replace("\n", "\r\n").encode("utf-8")
+    return text.replace("{{AUTOMATION_DIR}}", str(auto).replace("'", "'\\''")).encode("utf-8")
+
+
+def sync_env(existing, env):
+    """Every tier reads config.json, so Brain variables are no longer added to client settings.
+    Ones an earlier release injected are kept current, so a stale value never overrides the config."""
+    for key, value in env.items():
+        if key in existing:
+            existing[key] = value
 
 
 def config_bytes(home, vault, clients, existing):
     """The neutral home's config.json: Brain paths any client or adapter can read without environment injection."""
     data = dict(existing)
     known = data.get("clients") if isinstance(data.get("clients"), list) else []
-    data.update({"version": CONFIG_VERSION, "vault_root": str(vault), "automation_dir": str(home / ".claude/vault-automation"),
+    data.update({"version": CONFIG_VERSION, "vault_root": str(vault), "automation_dir": str(automation_dir(home)),
                  "python": sys.executable, "clients": sorted({*map(str, known), *clients})})
     return (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
@@ -138,7 +171,7 @@ def toml_bytes(data):
 
 def installation(home, vault, replace=False, client="both"):
     """Build the entire plan before writing; conflicting files require explicit replacement."""
-    auto = home / ".claude/vault-automation"
+    auto = automation_dir(home)
     files = {}
     conflicts = []
     clients = selected(client)
@@ -184,6 +217,8 @@ def installation(home, vault, replace=False, client="both"):
         add(auto / "adapters" / path.name, path.read_bytes())
     add(auto / "BRAIN.md", (REPO / "boot/BRAIN.md").read_bytes())
     add(auto / "FIRST-CHECKPOINT.md", (REPO / "FIRST-CHECKPOINT.md").read_bytes())
+    for name in ("brain", "brain.cmd"):
+        add(home / ".agent-brain/bin" / name, launcher_bytes(name, auto))
     add(home / ".agent-brain/config.json", config_bytes(home, vault, {*clients, *installed_clients(home)}, read_config(home)), merge=True)
     for name in clients:
         adapter = ADAPTERS[name]
@@ -216,10 +251,11 @@ def installation(home, vault, replace=False, client="both"):
         target = expand(formats["codex-config-toml"]["settings"]["path"], home)
         original = target.read_text(encoding="utf-8-sig") if target.exists() else ""
         config = tomllib.loads(original)
-        policy = config.setdefault("shell_environment_policy", {})
+        policy = config.get("shell_environment_policy", {})
         if not isinstance(policy, dict) or not isinstance(policy.get("set", {}), dict):
             raise ValueError("Codex shell_environment_policy and set must be tables")
-        policy.setdefault("set", {}).update(env)
+        if "set" in policy:
+            sync_env(policy["set"], env)
         if config != tomllib.loads(original):
             add(target, toml_bytes(config), merge=True)
     if conflicts:
@@ -264,7 +300,8 @@ def merge_claude(home, env, add, replace, adapter):
         raise ValueError("Claude settings and hooks must be JSON objects")
     if not isinstance(settings.get("env", {}), dict):
         raise ValueError("Claude settings.env must be an object")
-    settings.setdefault("env", {}).update(env)
+    if "env" in settings:
+        sync_env(settings["env"], env)
     if scripts is None:
         add(settings_path, (json.dumps(settings, indent=2, ensure_ascii=False) + "\n").encode(), merge=True)
         return
@@ -373,10 +410,12 @@ def install(home, vault, apply=False, replace=False, client="both"):
             temporary.unlink(missing_ok=True)
         if target.read_bytes() != data:
             raise OSError(f"Read-back failed: {target}")
+        if target.name == "brain" and target.parent.name == "bin" and os.name != "nt":
+            target.chmod(0o755)  # the POSIX launcher; NamedTemporaryFile creates 0600
     if backup.exists():
         print("Backups: " + str(backup))
     if apply and migration:
-        auto = home / ".claude/vault-automation"
+        auto = automation_dir(home)
         with tempfile.TemporaryDirectory(prefix="brain-migration-") as tmp:
             payload = Path(tmp) / "migration.json"
             payload.write_text(json.dumps({"operations": [migration]}), encoding="utf-8")
@@ -524,7 +563,7 @@ def verify(home, vault):
     env = {k: v for k, v in os.environ.items() if not k.startswith("BRAIN_") and k not in ("VAULT_AUTOMATION_DIR", "VAULT_AUTOMATION")}
     env.update(environment(home, vault), HOME=str(home), USERPROFILE=str(home), PYTHONIOENCODING="utf-8")
     for check in ("validate", "hygiene"):
-        result = subprocess.run([sys.executable, str(home / ".claude/vault-automation/vaultctl.py"), check],
+        result = subprocess.run([sys.executable, str(automation_dir(home) / "vaultctl.py"), check],
                                 capture_output=True, text=True, encoding="utf-8", env=env, timeout=60)
         if result.returncode:
             raise ValueError(f"Installed {check} failed: {result.stdout}\n{result.stderr}")
@@ -639,7 +678,8 @@ def main():
         print("Restart each selected CLI, sign in, and approve its normal hook/access prompts.")
         if any((ADAPTERS[name]["hooks"] or {}).get("format") == "codex-hooks-json" for name in selected(args.client)):
             print("Codex: open /hooks in a new session and trust the three Agent Brain hooks; until then they are skipped.")
-        print(f"Then follow the first-checkpoint prompt saved at:\n{home / '.claude/vault-automation/FIRST-CHECKPOINT.md'}")
+        print(f"Then follow the first-checkpoint prompt saved at:\n{automation_dir(home) / 'FIRST-CHECKPOINT.md'}")
+        print(f"Optional: add {home / '.agent-brain/bin'} to PATH to run controller commands as `brain <command>`.")
         print("Online guide: https://github.com/gabz147/agent-brain/blob/main/FIRST-CHECKPOINT.md")
         print("Live agent behavior and Obsidian UI still need that check; file installation cannot certify them.")
     else:

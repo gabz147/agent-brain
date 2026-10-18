@@ -5,7 +5,7 @@ description: "Create or refresh a durable handoff in the user's shared vault so 
 
 # Durable handoff
 
-Resolve `<BRAIN_VAULT_ROOT>` and `<BRAIN_AUTOMATION_DIR>` from environment variables, defaulting to `~/Documents/Brain` and `~/.claude/vault-automation`. `<HOME>` means the current user home. These are placeholders, not literal paths.
+Resolve `<BRAIN_VAULT_ROOT>` and `<BRAIN_AUTOMATION_DIR>` from environment variables, else `~/.agent-brain/config.json`, defaulting to `~/Documents/Brain` and `~/.agent-brain/automation`. `<HOME>` means the current user home. These are placeholders, not literal paths.
 
 Read `<BRAIN_VAULT_ROOT>\10 - Resources\Handoff Template.md`; from `Vault Workflow Contract.md` in that folder load only the Handoffs and manual use section when it is not already in context. Apply the shared obsidian-vault skill for retrieval and writes.
 
