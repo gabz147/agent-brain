@@ -23,15 +23,18 @@ def brain_config():
     try:
         data = json.loads((Path.home() / ".agent-brain" / "config.json").read_text(encoding="utf-8-sig"))
         return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
+    except Exception:  # unreadable config, undeterminable home: the config simply does not take part
         return {}
 
 
-CONFIG = brain_config()
+def _config_vault_root():
+    value = brain_config().get("vault_root")
+    return value if isinstance(value, str) and value else None
+
+
 DEFAULT_AUTOMATION = Path(os.environ.get("BRAIN_AUTOMATION_DIR") or os.environ.get("VAULT_AUTOMATION_DIR") or HERE).expanduser()
 # Resolution order for the vault: environment, then config.json, then the default folder.
-DEFAULT_VAULT = Path(os.environ.get("BRAIN_VAULT_ROOT") or (CONFIG.get("vault_root") if isinstance(CONFIG.get("vault_root"), str) else None)
-                     or Path.home() / "Documents" / "Brain").expanduser()
+DEFAULT_VAULT = Path(os.environ.get("BRAIN_VAULT_ROOT") or _config_vault_root() or Path.home() / "Documents" / "Brain").expanduser()
 DEFAULT_STATE = Path(os.environ.get("BRAIN_STATE_DIR") or DEFAULT_AUTOMATION / "state-v2").expanduser()
 DEFAULT_BACKUPS = Path(os.environ.get("BRAIN_BACKUPS_DIR") or DEFAULT_VAULT.parent / (DEFAULT_VAULT.name + " Backups") / "versions").expanduser()
 SCHEMA = json.loads((HERE / "vault-schema.json").read_text(encoding="utf-8-sig"))

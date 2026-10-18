@@ -20,4 +20,4 @@ What was tried, why it failed, and what to do instead. The counterpart of "bank 
 
 ## Vault maintenance
 
-- **Renaming a note** — tried: shell `mv`. Failed: every `[[link]]` to it breaks. Do instead: rename inside Obsidian (auto-update links), or fix every reference by hand.
+- **Renaming a note** — tried: shell `mv`. Failed: every `[[link]]` to it breaks. Do instead: rename inside Obsidian (auto-update links), or fix every reference by hand. → convention (2026-10-17, human)

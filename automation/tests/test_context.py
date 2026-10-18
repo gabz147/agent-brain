@@ -71,11 +71,27 @@ class ContextTests(Fixture):
         roomy = session_brief(self.vault, self.directory, cap=4000)
         self.assertIn("Before that: Session 1", roomy)
         self.assertIn("Active Now: Item 0", roomy)
+        # Newest by date, not by path: the January folder sorts before December's.
+        for day, open_next in (("2026-12-31", "Finish the December task"), ("2027-01-01", "Start the January task")):
+            op = core.daily_operation(self.vault, day, "3:00 PM", "Turn of the year", sections, "astra", f"<!-- {day} -->", open_next)
+            self.vault.commit([op], "astra", "fixture")
+        self.assertTrue(session_brief(self.vault, self.directory).startswith("Brain: last day 2027-01-01; open: Start the January task"))
+        # A long multibyte Open line still leaves room for the hook-error line under the byte cap.
+        op = core.daily_operation(self.vault, "2027-01-02", "3:00 PM", "Wide", sections, "astra", "<!-- wide -->", "\u6f22" * 300)
+        self.vault.commit([op], "astra", "fixture")
+        wide = session_brief(self.vault, self.directory)
+        self.assertLessEqual(len(wide.encode("utf-8")), 700)
+        self.assertIn("Hook errors: 1", wide)
         args = ["--vault", str(self.vault.root), "--state", str(self.vault.state), "--backups", str(self.vault.backups), "session-brief"]
         self.assertIsInstance(main(args), str)
         child = subprocess.run([sys.executable, str(core.HERE / "vaultctl.py"), *args], capture_output=True, text=True, encoding="utf-8", timeout=10)
         self.assertEqual(child.returncode, 0, child.stderr)
-        self.assertTrue(child.stdout.startswith("Brain: last day 2026-09-05"), child.stdout)
+        self.assertTrue(child.stdout.startswith("Brain: last day 2027-01-02"), child.stdout)
+        # An unreadable newest note is reported, never passed off as an empty history.
+        broken = self.vault.path(core.daily_path("2027-01-03"))
+        broken.parent.mkdir(parents=True, exist_ok=True)
+        broken.write_bytes(b"---\nstatus: active\n---\n# Caf\xe9\n")
+        self.assertIn("could not read the latest daily note", session_brief(self.vault, self.directory))
 
     def test_real_cli_summary_keeps_complete_verified_receipt_and_retry(self):
         transcript = self.transcript()

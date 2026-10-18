@@ -5,8 +5,10 @@ import json
 import os
 from pathlib import Path
 import sys
+import threading
 
 PREFIX = "Vault checkpoint requested for session "
+DEADLINE_SECONDS = 10
 
 
 def log_error(directory, error):
@@ -19,26 +21,40 @@ def log_error(directory, error):
         pass
 
 
+def resolve_directory():
+    try:
+        from brain_paths import automation_dir
+        return automation_dir()
+    except Exception:  # a partial install still resolves the legacy default
+        return Path(os.environ.get("BRAIN_AUTOMATION_DIR") or os.environ.get("VAULT_AUTOMATION_DIR")
+                    or os.path.expanduser("~/.claude/vault-automation"))
+
+
 def main():
     if os.environ.get("VAULT_AUTOMATION") == "1":
         return 0
+    directory = None
+    watchdog = None
     try:
-        from brain_paths import automation_dir
-        directory = automation_dir()
-    except Exception:  # a partial install still resolves the legacy default
-        directory = Path(os.environ.get("BRAIN_AUTOMATION_DIR") or os.environ.get("VAULT_AUTOMATION_DIR")
-                         or Path.home() / ".claude" / "vault-automation").expanduser()
-    try:
+        directory = resolve_directory()
+        # A controller blocked on an unreadable transcript must not hang until the client kills the hook.
+        watchdog = threading.Timer(DEADLINE_SECONDS, lambda: (log_error(directory, f"timeout after {DEADLINE_SECONDS} s"), os._exit(0)))
+        watchdog.daemon = True
+        watchdog.start()
         sys.path.insert(0, str(directory))
         from vault_hooks import stop_gate
         code, output = stop_gate(json.loads(sys.stdin.read() or "{}"))
+        watchdog.cancel()
         # Only the controller's explicit checkpoint request is a wake; anything else fails open.
         if code == 2 and output.startswith(PREFIX):
             print(output)
             return 2
         return 0
     except Exception as exc:
-        log_error(directory, exc)
+        if watchdog is not None:
+            watchdog.cancel()
+        if directory is not None:
+            log_error(directory, exc)
         return 0
 
 

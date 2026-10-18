@@ -365,16 +365,21 @@ HOOK_ERROR_DAYS = 7
 
 
 def _clip_to(text, limit):
+    """Clip to a UTF-8 byte budget, since the brief's cap is in bytes."""
     text = " ".join(text.split())
-    return text if len(text) <= limit else text[:limit - 1] + "…"
+    if len(text.encode("utf-8")) <= limit:
+        return text
+    while text and len(text.encode("utf-8")) > limit - 3:
+        text = text[:-1]
+    return text + "…"
 
 
 def latest_daily(vault):
     """The newest dated daily note: day, Open line and session headings, read without the bodies."""
-    dailies = sorted(p for p in vault.notes() if is_daily(p))
+    dailies = [p for p in vault.notes() if is_daily(p)]
     if not dailies:
         return None
-    path = dailies[-1]
+    path = max(dailies, key=lambda p: p.stem)  # stems are ISO dates; month folders sort by month, not year
     open_line, sessions = None, []
     for _, line in _unfenced_lines(read_text(path)):
         if line.startswith("**Open for tomorrow:**"):
@@ -426,10 +431,12 @@ def session_brief(vault, automation_dir=None, cap=BRIEF_CAP):
         lines.append((priority, _clip_to(text, BRIEF_LINE)))
 
     try:
-        daily = latest_daily(vault)
-    except Exception:
-        daily = None
-    if daily is None:
+        daily, failure = latest_daily(vault), None
+    except Exception as exc:
+        daily, failure = None, exc
+    if failure is not None:
+        add(9, f"Brain: could not read the latest daily note ({type(failure).__name__}: {failure}); check it before relying on history.")
+    elif daily is None:
         add(9, "Brain: no sessions recorded yet.")
     else:
         add(9, f"Brain: last day {daily['day']}" + (f"; open: {daily['open']}" if daily["open"] else ""))

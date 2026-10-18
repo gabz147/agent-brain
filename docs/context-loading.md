@@ -53,7 +53,8 @@ they do not prove a particular model follows the policy or measure its billing.
 daily note's Open line, its last two session headings, the Active Now bullets,
 and a count of fail-open hook errors from the last seven days. It reads notes
 and never writes. Claude's SessionStart hook injects it on startup and resume;
-Codex runs it when its instructions ask for continuity. The brief is navigation
+Codex, which has no hooks here, is instructed to run it once at the start of
+substantive work. The brief is navigation
 for the model, not evidence: the notes it points at still have to be read.
 
 ## Compact checkpointing and optional vault actions

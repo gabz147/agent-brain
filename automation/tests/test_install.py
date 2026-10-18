@@ -48,9 +48,12 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(config["vault_root"], str(vault))
             self.assertEqual(config["clients"], ["codex"])
             self.assertEqual(config["automation_dir"], str(home / ".claude/vault-automation"))
-            # A later run for the other client keeps the vault and adds the client; nothing conflicts.
+            # A v1 home has no config.json: the other client's settings still decide the vault, so adding a client
+            # without --vault joins the existing vault instead of creating ~/Documents/Brain.
+            (home / ".agent-brain/config.json").unlink()
+            self.assertEqual(installer.configured_vault(home, "claude"), vault)
             with contextlib.redirect_stdout(io.StringIO()):
-                installer.install(home, installer.configured_vault(home, "both"), apply=True, client="claude")
+                installer.install(home, installer.configured_vault(home, "claude"), apply=True, client="claude")
             config = json.loads((home / ".agent-brain/config.json").read_text(encoding="utf-8"))
             self.assertEqual(config["clients"], ["claude", "codex"])
             self.assertEqual(config["vault_root"], str(vault))
@@ -66,6 +69,28 @@ class InstallTests(unittest.TestCase):
                                   input=json.dumps({"tool_input": {"file_path": str(note)}}), capture_output=True, text=True, env=env, timeout=30)
             self.assertEqual(hook.returncode, 2, hook.stdout + hook.stderr)
             self.assertIn("Missing opening frontmatter", hook.stderr)
+
+    def test_stale_other_client_is_refused_before_any_write(self):
+        spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")
+        installer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        with tempfile.TemporaryDirectory(prefix="brain-stale-") as tmp:
+            home = Path(tmp).resolve() / "home"
+            with contextlib.redirect_stdout(io.StringIO()):
+                installer.install(home, home / "Brain", apply=True, client="both")
+            self.assertEqual(installer.stale_clients(home, "claude"), [])
+            older = home / ".codex/skills/handoff/SKILL.md"
+            older.write_text(older.read_text(encoding="utf-8") + "\nolder release\n", encoding="utf-8")
+            self.assertEqual(installer.stale_clients(home, "claude"), ["codex"])
+            self.assertEqual(installer.stale_clients(home, "both"), [])
+            result = subprocess.run([sys.executable, str(REPO / "install.py"), "--home", str(home), "--client", "claude", "--apply", "--replace-workflow"],
+                                    capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("rerun with --client both", result.stderr)
+            self.assertNotIn("WRITE", result.stdout)
+            (home / ".agent-brain/config.json").write_text("not json", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "config.json is not valid JSON"):
+                installer.read_config(home)
 
     def test_upgrade_prunes_only_the_retired_session_end_hook(self):
         spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")

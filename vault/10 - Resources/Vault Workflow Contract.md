@@ -58,7 +58,7 @@ Current claims require source evidence; chronology alone is not proof of current
 
 ## Shared writer
 
-Resolve angle-bracket paths from the environment: BRAIN_VAULT_ROOT defaults to ~/Documents/Brain; BRAIN_AUTOMATION_DIR defaults to ~/.claude/vault-automation; BRAIN_BACKUPS_DIR defaults to a sibling <vault name> Backups/versions directory. Both agents use the same controller:
+Resolve angle-bracket paths from the environment, or from `~/.agent-brain/config.json` when the environment is silent: BRAIN_VAULT_ROOT defaults to ~/Documents/Brain; BRAIN_AUTOMATION_DIR defaults to ~/.claude/vault-automation; BRAIN_BACKUPS_DIR defaults to a sibling <vault name> Backups/versions directory. Both agents use the same controller:
 
 ```powershell
 $vaultCtl = '<BRAIN_AUTOMATION_DIR>\vaultctl.py'

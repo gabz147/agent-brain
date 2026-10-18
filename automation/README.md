@@ -80,7 +80,7 @@ python "$auto\vaultctl.py" snapshot-runtime
 python "$auto\vaultctl.py" hygiene
 ```
 
-The baseline is private at `<BRAIN_STATE_DIR>/runtime-contract.json`. Core-only installations do not require a scheduled-task baseline. Runtime checks compare the actual hooks and this task without repairing them. After upgrading from a release with the drain, remove `VaultQueueDrain` and re-record the baseline once, since the approved runtime changed. Do not re-record a baseline just to hide unexplained drift.
+The baseline is private at `<BRAIN_STATE_DIR>/runtime-contract.json`. Core-only installations do not require a scheduled-task baseline. Runtime checks compare the actual hooks and this task without repairing them. After upgrading from a release with the drain, remove `VaultQueueDrain` and re-record the baseline once, since the approved runtime changed. The release that replaced the Node Stop launcher and added the SessionStart hook also changed the approved hook wiring; inspect the new settings, then re-record once. Do not re-record a baseline just to hide unexplained drift.
 
 The audit defers with input less than five minutes ago, fullscreen foreground, an unavailable presence probe, or a pause toggle. `-Force` skips only the daily audit stamp. Keep Interactive identity; SYSTEM/S4U cannot observe the user's input session correctly. Keep the VBS launcher to avoid console flashes.
 

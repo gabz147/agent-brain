@@ -80,8 +80,8 @@ Client accounts and usage costs remain your own.
 
 The agent starts with a compact boot policy. On Claude Code a SessionStart hook
 injects a short brief, about 200 tokens: the latest Open line, the last session
-headings, Active Now and any recent hook errors. Codex gets the same brief from
-`vaultctl.py session-brief`. Greetings and self-contained
+headings, Active Now and any recent hook errors. Codex, which has no hooks here, is
+instructed to run `vaultctl.py session-brief` once instead. Greetings and self-contained
 questions need no vault reads. For substantive project work, it reads the map
 and relevant notes. Priorities are for status/continuation, daily history starts
 with compact Open/session navigation and relevant complete sessions, and workflow sections load before writing.

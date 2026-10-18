@@ -12,7 +12,7 @@ Read this map once when substantive work needs vault context. The boot file defi
 
 ## Vault location
 
-Use `BRAIN_VAULT_ROOT`, default `~/Documents/Brain`. The boot files stay outside the vault. An agent must have filesystem access to this location to participate.
+Use `BRAIN_VAULT_ROOT`, else `vault_root` in `~/.agent-brain/config.json`, default `~/Documents/Brain`. The boot files stay outside the vault. An agent must have filesystem access to this location to participate.
 
 ## Who I Am
 

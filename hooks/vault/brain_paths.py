@@ -13,7 +13,7 @@ def config():
     try:
         data = json.loads((Path.home() / ".agent-brain" / "config.json").read_text(encoding="utf-8-sig"))
         return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
+    except Exception:  # unreadable config or undeterminable home: the config does not take part
         return {}
 
 
