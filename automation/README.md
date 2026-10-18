@@ -1,6 +1,6 @@
-# Shared controller and optional Windows audit
+# Shared controller
 
-The Python controller is required for live vault writes and checkpoints. The PowerShell runner and its Task Scheduler job are optional. Nothing in this package starts a model call on its own: checkpoints are written live by the agent inside its own session.
+The Python controller is required for live vault writes and checkpoints. Nothing in this package starts a model call on its own: checkpoints are written live by the agent inside its own session.
 
 ## Components
 
@@ -14,9 +14,8 @@ The Python controller is required for live vault writes and checkpoints. The Pow
 | `vault_recall.py` | Read-only session brief, recall eval, consolidation digest and `(as of <date>)` fact freshness; no index |
 | `obsidian_read.py` | Optional read-only Obsidian CLI observations (links, backlinks, properties, local recovery history, write preflight); never writes |
 | `vault_adapters.py`, `adapters/*.json`, `BRAIN.md` | One data-only manifest per agent (instructions path and strategy, skills dirs, hooks, transcript adapter), validated against `adapters/schema.json`, plus the shared boot block each agent's file is rendered from |
-| `vault_hygiene.py`, `vault_runtime.py` | Deterministic schema/index/priority checks, boot/skill parity against one rendering per installed agent, and approved runtime drift checks |
-| `invoke-vault-job.ps1`, `nightly-audit.ps1` | Guarded scheduled audit entry point; only verified audit results advance the day stamp |
-| `user-busy.ps1`, `run-hidden.vbs` | Interactive idle/fullscreen/pause guards and a windowless launcher |
+| `vault_hygiene.py` | Deterministic schema/index/priority checks and boot/skill parity against one rendering per installed agent; runtime drift checks when the optional `contrib/windows-audit` baseline is installed |
+| `vault_links.py` | `vaultctl.py links`: read-only wikilink audit (missing targets, ambiguous names, unmatched headings and blocks, orphan candidates) |
 | `tests/` | Temporary-vault regression tests; no paid model calls |
 
 ## Live commands
@@ -53,43 +52,9 @@ Keep `state-v2/`, any legacy queue/spool files and journals, logs, toggles, lock
 
 `automation-state.json` with `paused: true` and scope `afk` pauses the scheduled audit; scope `all` also silences live Stop requests. Agent Pulse controls this toggle. Missing means unpaused; unreadable existing state defers scheduled work. It never discards data.
 
-## Optional Windows audit task
+## Optional extras
 
-Install the controller first and confirm the environment matches its directory. Dry-run the wrapper:
-
-```powershell
-$auto = $env:BRAIN_AUTOMATION_DIR
-if (-not $auto) { $auto = (Get-Content (Join-Path $env:USERPROFILE '.agent-brain\config.json') | ConvertFrom-Json).automation_dir }
-powershell -NoProfile -ExecutionPolicy Bypass -File "$auto\nightly-audit.ps1" -DryRun
-```
-
-The dry run reports the controller and intended operation. It does not test actual writes or user-idle eligibility.
-
-For a new installation, register the following only within the user's approved scheduling scope. If the task already exists, inspect and merge its definition rather than replacing it blindly. The audit runs daily with a logon catch-up and never calls a model. Adjust cadence deliberately, then record the actual baseline.
-
-```powershell
-$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
-$taskSettings = New-ScheduledTaskSettingsSet -Hidden -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 1) -MultipleInstances IgnoreNew
-
-$auditAction = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument "`"$auto\run-hidden.vbs`" `"$auto\nightly-audit.ps1`""
-$auditDaily = New-ScheduledTaskTrigger -Daily -At '03:30'
-$auditLogon = New-ScheduledTaskTrigger -AtLogOn -User $user
-$auditLogon.Delay = 'PT10M'
-Register-ScheduledTask -TaskName 'VaultNightlyAudit' -Action $auditAction -Trigger $auditDaily,$auditLogon -Principal $principal -Settings $taskSettings
-
-# Inspect the installed definitions and hook wiring first, then record that approved state.
-python "$auto\vaultctl.py" snapshot-runtime
-python "$auto\vaultctl.py" hygiene
-```
-
-The baseline is private at `<BRAIN_STATE_DIR>/runtime-contract.json`. Core-only installations do not require a scheduled-task baseline. Runtime checks compare the actual hooks and this task without repairing them. After upgrading from a release with the drain, remove `VaultQueueDrain` and re-record the baseline once, since the approved runtime changed. The release that replaced the Node Stop launcher and added the SessionStart hook also changed the approved hook wiring; inspect the new settings, then re-record once. Do not re-record a baseline just to hide unexplained drift.
-
-The audit defers with input less than five minutes ago, fullscreen foreground, an unavailable presence probe, or a pause toggle. `-Force` skips only the daily audit stamp. Keep Interactive identity; SYSTEM/S4U cannot observe the user's input session correctly. Keep the VBS launcher to avoid console flashes.
-
-Nightly hygiene makes zero model calls and stamps the day only on a verified report. `hygiene` records `state-v2/hygiene-latest.json` and an outcomes row even without `--fix`; only `--fix` edits notes. Review `audit.log` and `state-v2/hygiene-latest.json`; no process exit alone proves success.
-
-To disable scheduling, disable only `VaultNightlyAudit` within the user's requested scope.
+The scheduled Windows audit and its runtime baseline, the Obsidian debug-port link checker and the Agent Pulse plugin live in the repository's `contrib/` folder; setup does not install them. For a cross-platform nightly `hygiene --fix`, see `docs/scheduling.md`.
 
 ## Readable note timestamps
 

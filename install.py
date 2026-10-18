@@ -614,7 +614,7 @@ def main():
             variable = adapter.get("home_env")
             value = os.environ.get(variable) if variable else None
             if value and Path(value).expanduser().resolve() != expand(adapter["home_dir"], home):
-                raise ValueError(f"{variable} points to a nonstandard client directory. Use the manual INSTALL.md steps; no standard-profile files were changed.")
+                raise ValueError(f"{variable} points to a nonstandard client directory. Use the manual steps in docs/setup.md; no standard-profile files were changed.")
     vault = (args.vault or configured_vault(home, args.client)).expanduser().resolve()
     if args.wizard:
         answer = input(f"Vault folder [{vault}]: ").strip()

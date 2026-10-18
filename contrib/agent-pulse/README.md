@@ -20,7 +20,7 @@ This is optional and self-contained. The rest of agent-brain works without it.
 
 ## Signals it reads
 
-The orb watches the optional automation module's runtime files under `BRAIN_AUTOMATION_DIR` (falls back to `~/.claude/vault-automation`): `stop-state.json`, `.drain.lock` (the scheduled audit's lock) and `automation-state.json`, plus a `tasklist` process check and Obsidian's own vault-write events. If you don't run the automation module, those files simply won't exist — every poll treats a missing file as "no signal", so the orb just stays idle and the refresh button still works.
+The orb watches the optional automation module's runtime files under `BRAIN_AUTOMATION_DIR` (falls back to `~/.claude/vault-automation`; set the variable if your controller is in `~/.agent-brain/automation`): `stop-state.json`, `.drain.lock` (the scheduled audit's lock) and `automation-state.json`, plus a `tasklist` process check and Obsidian's own vault-write events. If you don't run the automation module, those files simply won't exist — every poll treats a missing file as "no signal", so the orb just stays idle and the refresh button still works.
 
 No configuration is required beyond the `BRAIN_AUTOMATION_DIR` env var that the rest of agent-brain already uses.
 

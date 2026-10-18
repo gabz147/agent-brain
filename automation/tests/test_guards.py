@@ -1,6 +1,7 @@
 """Release guards: keep the template lean, consistent with its Contract and free of private paths."""
 import re
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -8,10 +9,12 @@ REPO = Path(__file__).resolve().parents[2]
 CONTRACT = REPO / "vault/10 - Resources/Vault Workflow Contract.md"
 # Sizes after the October 2026 context audit, plus 5%. Raise a cap only with a measured reason.
 CAPS = {"skills/obsidian-vault/SKILL.md": 4300,  # +95 on 2026-10-18 for the transcript-free checkpoint form "skills/handoff/SKILL.md": 1793,
-        "skills/source-to-vault/SKILL.md": 4260, "vault/10 - Resources/Vault Workflow Contract.md": 20428}
+        "skills/source-to-vault/SKILL.md": 4260,
+        # 2026-10-18: v2 trimmed the Contract from 20,178 to about 13,400 bytes, agent-neutral; cap is that plus 5%.
+        "vault/10 - Resources/Vault Workflow Contract.md": 14100}
 STOP_TEMPLATE_CAP = 1246
 BANNED = ("keep queueing", "drain when you resume", "durable spool", "scheduled capture")
-PLACEHOLDER_PATHS = {"/home/x", "C:/Users/you", "C:/Users/me"}  # compared with separators normalized to '/'
+PLACEHOLDER_PATHS = {"/home/x", "/Users/you", "C:/Users/you", "C:/Users/me"}  # compared with separators normalized to '/'
 # Contract section references: quoted in the Stop text, "Contract's X section" or "its X section" in boots and skills.
 SECTION_REFERENCES = (re.compile(r'"([A-Z][^"{}]*)"(?= (?:sections?\b|and "))'),
                       re.compile(r"(?:[Cc]ontract's|its) ([A-Z][A-Za-z -]+?) section"))
@@ -40,12 +43,16 @@ class ReleaseGuards(unittest.TestCase):
         self.assertFalse(named - headings, "Contract sections named by the Stop text, boots or skills are missing")
 
     def test_shipped_docs_have_no_retired_capture_promises(self):
-        docs = [REPO / p for p in ("README.md", "INSTALL.md", "LAPTOP-SETUP.md", "plugins/agent-pulse/README.md")]
+        docs = [REPO / p for p in ("README.md", "docs/setup.md", *(str(p.relative_to(REPO)) for p in sorted((REPO / "contrib").glob("*/README.md"))))]
         docs += list((REPO / "docs").glob("*.md")) + list((REPO / "vault").rglob("*.md"))
         for path in docs:
             text = path.read_text(encoding="utf-8").lower()
             for phrase in BANNED:
                 self.assertNotIn(phrase, text, f"{path.relative_to(REPO)}: {phrase}")
+
+    def test_generated_agent_pages_are_current(self):
+        result = subprocess.run([sys.executable, str(REPO / "tools/gen_agent_docs.py"), "--check"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, "Run python tools/gen_agent_docs.py: " + result.stdout)
 
     def test_vault_actions_fallback_matches_the_note(self):
         note = (REPO / "vault/10 - Resources/Vault Actions.md").read_text(encoding="utf-8")

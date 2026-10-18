@@ -18,8 +18,8 @@ import zipfile
 REPO = Path(__file__).resolve().parents[1]
 # Everything setup installs, plus the docs and bootstraps the bundled test suite checks.
 INCLUDE = ("install.py", "FIRST-CHECKPOINT.md", "LICENSE", "automation", "boot", "bin", "hooks", "settings", "skills", "vault",
-           "README.md", "INSTALL.md", "LAPTOP-SETUP.md", "SKILL.md", "bootstrap.py", "bootstrap.sh", "bootstrap.ps1",
-           "get.sh", "get.ps1", "docs/*.md", "docs/examples", "plugins", "tools")
+           "README.md", "SKILL.md", "bootstrap.py", "bootstrap.sh", "bootstrap.ps1",
+           "get.sh", "get.ps1", "docs/*.md", "docs/examples", "contrib", "tools")
 SKIP_PARTS = {"__pycache__", "node_modules", ".pytest_cache"}
 SKIP_SUFFIXES = {".pyc", ".pyo"}
 BINARY_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip", ".pyz"}

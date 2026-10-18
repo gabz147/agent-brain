@@ -14,8 +14,8 @@ file is available, obtain the public `https://github.com/gabz147/agent-brain`
 repository in a user workspace first. A standalone copy of these instructions
 is not the installed system. Never put the user's vault inside the checkout.
 
-Run `install.py --doctor` first; open [LAPTOP-SETUP.md](LAPTOP-SETUP.md) only for a prerequisite
-or login it reports missing, and [INSTALL.md](INSTALL.md) only for an upgrade conflict or manual merge.
+Run `install.py --doctor` first; open [docs/setup.md](docs/setup.md) only for a prerequisite
+or login it reports missing, or, under Manual installation and upgrades, for an upgrade conflict or manual merge.
 Detect the OS. Use the user's chosen clients and vault path; ask only for
 choices that remain unknown. Default vault: `~/Documents/Brain`.
 
@@ -31,7 +31,7 @@ For upgrades, inspect differing workflow files before `--replace-workflow`.
 The installer backs up replacements, merges the shared boot block and preserves
 existing notes, unrelated settings, custom schema, queues and receipts. Keep
 scheduled jobs from running while their controller is replaced, following
-INSTALL.md. Do not reset a vault to the starter template.
+docs/setup.md. Do not reset a vault to the starter template.
 
 Run `--verify` with the same client/vault arguments after installation. Report
 the actual paths and checks, then follow [FIRST-CHECKPOINT.md](FIRST-CHECKPOINT.md)
