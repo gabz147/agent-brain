@@ -10,7 +10,10 @@ import stat
 import subprocess
 import sys
 import tempfile
-import tomllib
+try:
+    import tomllib
+except ImportError:  # Python 3.10: Codex settings are left alone, config.json carries the paths
+    tomllib = None
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -99,7 +102,7 @@ class OnboardingTests(unittest.TestCase):
                 if client == "codex":
                     self.assertFalse((home / ".claude/settings.json").exists())
                     self.assertFalse((home / ".claude/hooks").exists())
-                if client == "claude":
+                if client == "claude" or tomllib is None:
                     self.assertEqual(config.read_text(), original)
                 else:
                     data = tomllib.loads(config.read_text(encoding="utf-8"))

@@ -12,7 +12,7 @@ handle everyday vault work after installation.
 ## Prerequisites
 
 - **Obsidian**, already installed: [official download](https://obsidian.md/download).
-- **Python 3.11+**, on PATH: [official downloads](https://www.python.org/downloads/).
+- **Python 3.10+**, on PATH: [official downloads](https://www.python.org/downloads/).
   On Windows select Add Python to PATH. On Linux use your distribution's Python
   package if it is new enough. Reopen the terminal afterward.
 - **Node.js 22+** only if you want the optional link checker in Vault Actions;
@@ -142,7 +142,7 @@ restore their previous state afterward; setup does not schedule new jobs.
 
 ## Troubleshooting
 
-- **Python missing:** install Python 3.11+, enable PATH on Windows, reopen the
+- **Python missing:** install Python 3.10+, enable PATH on Windows, reopen the
   terminal and rerun. `py -3` can also launch a downloaded installer on Windows.
 - **CLI missing after installation:** reopen the terminal for the vendor's PATH
   change and run its `--version` command.

@@ -9,7 +9,7 @@ import re
 import sys
 import time
 
-from vault_core import DEFAULT_AUTOMATION, DEFAULT_VAULT, HERE, Vault, atomic_json, file_lock, now, read_text
+from vault_core import DEFAULT_AUTOMATION, DEFAULT_VAULT, HERE, Vault, atomic_json, file_lock, iso_normalize, now, read_text
 from vault_sources import source_key, verified_receipts
 
 READ_ONLY = re.compile(r"^\s*(?:ls|dir|pwd|cd|cat|type|head|tail|wc|grep|rg|find|which|where|echo|printf|stat|file|du|df|jq|tree|date|whoami|hostname|git\s+(?:status|log|diff|show|branch|remote|rev-parse|describe)|Get-(?:ChildItem|Content|Item|Location|Command|Process|Date|Service)|Test-Path|Select-String|Measure-Object)\b", re.I)
@@ -119,7 +119,7 @@ def pending_agents(rows, current_ms):
     pending = []
     for tool_id, stamp in launched.items():
         try:
-            launched_ms = int(dt.datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp() * 1000)
+            launched_ms = int(dt.datetime.fromisoformat(iso_normalize(stamp)).timestamp() * 1000)
         except ValueError:
             continue
         if tool_id not in resolved and current_ms - launched_ms < PENDING_AGENT_MS:

@@ -93,6 +93,43 @@ class ContextTests(Fixture):
         broken.write_bytes(b"---\nstatus: active\n---\n# Caf\xe9\n")
         self.assertIn("could not read the latest daily note", session_brief(self.vault, self.directory))
 
+    def test_attested_checkpoint_from_flags_for_any_agent(self):
+        base = ["--vault", str(self.vault.root), "--state", str(self.vault.state), "--backups", str(self.vault.backups), "checkpoint"]
+        flags = ["--source", "opencode", "--model", "gpt-5.6", "--session", "oc-1", "--topic", "Adapter work",
+                 "--done", "Wrote the manifest", "--done", "Ran the fixtures", "--next", "Wire the gate",
+                 "--touched", "[[Agent Brain]]", "--open", "Verify on a second machine", "--day", "2026-09-06", "--time", "4:10 PM", "--summary"]
+        summary = main(base + flags)
+        self.assertEqual(summary["tier"], "attested")
+        self.assertEqual(summary["writer_model"], "gpt-5.6")
+        self.assertEqual(summary["provider"], "opencode")
+        daily = self.vault.path(core.daily_path("2026-09-06"))
+        text = daily.read_text(encoding="utf-8")
+        self.assertIn("## Session 1 \u2014 4:10 PM: Adapter work \u2014 `gpt-5.6`", text)
+        self.assertIn("- Wrote the manifest\n- Ran the fixtures", text)
+        self.assertIn("**Open for tomorrow:** Verify on a second machine", text)
+        receipt = sources.verified_receipts(self.vault, "opencode", "oc-1")[0]
+        self.assertEqual(receipt["id"], summary["id"])
+        self.assertEqual(receipt["model_source"], "self-report")
+        self.assertEqual(receipt["evidence"][0]["kind"], "attested")
+        self.assertEqual(receipt["ranges"], [])
+        # Replaying the identical flags returns the same receipt and appends nothing.
+        before = daily.read_bytes()
+        self.assertEqual(main(base + flags)["id"], summary["id"])
+        self.assertEqual(before, daily.read_bytes())
+        # A trivial attested turn records a receipt and writes nothing.
+        trivial = main(base + ["--source", "opencode", "--model", "gpt-5.6", "--session", "oc-2", "--trivial", "Answered a question from memory"])
+        self.assertEqual(trivial["disposition"], "trivial")
+        self.assertEqual(before, daily.read_bytes())
+        # Guards: no model, flags mixed with JSON, a transcript without its source, an agent name as model.
+        with self.assertRaisesRegex(core.VaultError, "--model"):
+            main(base + ["--source", "opencode", "--topic", "x", "--done", "y"])
+        with self.assertRaisesRegex(core.VaultError, "not both"):
+            main(base + ["--source", "opencode", "--model", "gpt-5.6", "--topic", "x", "--done", "y", "--input", "payload.json"])
+        with self.assertRaisesRegex(core.VaultError, "--source claude|codex"):
+            main(base + ["--transcript", str(self.transcript()), "--topic", "x", "--done", "y"])
+        with self.assertRaises(core.VaultError):
+            main(base + ["--source", "opencode", "--model", "codex", "--topic", "x", "--done", "y"])
+
     def test_real_cli_summary_keeps_complete_verified_receipt_and_retry(self):
         transcript = self.transcript()
         units = list(sources.stream_units(transcript, "codex", "session-1"))

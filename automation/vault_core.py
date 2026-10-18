@@ -59,15 +59,21 @@ ISO_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-](?
 READABLE_TIME = re.compile(r"([A-Za-z]+) ([1-9]\d?), (\d{4}) at (1[0-2]|[1-9]):([0-5]\d):([0-5]\d)(\.\d+)? (AM|PM) \(UTC([+-](?:[01]\d|2[0-3]):[0-5]\d)\)")
 
 
+def iso_normalize(value):
+    """An ISO timestamp every supported Python parses: Z as +00:00, fractions padded or cut to six digits."""
+    value = str(value).replace("Z", "+00:00")
+    return re.sub(r"\.(\d+)", lambda m: "." + (m.group(1) + "000000")[:6], value, count=1)
+
+
 def parse_note_time(value):
     if ISO_TIME.fullmatch(value):
-        return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return dt.datetime.fromisoformat(iso_normalize(value))
     match = READABLE_TIME.fullmatch(value)
     if not match:
         raise ValueError("Invalid note time")
     month, day, year, hour, minute, second, fraction, period, offset = match.groups()
     hour = int(hour) % 12 + (12 if period == "PM" else 0)
-    return dt.datetime.fromisoformat(f"{year}-{MONTHS.index(month) + 1:02}-{int(day):02}T{hour:02}:{minute}:{second}{fraction or ''}{offset}")
+    return dt.datetime.fromisoformat(iso_normalize(f"{year}-{MONTHS.index(month) + 1:02}-{int(day):02}T{hour:02}:{minute}:{second}{fraction or ''}{offset}"))
 
 
 def format_note_time(at=None):

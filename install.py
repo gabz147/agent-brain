@@ -12,9 +12,12 @@ import sys
 import tempfile
 import urllib.request
 
-if sys.version_info < (3, 11):
-    raise SystemExit("Install Python 3.11+ from https://www.python.org/downloads/ and rerun setup.")
-import tomllib
+if sys.version_info < (3, 10):
+    raise SystemExit("Install Python 3.10+ from https://www.python.org/downloads/ and rerun setup.")
+try:
+    import tomllib  # 3.11+; without it Codex settings are left alone and config.json carries the paths
+except ImportError:  # pragma: no cover - exercised only on 3.10
+    tomllib = None
 
 for stream in (sys.stdout, sys.stderr):
     if hasattr(stream, "reconfigure"):
@@ -185,7 +188,7 @@ def installation(home, vault, replace=False, client="both"):
 
     if "claude" in clients:
         merge_claude(home, env, add, replace)
-    if "codex" in clients:
+    if "codex" in clients and tomllib is not None:
         target = home / ".codex/config.toml"
         original = target.read_text(encoding="utf-8-sig") if target.exists() else ""
         config = tomllib.loads(original)
@@ -421,7 +424,7 @@ def configured_vault(home, client):
         paths.add(Path(root).expanduser().resolve())
     for name in selected("both"):
         path = home / ("." + name) / ("settings.json" if name == "claude" else "config.toml")
-        if not path.exists():
+        if not path.exists() or (name == "codex" and tomllib is None):
             continue
         text = path.read_text(encoding="utf-8-sig")
         data = json.loads(text) if name == "claude" else tomllib.loads(text)

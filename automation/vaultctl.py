@@ -6,6 +6,7 @@ import copy
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 from vault_core import (DEFAULT_AUTOMATION, DEFAULT_BACKUPS, DEFAULT_STATE, DEFAULT_VAULT, HERE, Conflict, Vault, VaultError,
@@ -83,7 +84,7 @@ def daily_context(vault, path):
 def receipt_summary(receipt):
     """Only presentation changes; checkpoint persists and verifies full receipts."""
     return {**{key: receipt.get(key) for key in
-               ("id", "disposition", "writer_model", "transaction_id")},
+               ("id", "disposition", "writer_model", "transaction_id", "tier", "provider")},
             "source_units": len(receipt.get("units", [])),
             "anchors": [{"path": a["path"], "sha256": a["sha256"],
                          "heading": a["text"].splitlines()[0]}
@@ -127,7 +128,7 @@ def default_evidence(units):
 
 def refuse_trivial(vault, args):
     """A trivial disposition must not hide durable work done since this turn's last checkpoint."""
-    if args.source != "claude":
+    if args.source != "claude" or not args.transcript:
         return
     from vault_hooks import latest_turn, signals, since_acknowledgment
     rows, _ = since_acknowledgment(vault, args.session, latest_turn(args.transcript))
@@ -158,6 +159,64 @@ def checkpoint(vault, args, payload):
     atomic_json(vault.state / "live" / (source_key(args.source, args.session) + ".json"),
                 {"turn_key": units[-1]["turn_key"], "receipt_id": receipt["id"], "status": receipt["disposition"],
                  "completed_at": now().isoformat(), "through": max(r["end"] for r in receipt["ranges"])})
+    return receipt
+
+
+SUMMARY_FLAGS = (("done", "What Got Done"), ("next", "What's Still In Progress"), ("decision", "Decisions Made"),
+                 ("touched", "Notes Touched"), ("profile", "Profile Updates"))
+
+
+def flags_payload(args):
+    """The checkpoint JSON an agent would otherwise write, built from repeatable flags."""
+    if args.input:
+        raise VaultError("Use the summary flags or --input, not both")
+    if not args.topic or not args.done:
+        raise VaultError("The summary flags need --topic and at least one --done")
+    sections = {heading: list(getattr(args, flag)) for flag, heading in SUMMARY_FLAGS if getattr(args, flag)}
+    day = {"topic": args.topic, "sections": sections}
+    for key, value in (("day", args.day), ("time", args.time), ("open_next", args.open)):
+        if value:
+            day[key] = value
+    return {"reason": args.reason or "Checkpoint: " + args.topic, "days": [day], "operations": []}
+
+
+def workspace_evidence(agent, model):
+    """What an attested checkpoint can measure without a transcript: the agent's claim plus cheap git facts."""
+    evidence = {"kind": "attested", "agent": agent, "model": model, "cwd": str(Path.cwd()), "at": now().isoformat()}
+    try:
+        head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=5)
+        if head.returncode == 0:
+            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, timeout=10)
+            evidence["git"] = {"head": head.stdout.strip(),
+                               "dirty_files": len([l for l in status.stdout.splitlines() if l.strip()]) if status.returncode == 0 else None}
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return evidence
+
+
+def attested_checkpoint(vault, args, payload):
+    """A checkpoint for an agent with no transcript: the agent names itself and its model, the receipt says it is attested."""
+    if not args.model:
+        raise VaultError("Without --transcript, pass --model with the verified runtime model id (and --source as the agent id)")
+    signer = model_label(args.model)
+    agent = args.source or "agent"
+    session = args.session or now().strftime("s-%Y%m%d-%H%M%S")
+    payload = copy.deepcopy(payload)
+    stamp = now()
+    for entry in payload.get("days", []):
+        entry.setdefault("day", stamp.date().isoformat())
+        entry.setdefault("time", stamp.strftime("%I:%M %p").lstrip("0"))
+    prepared = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    capture_id = "attested-" + sha((source_key(agent, session) + ":" + prepared).encode())
+    proposal = {"disposition": payload.get("disposition", "captured"), "reason": payload.get("reason", "Attested checkpoint"),
+                "evidence": payload.get("evidence") or [workspace_evidence(agent, args.model)],
+                "days": payload.get("days", []), "operations": payload.get("operations", []), "anchors": payload.get("anchors", [])}
+    receipt = next((r for r in verified_receipts(vault, agent, session) if r["id"] == capture_id), None)
+    if receipt is None:
+        receipt = apply_proposal(vault, proposal, signer, [], agent, session, capture_id, tier="attested", model_source="self-report")
+    atomic_json(vault.state / "live" / (source_key(agent, session) + ".json"),
+                {"turn_key": capture_id, "receipt_id": receipt["id"], "status": receipt["disposition"],
+                 "completed_at": now().isoformat(), "through": None})
     return receipt
 
 
@@ -194,15 +253,25 @@ def main(argv=None):
     freshness = sub.add_parser("fact-freshness", help="Stale (as of <date>) facts; read-only")
     sub.add_parser("session-brief", help="Plain-text startup continuity: Open line, last sessions, Active Now, recent hook errors; read-only")
     freshness.add_argument("--max-age-days", type=int, default=90)
-    for name in ("checkpoint-context", "checkpoint"):
-        command = sub.add_parser(name)
-        command.add_argument("--source", choices=("claude", "codex"), required=True)
-        command.add_argument("--session", required=True)
-        command.add_argument("--transcript", required=True)
-        if name == "checkpoint":
-            command.add_argument("--input", help="JSON file; default reads stdin (pipe a file under Windows PowerShell 5.1)")
-            command.add_argument("--trivial", metavar="REASON", help="Record a reasoned trivial disposition without JSON input")
-            command.add_argument("--summary", action="store_true", help="Print compact verified receipt; retain full receipt on disk")
+    context = sub.add_parser("checkpoint-context", help="Event days and times of the current transcript turn")
+    context.add_argument("--source", choices=("claude", "codex"), required=True)
+    context.add_argument("--session", required=True)
+    context.add_argument("--transcript", required=True)
+    command = sub.add_parser("checkpoint", help="Append a verified daily session: from a transcript (claude, codex) or attested by any agent")
+    command.add_argument("--source", "--agent", dest="source", help="Agent id: claude or codex with --transcript; any lowercase id otherwise")
+    command.add_argument("--session", help="Client session id; generated when omitted without a transcript")
+    command.add_argument("--transcript", help="Transcript path; binds the receipt to source evidence and verifies the model")
+    command.add_argument("--model", help="Verified runtime model id; required without --transcript")
+    command.add_argument("--input", help="JSON file; default reads stdin (pipe a file under Windows PowerShell 5.1)")
+    command.add_argument("--trivial", metavar="REASON", help="Record a reasoned trivial disposition without JSON input")
+    command.add_argument("--summary", action="store_true", help="Print compact verified receipt; retain full receipt on disk")
+    command.add_argument("--topic", help="Summary flags instead of JSON: the session topic")
+    for flag, heading in SUMMARY_FLAGS:
+        command.add_argument("--" + flag, action="append", metavar="TEXT", help=f"One bullet under {heading}; repeatable")
+    command.add_argument("--open", help="Replace the day's Open for tomorrow line")
+    command.add_argument("--day", help="Event day YYYY-MM-DD; default today, or the transcript's day")
+    command.add_argument("--time", help="Event time like 3:42 PM; default now, or the transcript's last event")
+    command.add_argument("--reason", help="Why this checkpoint exists; default from --topic")
     restore = sub.add_parser("restore")
     restore.add_argument("snapshot")
     restore.add_argument("path")
@@ -251,14 +320,22 @@ def main(argv=None):
                 "days": sorted({u["day"] for u in units}), "latest_event": {k: units[-1][k] for k in ("day", "time", "end")},
                 "day_times": day_times(units), "units": len(units), "first_evidence": default_evidence(units)[0]}
     if args.command == "checkpoint":
+        flagged = args.topic is not None or any(getattr(args, flag) for flag, _ in SUMMARY_FLAGS)
         if args.trivial is not None:
             if not args.trivial.strip():
                 raise VaultError("--trivial needs a reason")
             refuse_trivial(vault, args)
             payload = {"disposition": "trivial", "reason": args.trivial.strip()}
+        elif flagged:
+            payload = flags_payload(args)
         else:
             payload = load_input(args.input)
-        receipt = checkpoint(vault, args, payload)
+        if args.transcript:
+            if not args.source or not args.session:
+                raise VaultError("--transcript needs --source claude|codex and --session")
+            receipt = checkpoint(vault, args, payload)
+        else:
+            receipt = attested_checkpoint(vault, args, payload)
         return receipt_summary(receipt) if args.summary else receipt
     if args.command == "restore":
         return vault.restore(args.snapshot, args.path, args.expected_sha256)

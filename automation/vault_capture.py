@@ -21,8 +21,13 @@ def validate_proposal(vault, proposal, units):
         raise VaultError("Capture blocked: " + proposal.get("reason", "unspecified"))
     if not proposal.get("reason") or not proposal.get("evidence"):
         raise VaultError("Disposition needs a reason and source evidence")
+    attested = not units  # no transcript: the agent attests, and the receipt says so
     source = {u["id"]: u for u in units}
     for evidence in proposal["evidence"]:
+        if attested:
+            if not isinstance(evidence, dict) or evidence.get("kind") != "attested" or not evidence.get("agent"):
+                raise VaultError("An attested checkpoint needs attested evidence naming the agent")
+            continue
         unit = source.get(evidence.get("unit_id"))
         quote = evidence.get("quote")
         if not unit or not isinstance(quote, str) or len(quote.strip()) < 8 or quote not in unit["text"]:
@@ -46,20 +51,26 @@ def validate_proposal(vault, proposal, units):
         seen = set()
         for day in days:
             if not day.get("day"):
-                raise VaultError(f"This turn spans {valid}; give each days entry its day")
-            if day["day"] not in source_days or day["day"] in seen:
+                raise VaultError(f"This turn spans {valid}; give each days entry its day" if not attested else "Give each days entry its day")
+            if attested:
+                try:
+                    dt.date.fromisoformat(str(day["day"]))
+                except ValueError:
+                    raise VaultError("An attested day must be YYYY-MM-DD")
+            if (not attested and day["day"] not in source_days) or day["day"] in seen:
                 raise VaultError(f"Daily capture must use distinct source-local dates; valid days: {valid}")
             seen.add(day["day"])
             try:
                 dt.datetime.strptime(day.get("time", ""), "%I:%M %p")
             except ValueError:
                 raise VaultError(f"Session time for {day['day']} must look like 3:42 PM, or be omitted to use that day's last event")
-            times = [u["time"] for u in units if u["day"] == day["day"]]
-            if day["time"] not in times:
-                raise VaultError(f"Session time {day['time']} is not a source event on {day['day']} (first {times[0]}, last {times[-1]}); omit it to use the last")
+            if not attested:
+                times = [u["time"] for u in units if u["day"] == day["day"]]
+                if day["time"] not in times:
+                    raise VaultError(f"Session time {day['time']} is not a source event on {day['day']} (first {times[0]}, last {times[-1]}); omit it to use the last")
             if not day.get("sections", {}).get("What Got Done"):
                 raise VaultError("Capture needs an outcome")
-        if seen != source_days:
+        if not attested and seen != source_days:
             missing = ", ".join(sorted(source_days - seen))
             raise VaultError(f"Capture must account for every source-local day in this batch; add a days entry for {missing}")
         for op in proposal.get("operations", []):
@@ -85,7 +96,8 @@ def check_decision_edit(edit):
         raise VaultError("Superseding a locked decision needs the owner's words and an interactive vaultctl commit")
 
 
-def apply_proposal(vault, proposal, signer, units, provider, session_id, capture_id, transaction_id=None):
+def apply_proposal(vault, proposal, signer, units, provider, session_id, capture_id, transaction_id=None,
+                   tier="transcript", model_source="transcript"):
     validate_proposal(vault, proposal, units)
     marker = "<!-- vault-capture:" + capture_id + " -->"
     operations = copy.deepcopy(proposal.get("operations", []))
@@ -125,6 +137,7 @@ def apply_proposal(vault, proposal, signer, units, provider, session_id, capture
     else:
         anchors = proposal.get("anchors", [])
     receipt = {"id": capture_id, "at": now().isoformat(), "provider": provider, "session_id": session_id,
+               "tier": tier, "model_source": model_source,
                "disposition": proposal["disposition"], "reason": proposal["reason"], "evidence": proposal["evidence"],
                "units": [u["id"] for u in units], "ranges": [{k: u[k] for k in ("start", "end", "line_sha256", "fragment", "fragments")} for u in units],
                "anchors": anchors, "writer_model": signer, "transaction_id": (result or {}).get("transaction_id")}

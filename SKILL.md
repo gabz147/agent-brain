@@ -19,7 +19,7 @@ or login it reports missing, and [INSTALL.md](INSTALL.md) only for an upgrade co
 Detect the OS. Use the user's chosen clients and vault path; ask only for
 choices that remain unknown. Default vault: `~/Documents/Brain`.
 
-Run the repository's installer with Python 3.11+ (`python` on Windows,
+Run the repository's installer with Python 3.10+ (`python` on Windows,
 `python3` on macOS/Linux). For a user-operated terminal, `install.py --wizard`
 provides guided setup. In an agent tool without interactive input, use explicit
 arguments: `--client claude|codex|both` and, if chosen, `--vault <path>`.

@@ -10,8 +10,8 @@ import tempfile
 import urllib.request
 import zipfile
 
-if sys.version_info < (3, 11):
-    raise SystemExit("Install Python 3.11+ from https://www.python.org/downloads/ and rerun setup.")
+if sys.version_info < (3, 10):
+    raise SystemExit("Install Python 3.10+ from https://www.python.org/downloads/ and rerun setup.")
 
 
 def download(url, maximum):

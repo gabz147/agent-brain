@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 import re
 
-from vault_core import (MONTHS, VaultError, atomic_json, format_note_time, frontmatter, is_daily,
+from vault_core import (MONTHS, VaultError, atomic_json, format_note_time, frontmatter, is_daily, iso_normalize,
                         now, read_text)
 
 EVAL_NOTE = "10 - Resources/Recall Eval.md"
@@ -411,7 +411,7 @@ def recent_hook_errors(automation_dir, days=HOOK_ERROR_DAYS):
     count = 0
     for line in read_text(path).splitlines():
         try:
-            at = dt.datetime.fromisoformat(json.loads(line)["at"])
+            at = dt.datetime.fromisoformat(iso_normalize(json.loads(line)["at"]))
             if at.tzinfo is None:
                 at = at.astimezone()
             if at >= since:

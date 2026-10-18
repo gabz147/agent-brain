@@ -8,7 +8,7 @@ needed for the Brain workflow. Your notes stay on your computer.
 
 ## Install
 
-Have **Obsidian** and **Python 3.11+** installed. Guided setup checks these,
+Have **Obsidian** and **Python 3.10+** installed. Guided setup checks these,
 lets you choose a CLI and vault folder, and offers the official installer if
 your chosen CLI is missing. Nothing else is required.
 You do not need Git, a GitHub account, or another repository.
@@ -88,7 +88,9 @@ with compact Open/session navigation and relevant complete sessions, and workflo
 Compaction reloads only missing context for the current task.
 
 It saves substantial findings, decisions and handoffs through the shared writer,
-then appends a verified daily checkpoint. Each changed note gets an automatic
+then appends a verified daily checkpoint. Any agent can checkpoint: Claude Code and Codex bind
+the receipt to their transcript, other agents attest with their model id and
+summary flags. Each changed note gets an automatic
 readable local write timestamp with 12-hour time, seconds and timezone in `updated`, for example
 `September 23, 2026 at 6:20:14 AM (UTC-06:00)`. Existing date-only notes remain valid. Future sessions retrieve that context
 from the same Markdown files you see in Obsidian.
