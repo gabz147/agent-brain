@@ -14,7 +14,7 @@ What was tried, why it failed, and what to do instead. The counterpart of "bank 
 
 - **Add a line the moment an approach is abandoned for a working one.** Recurring operations only; not one-off typos.
 - Format: `- **operation** — tried: X. Failed: Y. Do instead: Z. → [[source note]] (YYYY-MM-DD, agent)`. One line.
-- Group under headings by area; add a heading when nothing fits.
+- Group under headings by the tool or operation the entry is about; add a heading when nothing fits. Name a heading for a tool or operation, never a project day, session or date, and never append under whichever section happens to be last: a heading scan must find every entry for its tool.
 - Look up an operation with `rg -n '^## ' 'Dead Ends.md'`, then read the matching section, or `rg -n -i -m 8 '<term>' 'Dead Ends.md'`.
 - Never delete a line. If a dead end stops being one (a tool update fixes it), append `— resolved YYYY-MM-DD: …`.
 
