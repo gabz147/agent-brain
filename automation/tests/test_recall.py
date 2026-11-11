@@ -109,6 +109,77 @@ class RecallTests(Fixture):
         report = recall.fact_freshness(self.vault)
         self.assertEqual(report["volatile_without_markers"][0]["path"], "Machine Inventory.md")
 
+    def drift_vault(self, marker):
+        def note(rel, text):
+            path = self.vault.root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        note("VAULT-INDEX.md", HEADER + f"\n## Who I Am\n\nWorks on [[Xray]].\n\n## Living Profile\n\nProfile reviewed through: {marker}\n")
+        note("Active Priorities.md", HEADER + "\n## Active Now\n\n- Work on [[Xray]]\n\n## Next\n\n- Later [[Yankee]]\n")
+        note("Xray.md", HEADER)
+        note("Yankee.md", HEADER)
+        note("01 - Daily Notes/10 - October 2026/2026-10-20.md", HEADER + "\n# Tuesday, October 20, 2026\n\n## Index\n\n"
+             "## Session 1 — 3:42 PM: Topic — `astra`\n\n### Profile Updates\n- I prefer tea.\n\n")
+
+    def test_session_brief_profile_line_with_drift_and_without(self):
+        self.drift_vault("2026-10-20T12:00")
+        brief = recall.session_brief(self.vault)
+        profile = [l for l in brief.splitlines() if l.startswith("Profile:")]
+        self.assertEqual(profile, ["Profile: 1 pending profile update(s) since 2026-10-20; 1 active project(s) not in Who I Am (Yankee). "
+                                   "Editing VAULT-INDEX needs owner approval."])
+        self.assertLessEqual(len(profile[0]), recall.BRIEF_LINE)
+        self.drift_vault("2026-10-20T23:00")
+        (self.vault.root / "Active Priorities.md").write_text(HEADER + "\n## Active Now\n\n- Work on [[Xray]]\n", encoding="utf-8")
+        self.assertNotIn("Profile:", recall.session_brief(self.vault))
+
+    def test_session_brief_profile_line_omits_zero_clause_and_caps_names(self):
+        self.drift_vault("2026-10-20T23:00")
+        names = ["Yankee", "Zulu", "Quebec", "Romeo", "Sierra"]
+        for name in names:
+            (self.vault.root / f"{name}.md").write_text(HEADER, encoding="utf-8")
+        (self.vault.root / "Active Priorities.md").write_text(
+            HEADER + "\n## Active Now\n\n- Work on [[Xray]]\n\n## Next\n\n" + "".join(f"- [[{n}]]\n" for n in names), encoding="utf-8")
+        profile = [l for l in recall.session_brief(self.vault).splitlines() if l.startswith("Profile:")][0]
+        self.assertTrue(profile.startswith("Profile: 5 active project(s) not in Who I Am (Yankee, Zulu, Quebec, Romeo, ...)"), profile)
+        self.assertNotIn("pending", profile)
+        self.assertIn("Editing VAULT-INDEX needs owner approval.", profile)
+
+    def test_session_brief_survives_profile_drift_failure(self):
+        self.drift_vault("2026-10-20T23:00")
+        (self.vault.root / "Active Priorities.md").write_text(HEADER + "\n## Active Now\n\n- Work on [[Xray]]\n", encoding="utf-8")
+        baseline = recall.session_brief(self.vault)
+        self.drift_vault("2026-10-20T12:00")
+        with patch("vault_hygiene.profile_drift", side_effect=core.VaultError("boom")):
+            self.assertEqual(recall.session_brief(self.vault), baseline)
+
+    def test_find_returns_the_ranking_the_eval_measures(self):
+        self.corpus()
+        info = self.vault.inspect(recall.EVAL_NOTE)
+        for case in recall.load_eval(info["text"]):
+            found = recall.find_notes(self.vault, case["terms"], top=50)
+            corpus = [(path.stem, rel, core.read_text(path)) for path, rel in recall._live_notes(self.vault) if rel != recall.EVAL_NOTE]
+            expected = [rel for _, rel, _ in recall.rank_notes(corpus, case["terms"])]
+            self.assertEqual([row["path"] for row in found["results"] if row["path"] != recall.EVAL_NOTE], expected[:len(found["results"])])
+        first = recall.find_notes(self.vault, [recall.load_eval(info["text"])[0]["terms"][0]], top=1)
+        self.assertEqual((first["outcome"], len(first["results"])), ("found", 1))
+        self.assertTrue(all(set(hit) == {"line", "text"} for hit in first["results"][0]["hits"]))
+        self.assertEqual(recall.find_notes(self.vault, ["no-such-term-anywhere"])["outcome"], "none")
+        with self.assertRaises(core.VaultError):
+            recall.find_notes(self.vault, ["  "])
+
+    def test_find_scope_excludes_daily_and_archive_unless_asked(self):
+        def note(rel, body):
+            path = self.vault.root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(HEADER + body, encoding="utf-8")
+        note("02 - Project/Zebra plan.md", "\n# Zebra plan\n")
+        note("09 - Archive/Zebra old.md", "\n# Zebra old\n")
+        note("01 - Daily Notes/09 - September 2026/2026-09-05.md", "\n# Saturday, September 5, 2026\n\nzebra session\n")
+        paths = lambda **kw: [row["path"] for row in recall.find_notes(self.vault, ["zebra"], **kw)["results"]]
+        self.assertEqual(paths(), ["02 - Project/Zebra plan.md"])
+        self.assertEqual(paths(daily=True), ["01 - Daily Notes/09 - September 2026/2026-09-05.md"])
+        self.assertEqual(sorted(paths(archive=True)), ["02 - Project/Zebra plan.md", "09 - Archive/Zebra old.md"])
+
     def test_cli_exit_codes(self):
         self.corpus()
         args = [sys.executable, str(core.HERE / "vaultctl.py"), "--vault", str(self.vault.root),

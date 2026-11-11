@@ -112,6 +112,42 @@ def score_note(stem, text, terms):
     return score
 
 
+def rank_notes(corpus, terms):
+    """(score, path, stem) for every scoring note, best first; the one ranking `find` returns and `recall-eval` measures."""
+    ranked = sorted(((score_note(stem, text, terms), rel, stem) for stem, rel, text in corpus), key=lambda row: (-row[0], len(row[1])))
+    return [row for row in ranked if row[0] > 0]
+
+
+def find_notes(vault, terms, top=8, daily=False, archive=False, lines=3):
+    """Ranked live notes for the terms, with a few matching lines each. A locator: read the chosen note in full.
+
+    Default scope is every visible note outside the daily notes and Archive; --daily searches only the daily
+    notes (chronology), --archive adds Archive. Nothing is indexed or cached: the notes are read on each call."""
+    terms = [term.strip().lower() for term in terms if term.strip()]
+    if not terms:
+        raise VaultError("find needs at least one search term")
+    corpus = []
+    for path in sorted(vault.root.rglob("*.md")):
+        rel = path.relative_to(vault.root)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        rel = rel.as_posix()
+        if is_daily(path) != daily or (rel.startswith(ARCHIVE_PREFIX) and not archive):
+            continue
+        corpus.append((path.stem, rel, read_text(path)))
+    texts = {rel: text for _, rel, text in corpus}
+    ranked = rank_notes(corpus, terms)
+    results = []
+    for score, rel, _ in ranked[:max(top, 1)]:
+        hits = [{"line": number, "text": _clip(line)} for number, line in enumerate(texts[rel].splitlines(), 1)
+                if any(term in line.lower() for term in terms)]
+        results.append({"path": rel, "score": score, "matching_lines": len(hits), "hits": hits[:lines]})
+    return {"outcome": "found" if results else "none", "terms": terms,
+            "scope": ("daily notes" if daily else "live notes") + (" and Archive" if archive else ""),
+            "notes_scanned": len(corpus), "notes_matching": len(ranked), "results": results,
+            "next": "These are locators, not evidence: read the chosen note in full before relying on it."}
+
+
 def recall_eval(vault, top_k=5, record=False):
     info = vault.inspect(EVAL_NOTE)
     if info["text"] is None:
@@ -123,9 +159,7 @@ def recall_eval(vault, top_k=5, record=False):
     stems = {stem.lower() for stem, _, _ in corpus}
     results = []
     for case in cases:
-        ranked = sorted(((score_note(stem, text, case["terms"]), len(rel), stem) for stem, rel, text in corpus),
-                        key=lambda row: (-row[0], row[1]))
-        ranked = [row for row in ranked if row[0] > 0]
+        ranked = rank_notes(corpus, case["terms"])
         order = [stem.lower() for _, _, stem in ranked]
         target = case["expected"].lower()
         rank = order.index(target) + 1 if target in order else None
@@ -139,7 +173,7 @@ def recall_eval(vault, top_k=5, record=False):
               "found": len(results) - len(misses), "top_k": top_k,
               "recall_at_k": round((len(results) - len(misses)) / len(results), 3),
               "misses": [{k: r[k] for k in ("question", "expected", "rank", "missing_note", "missing_heading", "top")} for r in misses],
-              "method": "Lexical ranking over live notes: filename, headings, wikilinks, body (no index)"}
+              "method": "The ranking `vaultctl.py find` returns: filename, headings, wikilinks, body over live notes (no index)"}
     if record:
         report["recorded"] = record_eval(vault, report)
     return report
@@ -301,7 +335,7 @@ def mark_consolidated(vault, through):
 # ------------------------------------------------------------- fact freshness
 
 HANDOFF_HEADING = "## Handoff — resume here"
-HANDOFF_LIMIT = 4000
+HANDOFF_LIMIT = 3000  # the cap the handoff skill, template and Contract state
 
 
 def handoff_report(rel, text, report):
@@ -455,6 +489,28 @@ def session_brief(vault, automation_dir=None, cap=BRIEF_CAP):
             errors = 0
         if errors:
             add(7, f"Hook errors: {errors} in the last {HOOK_ERROR_DAYS} days; see {Path(automation_dir) / 'hook-errors.jsonl'}")
+    try:
+        from vault_hygiene import profile_drift  # lazy: keeps imports acyclic; any failure adds nothing
+        drift = profile_drift(vault)
+        if drift["outcome"] == "needs_review":
+            pending, names = len(drift["pending_profile_updates"]), [m["name"] for m in drift["missing_from_profile"]]
+            tail = " Editing VAULT-INDEX needs owner approval."
+            parts = []
+            if pending:
+                parts.append(f"{pending} pending profile update(s) since {drift['baseline'][:10]}")
+            line = None
+            for shown in range(min(len(names), 4), -1, -1):
+                clause = ""
+                if names:
+                    listed = ", ".join(names[:shown]) + (", ..." if shown < len(names) else "") if shown else "..."
+                    clause = f"{len(names)} active project(s) not in Who I Am ({listed})"
+                line = "Profile: " + "; ".join(parts + ([clause] if clause else [])) + "." + tail
+                if len(line) <= BRIEF_LINE:
+                    break
+            if parts or names:
+                add(7, line)
+    except Exception:
+        pass
     add(8, "Read VAULT-INDEX.md once before substantive work; checkpoint through vaultctl.py before handing back. This brief is navigation, not evidence.")
     kept = set(range(len(lines)))
 

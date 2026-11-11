@@ -34,7 +34,13 @@ ADAPTERS = load(REPO / "automation/adapters")
 
 
 def selected(client, home=None):
-    """Adapter ids for --client: one id, a comma list, both (claude,codex) or all (every detected agent)."""
+    """Adapter ids for --client: one id, a comma list, both (claude,codex), all (every detected agent) or
+    auto (agents already installed here plus detected ones, else claude,codex)."""
+    if client == "auto":
+        home = home or Path.home()
+        found = [name for name, adapter in ADAPTERS.items()
+                 if is_installed(adapter, home, ADAPTERS) or (not adapter.get("experimental") and detected(adapter, home))]
+        return tuple(found) or ("claude", "codex")
     if client == "both":
         return ("claude", "codex")
     if client == "all":
@@ -225,7 +231,11 @@ def installation(home, vault, replace=False, client="both"):
         adapter = ADAPTERS[name]
         hooks = adapter["hooks"]
         if hooks:
-            copy_tree(REPO / "hooks/vault", expand(hooks["scripts"], home))
+            scripts = expand(hooks["scripts"], home)
+            copy_tree(REPO / "hooks/vault", scripts)
+            for retired, event in RETIRED_SCRIPTS.items():
+                if (scripts / retired).is_file():
+                    add(scripts / retired, shim_bytes(name, event), merge=True)
         if hooks and hooks["format"] == "codex-hooks-json":
             shell_log = bool((read_config(home).get("hooks") or {}).get("shell_log"))
             merge_codex_hooks(home, add, replace, adapter, shell_log)
@@ -266,8 +276,23 @@ def installation(home, vault, replace=False, client="both"):
 
 # Brain adapters that earlier releases installed and this release retires.
 # session-end-enqueue.js only fed the removed background model-capture drain;
-# stop-vault-gate.js was the Node launcher replaced by stop-vault-gate.py.
-RETIRED_HOOKS = ("session-end-enqueue.js", "stop-vault-gate.js")
+# stop-vault-gate.js was the Node launcher. The three Claude-only Python adapters
+# are replaced by the one agent-hook.py every agent shares.
+RETIRED_SCRIPTS = {"session-brief.py": "SessionStart", "validate-vault-frontmatter.py": "PostToolUse", "stop-vault-gate.py": "Stop"}
+RETIRED_HOOKS = ("session-end-enqueue.js", "stop-vault-gate.js", *RETIRED_SCRIPTS)
+
+
+def shim_bytes(agent, event):
+    """A retired adapter's replacement: a session started before the upgrade still calls the old file name."""
+    return (f'''#!/usr/bin/env python
+"""Retired adapter, kept so a session started before the upgrade keeps working: runs agent-hook.py {agent} {event}."""
+import runpy
+import sys
+from pathlib import Path
+
+sys.argv = [str(Path(__file__).with_name("agent-hook.py")), "{agent}", "{event}"]
+runpy.run_path(sys.argv[0], run_name="__main__")
+''').encode("utf-8")
 
 
 def prune_retired_hooks(hooks):
@@ -314,7 +339,7 @@ def merge_claude(home, env, add, replace, adapter):
         # Replace parsed fields, never interpolate a path into serialized JSON.
         name = Path(hook["args"][0]).name
         hook["command"] = sys.executable if hook["command"] == "python" else shutil.which(hook["command"]) or hook["command"]
-        hook["args"] = [str(scripts / name)]
+        hook["args"] = [str(scripts / name), *hook["args"][1:]]
         return name
     merge_hook_groups(hooks, snippet["hooks"], render, replace)
     add(settings_path, (json.dumps(settings, indent=2, ensure_ascii=False) + "\n").encode(), merge=True)
@@ -569,9 +594,17 @@ def verify(home, vault):
         if result.returncode:
             raise ValueError(f"Installed {check} failed: {result.stdout}\n{result.stderr}")
         report = json.loads(result.stdout)
-        if report.get("issues") or report.get("outcome") not in ("valid", "verified"):
-            raise ValueError(f"Installed {check} needs review: {result.stdout}")
-        print(f"OK installed {check}: {report['outcome']}")
+        issues = report.get("issues") or []
+        # Boot, skill, schema-block and transaction problems mean the installation is wrong. Anything else hygiene
+        # reports is the state of the user's own notes, which an upgrade must not present as a failed install.
+        blocking = issues if check == "validate" else [i for i in issues if i.get("path") in ("boot/skills", "runtime", "snapshots")
+                                                       or "schema block" in str(i.get("problem"))]
+        if blocking or (check == "validate" and report.get("outcome") != "valid"):
+            raise ValueError(f"Installed {check} needs review: {json.dumps(blocking or report)}")
+        if issues:
+            print(f"OK installed {check}: the installation is consistent; {len(issues)} note item(s) to review with `vaultctl.py hygiene`")
+        else:
+            print(f"OK installed {check}: {report['outcome']}")
 
 
 def main():
@@ -581,13 +614,17 @@ def main():
     parser.add_argument("--apply", action="store_true", help="Write the previewed files")
     parser.add_argument("--replace-workflow", action="store_true", help="Back up and replace package files; merge boot rules, preserve real notes/state/schema")
     parser.add_argument("--persist-env", action="store_true", help="Set Windows user BRAIN paths; use only for the current user's real installation")
-    parser.add_argument("--client", default="both", help="Agent id (" + ", ".join(ADAPTERS) + "), a comma list, both (claude,codex) or all detected")
+    parser.add_argument("--client", default="auto", help="Agent id (" + ", ".join(ADAPTERS) + "), a comma list, both (claude,codex), all detected; "
+                                                         "default: the agents already set up here plus detected ones, else claude,codex")
     parser.add_argument("--wizard", action="store_true", help="Choose agents and a vault, check prerequisites, preview and confirm installation")
     parser.add_argument("--render", metavar="AGENT", help="Print the instructions file this release installs for one agent, for a manual merge; writes nothing")
     parser.add_argument("--doctor", action="store_true", help="Check prerequisites without writing")
     parser.add_argument("--verify", action="store_true", help="Check the installed vault and workflow without reinstalling")
     args = parser.parse_args()
     home = args.home.expanduser().resolve()
+    if sys.prefix != sys.base_prefix and not (args.render or args.doctor):
+        print(f"NOTE  This Python is a virtual environment ({sys.prefix}). Hooks and config.json will point at it; "
+              "run setup with your system Python if this environment may be removed.")
     if args.render:
         if args.render not in ADAPTERS:
             parser.error("Unknown agent; choose " + ", ".join(ADAPTERS))
@@ -600,7 +637,8 @@ def main():
         names = list(ADAPTERS)
         present = installed_clients(home) or [n for n in names if detected(ADAPTERS[n], home)] or ["claude"]
         default = ",".join(str(names.index(n) + 1) for n in present)
-        menu = ", ".join(f"{i} {ADAPTERS[n]['display']}" for i, n in enumerate(names, 1))
+        menu = ", ".join(f"{i} {ADAPTERS[n]['display']}" + (" (experimental)" if ADAPTERS[n].get("experimental") else "")
+                         for i, n in enumerate(names, 1))
         answer = input(f"Choose your agents ({menu}; comma-separate several) [{default}]: ").strip() or default
         picks = [part.strip() for part in answer.split(",") if part.strip()]
         try:
@@ -678,7 +716,11 @@ def main():
         print(f"\nBrain files verified. Open this folder as a vault in Obsidian:\n{vault}")
         print("Restart each selected CLI, sign in, and approve its normal hook/access prompts.")
         if any((ADAPTERS[name]["hooks"] or {}).get("format") == "codex-hooks-json" for name in selected(args.client)):
-            print("Codex: open /hooks in a new session and trust the three Agent Brain hooks; until then they are skipped.")
+            print("Codex: open /hooks in a new session and trust the three Agent Brain hooks; until then they are skipped "
+                  "(`vaultctl.py hygiene` lists them under hooks_idle until they have run once).")
+        for name in selected(args.client):
+            if ADAPTERS[name].get("experimental"):
+                print(f"{ADAPTERS[name]['display']} is experimental: its paths come from the vendor's documentation and have not been run against the real CLI.")
         print(f"Then follow the first-checkpoint prompt saved at:\n{automation_dir(home) / 'FIRST-CHECKPOINT.md'}")
         print(f"Optional: add {home / '.agent-brain/bin'} to PATH to run controller commands as `brain <command>`.")
         print("Online guide: https://github.com/gabz147/agent-brain/blob/main/FIRST-CHECKPOINT.md")

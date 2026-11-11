@@ -18,6 +18,6 @@ The line this agent gets after the shared rules:
 
 > Claude Code: verify the runtime model from trusted metadata or this transcript's `message.model`. A Stop-hook reminder does not establish capture.
 
-Hooks: SessionStart brief (startup|resume), PostToolUse frontmatter check, Stop gate with asyncRewake and exit 2. Tested minimum 2.1.270 for direct-execution hook args.
+Hooks, all through agent-hook.py: SessionStart brief (startup|resume) with this session's checkpoint flags, PreToolUse refusal of direct vault-note writes, PostToolUse frontmatter check, Stop gate with asyncRewake and exit 2. The Stop gate reads the transcript and falls back to the turn log and git when it is missing. Tested minimum 2.1.270 for direct-execution hook args.
 
 Vendor documentation: https://code.claude.com/docs/en/setup

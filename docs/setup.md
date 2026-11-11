@@ -2,8 +2,9 @@
 
 Agent Brain is a standalone public vault workflow. You need this repository only.
 It installs a generic Obsidian vault and three related skills for any agent with
-an adapter in `automation/adapters/` (Claude Code, Codex CLI, GitHub Copilot CLI,
-Kiro CLI, Qwen Code, Factory Droid), without anyone's personal notes or unrelated skills.
+an adapter in `automation/adapters/` (Claude Code and Codex CLI; experimental, instructions-only
+adapters for GitHub Copilot CLI, Kiro CLI, Qwen Code and Factory Droid, written from vendor
+documentation and not yet run against the real CLIs), without anyone's personal notes or unrelated skills.
 
 For setup through an agent, open this checkout and ask it to follow
 [SKILL.md](../SKILL.md).
@@ -94,8 +95,8 @@ are disabled for another home so tests cannot install software into your account
 | `~/.agent-brain/automation` | Shared writer/schema, adapter registry, private state and first-checkpoint guide; used by every agent. An existing `~/.claude/vault-automation` install stays where it is |
 | `~/.agent-brain/bin` | `brain` (macOS/Linux) and `brain.cmd` (Windows) launchers for controller commands; add to PATH if you like |
 | `~/.agent-brain/config.json` | The vault root, controller directory and interpreter, readable by any client or adapter |
-| `~/.claude/hooks/vault`, if selected | Claude startup brief, checkpoint reminder and validation adapters |
-| `~/.codex/hooks/vault` and `~/.codex/hooks.json`, if selected | The same three hooks for Codex; trust them once in `/hooks` |
+| `~/.claude/hooks/vault`, if selected | `agent-hook.py`, the one adapter behind Claude's startup brief, write guard, validation and checkpoint reminder |
+| `~/.codex/hooks/vault` and `~/.codex/hooks.json`, if selected | The same adapter for Codex (startup brief, write check, checkpoint reminder); trust its three hooks once in `/hooks` |
 | Selected clients' configuration | Hook entries merged with existing settings; Brain variables an earlier release injected are kept current, none are added |
 
 New installs keep the shared controller in `~/.agent-brain/automation`. A home that
@@ -159,7 +160,7 @@ PDF extraction optionally needs PyMuPDF in the interpreter used for extraction,
 preferably in a project virtual environment. Text and DOCX use the standard library.
 
 Optional extras live in [contrib/](../contrib/README.md): a scheduled Windows audit,
-the Obsidian debug-port link checker and the Agent Pulse status plugin. None makes
+the Obsidian debug-port link checker, the read-only Obsidian CLI helper and the Agent Pulse status plugin. None makes
 model calls; checkpoints are written live by the agent in its own session.
 [scheduling.md](scheduling.md) has one-line cron, launchd and Task Scheduler entries
 for a nightly `hygiene --fix`.
@@ -186,7 +187,7 @@ creates checked snapshots. Use `python3` on macOS/Linux.
 
 Use `install.py --doctor --client <agents>` to check the chosen agents. Python 3.10+ is required; the controller and the hook adapters use only the standard library. Node.js 22+ is needed only by the optional link checker. Obsidian is optional for agent work. The optional audit task requires Windows PowerShell and Task Scheduler; it never calls a model.
 
-For an upgrade, save copies of the installed boot files, skills, hooks, controller/schema, and relevant settings. Preserve source receipts and snapshot directories. Do not copy runtime state into this public repository. Pause or disable the audit task while its controller files are replaced, then restore its prior state. The Node Stop launcher was replaced by `stop-vault-gate.py` and a SessionStart hook was added: the installer retires the old `stop-vault-gate.js` hook entry on upgrade and leaves that inert file in place. That changes the approved hook wiring, so an existing runtime baseline reports drift until you inspect the new settings and re-record it once with `vaultctl.py snapshot-runtime`. Upgrading only some installed agents is refused before any write when the others hold older copies; rerun with the agent list the error names. The background capture drain was removed: the installer drops the retired SessionEnd hook entry, and an existing `VaultQueueDrain` task should be removed (`Unregister-ScheduledTask -TaskName VaultQueueDrain`), then the runtime baseline re-recorded once.
+For an upgrade, save copies of the installed boot files, skills, hooks, controller/schema, and relevant settings. Preserve source receipts and snapshot directories. Do not copy runtime state into this public repository. Pause or disable the audit task while its controller files are replaced, then restore its prior state. Claude's three separate adapters (`session-brief.py`, `validate-vault-frontmatter.py`, `stop-vault-gate.py`) and the older Node launcher were replaced by `agent-hook.py claude <Event>`, and a PreToolUse write guard was added: the installer retires the old hook entries on upgrade and turns each old script into a small forwarder, so a session started before the upgrade keeps working. That changes the approved hook wiring, so an existing runtime baseline reports drift until you inspect the new settings and re-record it once with `vaultctl.py snapshot-runtime`. Upgrading only some installed agents is refused before any write when the others hold older copies; rerun with the agent list the error names. The background capture drain was removed: the installer drops the retired SessionEnd hook entry, and an existing `VaultQueueDrain` task should be removed (`Unregister-ScheduledTask -TaskName VaultQueueDrain`), then the runtime baseline re-recorded once.
 
 ### 2. Copy or merge the starter vault
 
@@ -224,11 +225,12 @@ Copy `skills/obsidian-vault/`, `skills/handoff/` and `skills/source-to-vault/` i
 
 ### 5. Install Claude hook adapters
 
-Copy `hooks/vault/` to `~/.claude/hooks/vault/`. Merge the three arrays (SessionStart, PostToolUse, Stop) in `settings/vault-hooks.snippet.json` into the existing `hooks` object in `~/.claude/settings.json`. Replace `{{CLAUDE_DIR}}` inside each `args` entry with the absolute directory. Set `command` to the actual Python executable. The direct-execution form needs no shell quoting and supports Windows without Git Bash. Claude Code 2.1.270+ is the tested minimum. Preserve unrelated hooks/settings, then parse the JSON to verify it.
+Copy `hooks/vault/` to `~/.claude/hooks/vault/`. Merge the four arrays (SessionStart, PreToolUse, PostToolUse, Stop) in `settings/vault-hooks.snippet.json` into the existing `hooks` object in `~/.claude/settings.json`. Replace `{{CLAUDE_DIR}}` inside each `args` entry with the absolute directory; every entry runs `agent-hook.py claude <Event>`. Set `command` to the actual Python executable. The direct-execution form needs no shell quoting and supports Windows without Git Bash. Claude Code 2.1.270+ is the tested minimum. Preserve unrelated hooks/settings, then parse the JSON to verify it.
 
-- SessionStart prints the session brief into context on startup and resume. It reads notes and never writes.
-- PostToolUse reports an invalid completed Markdown write with exit 2. It cannot undo the write; the shared controller prevents invalid writes before they happen.
-- Stop requests a source-bound checkpoint after substantive work. The request is not evidence that capture happened.
+- SessionStart prints the session brief into context on startup and resume, plus one line with the flags that checkpoint this session (`--source`, `--session`, `--transcript`). It never writes a note.
+- PreToolUse refuses a Write or Edit aimed at a vault note (exit 2 with the reason), because only the controller hash-checks, snapshots, signs and timestamps notes. Set `"hooks": {"direct_writes": "allow"}` in `~/.agent-brain/config.json` to turn the refusal off.
+- PostToolUse reports an invalid completed Markdown write with exit 2 and logs the write for the Stop gate. It cannot undo the write.
+- Stop requests a source-bound checkpoint after substantive work, read from the transcript; when the transcript is missing or has no human turn it falls back to the logged writes and git changes and asks for an attested checkpoint. The request is not evidence that capture happened.
 
 Internal hook failures fail open and are logged. There is no background capture: a session that ends without a checkpoint is not summarized automatically.
 
@@ -238,9 +240,9 @@ Copy `hooks/vault/` to `~/.codex/hooks/vault/` and merge the three arrays in `se
 
 - SessionStart (startup, resume) prints the session brief, which Codex adds as developer context, and records the session's git baseline.
 - PostToolUse on `apply_patch` validates vault notes the patch touched (exit 2 with the problems on stderr) and appends the write to the session's turn log under the private state directory. Shell commands are logged only when `~/.agent-brain/config.json` sets `"hooks": {"shell_log": true}` before setup, which adds `Bash` to the matcher at the cost of one Python start per command.
-- Stop runs `vault_gate.py`, which needs no transcript: logged writes, git HEAD/remote/dirty-count changes since the baseline, and controller commits since the session's last receipt each count, and a long answer counts only beside five logged tool calls. It asks at most once per ten minutes and never twice for the same delta, as JSON `{"decision": "block", "reason": ...}`, which Codex turns into a continuation prompt. The request is not evidence of capture.
+- Stop runs the same gate as Claude's, on its transcript-free path: logged writes, git HEAD/remote/dirty-count changes since the baseline, and controller commits since the session's last receipt each count, and a long answer counts only beside five logged tool calls. It asks at most once per ten minutes and never twice for the same delta, as JSON `{"decision": "block", "reason": ...}`, which Codex turns into a continuation prompt. The request is not evidence of capture.
 
-`vaultctl.py gate --agent <id>` and `vaultctl.py validate --hook <id>` run the same logic from a payload on stdin, in the agent's hook dialect.
+Until the hooks have run once, `vaultctl.py hygiene` lists the agent under `hooks_idle`. `vaultctl.py gate --agent <id>`, `vaultctl.py guard --agent <id>` and `vaultctl.py validate --hook <id>` run the same logic from a payload on stdin, in the agent's hook dialect.
 
 ### 6. Verify the core in an isolated fixture
 
@@ -261,7 +263,7 @@ python $vaultCtl hygiene
 
 Inspect any issues. `hygiene --fix` applies only mechanical repairs but still requires the installation/repair authorization. A schema issue does not authorize rewriting historic daily sessions. For a fixture with no installed boot files, use `hygiene --no-parity`; keep parity enabled for normal installed checks.
 
-Exercise a real live checkpoint using an actual session transcript, first calling `checkpoint-context`. Prepare the five-section summary and hash-checked topic/index changes, then use `checkpoint`. Read back its daily section and receipt. Replaying the identical input must preserve the section rather than append a duplicate. A real CLI checkpoint is a separate acceptance check from the stubbed regression suite.
+Exercise a real live checkpoint using an actual session transcript, first calling `checkpoint-context`. Prepare the session summary and hash-checked topic/index changes, then use `checkpoint`. Read back its daily section and receipt. Replaying the identical input must preserve the section rather than append a duplicate. A real CLI checkpoint is a separate acceptance check from the stubbed regression suite.
 
 ### 7. Configure manual daily notes in Obsidian
 
@@ -269,11 +271,11 @@ Merge `settings/obsidian-daily-notes.json` into `.obsidian/daily-notes.json` and
 
 Daily Notes should use `01 - Daily Notes`, format `MM - MMMM YYYY/YYYY-MM-DD`, and `10 - Resources/Templates/Manual Daily Note Template.md`. Agent-created notes use the separate model template through the controller.
 
-Test creation in a temporary vault: the date/time tokens expand, the five sections and `human` signatures appear, and repeating the command opens the existing note without changing its bytes. Do not infer real UI acceptance from Python tests.
+Test creation in a temporary vault: the date/time tokens expand, the sections and `human` signatures appear, and repeating the command opens the existing note without changing its bytes. Do not infer real UI acceptance from Python tests.
 
 ### 8. Optional extras
 
-The scheduled Windows audit, its runtime baseline, the debug-port link checker and the Agent Pulse plugin moved to [contrib/](../contrib/README.md); each folder documents its install and guards. For a plain nightly `hygiene --fix` on any OS, see [scheduling.md](scheduling.md). `vaultctl.py links` is the built-in read-only link audit.
+The scheduled Windows audit, its runtime baseline, the debug-port link checker, the read-only Obsidian CLI helper and the Agent Pulse plugin live in [contrib/](../contrib/README.md); each folder documents its install and guards. For a plain nightly `hygiene --fix` on any OS, see [scheduling.md](scheduling.md). `vaultctl.py links` is the built-in read-only link audit.
 
 ### 9. Verify and record the result
 

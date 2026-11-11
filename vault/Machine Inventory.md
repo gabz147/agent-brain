@@ -26,9 +26,10 @@ When installed, registered in `~/.claude/settings.json`:
 
 | Event | Hook | Purpose |
 |---|---|---|
-| SessionStart startup/resume | `hooks/vault/session-brief.py` | continuity brief, read-only |
-| PostToolUse Write/Edit/MultiEdit | `hooks/vault/validate-vault-frontmatter.py` | vault schema guard (exit 2 on violation) |
-| Stop (asyncRewake) | `hooks/vault/stop-vault-gate.py` | live vault checkpoint |
+| SessionStart startup/resume | `hooks/vault/agent-hook.py claude SessionStart` | continuity brief plus this session's checkpoint flags |
+| PreToolUse Write/Edit/MultiEdit | `hooks/vault/agent-hook.py claude PreToolUse` | refuses a direct write to a vault note (exit 2) |
+| PostToolUse Write/Edit/MultiEdit | `hooks/vault/agent-hook.py claude PostToolUse` | vault schema check (exit 2 on violation) and turn log |
+| Stop (asyncRewake) | `hooks/vault/agent-hook.py claude Stop` | live vault checkpoint request |
 
 _[Add the rest of your hooks, MCP servers, and skills of note.]_ Codex uses live controller checkpoints directly. There is no background capture; checkpoint an interrupted session from its transcript before the client's transcript-retention interval expires.
 

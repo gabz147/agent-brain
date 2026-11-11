@@ -33,4 +33,6 @@ schtasks /Create /TN "Agent Brain hygiene" /SC DAILY /ST 03:30 /TR "\"$((Get-Com
 
 That task runs in a console window and does not wait for you to be idle. For a hidden run that defers while you are at the keyboard, in a fullscreen app or paused, use [contrib/windows-audit](../contrib/windows-audit/README.md) instead.
 
+Snapshots grow with every write. `brain snapshots` reports them; `brain snapshots --prune --keep-days 30` previews what is safe to drop and `--apply` removes it, always keeping unfinished transactions and each note's newest snapshot. Schedule that line the same way if you want it automatic.
+
 Check the result with `brain hygiene` (no `--fix`) or by reading `state-v2/hygiene-latest.json`; an exit code alone does not prove the run succeeded. To stop, remove the cron line, `launchctl unload` the plist, or `schtasks /Delete /TN "Agent Brain hygiene"`.

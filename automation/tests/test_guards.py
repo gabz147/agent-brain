@@ -3,16 +3,22 @@ import re
 import subprocess
 import sys
 import unittest
+import unittest.mock
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 CONTRACT = REPO / "vault/10 - Resources/Vault Workflow Contract.md"
 # Sizes after the October 2026 context audit, plus 5%. Raise a cap only with a measured reason.
-CAPS = {"skills/obsidian-vault/SKILL.md": 4360,  # +95 on 2026-10-18 for the transcript-free checkpoint form, +60 for Job notes "skills/handoff/SKILL.md": 1793,
-        "skills/source-to-vault/SKILL.md": 4260,
-        # 2026-10-18: v2 trimmed the Contract from 20,178 to about 13,400 bytes, agent-neutral; cap is that plus 5%.
-        "vault/10 - Resources/Vault Workflow Contract.md": 14100}
-STOP_TEMPLATE_CAP = 1246
+CAPS = {
+    # 2026-11-10: the find recipe and one worked checkpoint example replace the ripgrep block and the path paragraph,
+    # so the common checkpoint needs no Contract read; measured 4,547 bytes, cap is that plus 5%.
+    "skills/obsidian-vault/SKILL.md": 4775,
+    "skills/handoff/SKILL.md": 1793,
+    "skills/source-to-vault/SKILL.md": 4260,
+    # 2026-10-18: v2 trimmed the Contract from 20,178 to about 13,400 bytes, agent-neutral.
+    # 2026-11-10: plus the report byline, resume, write guard and snapshot rules, minus the Obsidian CLI section.
+    "vault/10 - Resources/Vault Workflow Contract.md": 15100}
+STOP_TEMPLATE_CAP = 1300
 BANNED = ("keep queueing", "drain when you resume", "durable spool", "scheduled capture")
 PLACEHOLDER_PATHS = {"/home/x", "/Users/you", "C:/Users/you", "C:/Users/me"}  # compared with separators normalized to '/'
 # Contract section references: quoted in the Stop text, "Contract's X section" or "its X section" in boots and skills.
@@ -21,9 +27,20 @@ SECTION_REFERENCES = (re.compile(r'"([A-Z][^"{}]*)"(?= (?:sections?\b|and "))'),
 
 
 def stop_template():
-    source = (REPO / "automation/vault_hooks.py").read_text(encoding="utf-8")
-    start = source.index('instruction = f"""') + len('instruction = f"""')
-    return source[start:source.index('"""', start)]
+    """The one Stop request every agent receives, rendered with placeholder paths so its fixed text can be measured."""
+    sys.path.insert(0, str(REPO / "automation"))
+    import types
+    import vault_gate
+    vault = types.SimpleNamespace(root=Path("V"))
+    with unittest.mock.patch.object(vault_gate, "HERE", Path("A")), unittest.mock.patch.object(vault_gate, "python_command", return_value="python"):
+        return vault_gate.instruction(vault, "claude", "{session_id}", {"transcript_path": "T"}, use_transcript=True)
+
+
+def vault_gate_request_without_transcript():
+    sys.path.insert(0, str(REPO / "automation"))
+    import types
+    import vault_gate
+    return vault_gate.instruction(types.SimpleNamespace(root=Path("V")), "kiro", "s", {"model": "m"})
 
 
 class ReleaseGuards(unittest.TestCase):
@@ -35,6 +52,8 @@ class ReleaseGuards(unittest.TestCase):
     def test_stop_text_prefix_and_named_contract_sections_exist(self):
         template = stop_template()
         self.assertTrue(template.startswith("Vault checkpoint requested for session {session_id}."))
+        self.assertIn("--transcript", template)
+        self.assertNotIn("--transcript", vault_gate_request_without_transcript())
         headings = set(re.findall(r"^## (.+)$", CONTRACT.read_text(encoding="utf-8"), re.M))
         sources = [REPO / "boot/BRAIN.md", REPO / "SKILL.md", *sorted((REPO / "skills").glob("*/SKILL.md"))]
         texts = [template] + [path.read_text(encoding="utf-8") for path in sources]
@@ -54,10 +73,18 @@ class ReleaseGuards(unittest.TestCase):
         result = subprocess.run([sys.executable, str(REPO / "tools/gen_agent_docs.py"), "--check"], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, "Run python tools/gen_agent_docs.py: " + result.stdout)
 
-    def test_vault_actions_fallback_matches_the_note(self):
-        note = (REPO / "vault/10 - Resources/Vault Actions.md").read_text(encoding="utf-8")
-        body = re.sub(r"^---\n.*?\n---\n\n?", "", note, flags=re.S)
-        self.assertEqual((REPO / "skills/obsidian-vault/references/vault-actions.md").read_text(encoding="utf-8"), body)
+    def test_one_copy_of_vault_actions_and_one_hook_adapter(self):
+        self.assertFalse((REPO / "skills/obsidian-vault/references").exists(), "Vault Actions lives once, in the vault")
+        self.assertEqual(sorted(p.name for p in (REPO / "hooks/vault").glob("*.py")), ["agent-hook.py", "brain_paths.py"])
+        self.assertFalse((REPO / "automation/obsidian_read.py").exists(), "the Obsidian CLI helper is optional, in contrib/")
+
+    def test_shipped_schema_matches_the_packaged_defaults(self):
+        import json
+        sys.path.insert(0, str(REPO / "automation"))
+        import vault_core
+        shipped = json.loads((REPO / "automation/vault-schema.json").read_text(encoding="utf-8"))
+        self.assertEqual(shipped, vault_core.DEFAULT_SCHEMA)
+        self.assertEqual(vault_core.load_schema(REPO / "automation/no-such-schema.json"), vault_core.DEFAULT_SCHEMA)
 
     def test_no_private_paths_or_license_placeholder(self):
         self.assertNotIn("<YOUR NAME>", (REPO / "LICENSE").read_text(encoding="utf-8"))

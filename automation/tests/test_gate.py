@@ -105,7 +105,8 @@ class GateTests(Fixture):
         subprocess.run(["git", "-C", str(self.work), "add", "."], check=True)
         subprocess.run(["git", "-C", str(self.work), "commit", "-qm", "one"], check=True, env=env)
         with mock.patch("vault_recall.session_brief", return_value="brief"):
-            self.assertEqual(self.run_hook("SessionStart", {"session_id": "s-1", "cwd": str(self.work), "source": "startup"}), (0, "brief", ""))
+            self.assertEqual(self.run_hook("SessionStart", {"session_id": "s-1", "cwd": str(self.work), "source": "startup"}),
+                             (0, "brief\nThis session's checkpoint flags: --source codex --session s-1", ""))
         self.assertEqual(self.stop(), (0, "", ""))
         (self.work / "b.txt").write_text("b", encoding="utf-8")  # one more dirty file, made by a shell nobody logged
         self.assertTrue(self.stop(at=10_000_000 + 700_000)[1])

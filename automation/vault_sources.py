@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import re
 
-from vault_core import VaultError, atomic_json, file_lock, iso_normalize, model_label, now, read_text, sha
+from vault_core import VaultError, atomic_json, file_lock, iso_normalize, read_text, sha
 
 AGENT_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
 
@@ -48,17 +48,6 @@ def blocks(content):
             output.append("[Image attachment; binary content omitted]")
         # Never retain hidden reasoning, encrypted reasoning, or analysis.
     return "\n".join(output)
-
-
-def codex_identity(path, session_id=None):
-    with Path(path).open("rb") as source:
-        first = json.loads(source.readline())
-    if first.get("type") != "session_meta":
-        raise VaultError("Codex source is missing its initial session metadata")
-    metadata = first.get("payload", {})
-    if session_id and metadata.get("id") != session_id:
-        raise VaultError("Transcript session id does not match queue entry")
-    return metadata
 
 
 def stream_units(path, provider, session_id=None, fragment_chars=16000):
@@ -208,24 +197,3 @@ def record_receipt(vault, provider, session_id, receipt):
         if not any(x.get("id") == receipt["id"] for x in state["receipts"]):
             state["receipts"].append(receipt)
             atomic_json(path, state)
-
-
-def uncovered(vault, path, provider, session_id, max_chars=100000):
-    covered = {unit for receipt in verified_receipts(vault, provider, session_id) for unit in receipt["units"]}
-    batch, chars, more = [], 0, False
-    for unit in stream_units(path, provider, session_id):
-        if unit["id"] in covered:
-            continue
-        if batch and chars + len(unit["text"]) > max_chars:
-            more = True
-            break
-        batch.append(unit)
-        chars += len(unit["text"])
-    return batch, more
-
-
-def runtime_model(path, provider, session_id):
-    model = None
-    for unit in stream_units(path, provider, session_id):
-        model = unit.get("model") or model
-    return model_label(model)

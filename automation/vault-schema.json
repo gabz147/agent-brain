@@ -50,11 +50,22 @@
     "Notes Touched",
     "Profile Updates"
   ],
+  "daily_optional_sections": [
+    "Profile Updates"
+  ],
   "project_pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
   "project_allowlist": null,
   "folder_projects": {
     "01": "personal",
     "02": "example-project",
     "10": "meta"
-  }
+  },
+  "index_folders": [
+    "02",
+    "03",
+    "04",
+    "05",
+    "06",
+    "07"
+  ]
 }

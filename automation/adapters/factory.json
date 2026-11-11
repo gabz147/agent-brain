@@ -17,5 +17,6 @@
   "docs": "https://docs.factory.ai/cli/getting-started/overview",
   "transcript_adapter": null,
   "verified_version": null,
+  "experimental": true,
   "notes": "Personal instructions in ~/.factory/ (AGENTS.md) and personal skills ~/.factory/skills per docs.factory.ai, checked 2026-10-18. Hooks (~/.factory/hooks.json) are not wired yet."
 }

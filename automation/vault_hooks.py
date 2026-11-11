@@ -1,15 +1,13 @@
-"""Fast live-hook decisions; all internal failures are visible and fail open."""
+"""Transcript evidence for the shared Stop gate (vault_gate.stop): the latest human turn, what it wrote and ran,
+and what its last verified checkpoint already covers. Callers fail open on any exception."""
 from __future__ import annotations
 
 import datetime as dt
 import json
-import os
 from pathlib import Path
 import re
-import sys
-import time
 
-from vault_core import DEFAULT_AUTOMATION, DEFAULT_VAULT, HERE, Vault, atomic_json, file_lock, iso_normalize, now, read_text
+from vault_core import DEFAULT_AUTOMATION, Vault, iso_normalize, read_text
 from vault_sources import source_key, verified_receipts
 
 READ_ONLY = re.compile(r"^\s*(?:ls|dir|pwd|cd|cat|type|head|tail|wc|grep|rg|find|which|where|echo|printf|stat|file|du|df|jq|tree|date|whoami|hostname|git\s+(?:status|log|diff|show|branch|remote|rev-parse|describe)|Get-(?:ChildItem|Content|Item|Location|Command|Process|Date|Service)|Test-Path|Select-String|Measure-Object)\b", re.I)
@@ -141,75 +139,27 @@ def since_acknowledgment(vault, session_id, rows):
     return rows, None
 
 
-def stop_gate(payload, vault=None, directory=DEFAULT_AUTOMATION, current_ms=None):
-    vault = vault or Vault()
-    directory = Path(directory)
-    if os.environ.get("VAULT_AUTOMATION") == "1" or payload.get("stop_hook_active"):
-        return 0, ""
-    toggle = directory / "automation-state.json"
-    if toggle.exists():
-        state = json.loads(read_text(toggle))
-        if state.get("paused") and state.get("scope") == "all":
-            return 0, ""
-    session_id, transcript = payload.get("session_id"), payload.get("transcript_path")
-    if not session_id or not transcript:
-        return 0, ""
+def transcript_delta(vault, session_id, transcript, current_ms):
+    """What the latest human turn of a Claude transcript still owes a checkpoint, or None when it has no human turn.
+
+    Raises OSError when the transcript cannot be read; the caller then falls back to the turn log and git."""
     rows = latest_turn(transcript)
     if not rows:
-        return 0, ""
-    boundary = rows[0]
-    turn_key = str(boundary.get("uuid") or boundary.get("timestamp"))
-    key = source_key("claude", session_id)
-    current_ms = current_ms if current_ms is not None else int(time.time() * 1000)
+        return None
+    turn_key = str(rows[0].get("uuid") or rows[0].get("timestamp"))
     rows, through = since_acknowledgment(vault, session_id, rows)
     evidence = signals(rows)
     durable = bool(evidence["writes"] or evidence["durable"])
     # After this turn's checkpoint, only later writes or durable commands count.
-    if through is not None and not durable:
-        return 0, ""
-    if not evidence["substantive"]:
-        return 0, ""
+    substantive = evidence["substantive"] and not (through is not None and not durable)
     # An orchestration still waiting on background agents checkpoints once, at the end.
-    if not durable and pending_agents(rows, current_ms):
-        return 0, ""
-    request = vault.state / "requested" / (key + ".json")
-    with file_lock(vault.state / "locks" / (key + ".gate.lock"), timeout=0.2):
-        previous = json.loads(read_text(request)) if request.exists() else {}
-        if (previous.get("turnKey") == turn_key and previous.get("through") == through) or current_ms - previous.get("lastFiredMs", 0) < 600000:
-            return 0, ""
-        # Persist only the loop guard. This explicitly does NOT claim capture.
-        atomic_json(request, {"turnKey": turn_key, "through": through, "lastFiredMs": current_ms, "status": "requested"})
-    # Compatibility activity feed for Agent Pulse/Companion. It is never read
-    # as coverage. Serialize updates instead of racing on a shared .tmp file.
-    with file_lock(vault.state / "locks" / "activity-feed.lock", timeout=0.2):
-        feed_path = directory / "stop-state.json"
-        feed = json.loads(read_text(feed_path)) if feed_path.exists() else {}
-        feed[session_id] = {"turnKey": turn_key, "lastFiredMs": current_ms, "status": "requested"}
-        feed = {k: v for k, v in feed.items() if isinstance(v, dict) and current_ms - v.get("lastFiredMs", 0) < 7 * 86400000}
-        atomic_json(feed_path, feed)
-    instruction = f"""Vault checkpoint requested for session {session_id}. Successful work or substantial findings need a durable checkpoint; a request is not a capture and authorizes no code changes.
-If its format is not already in context, load only the "Daily checkpoints and coverage" section of "{vault.root / '10 - Resources/Vault Workflow Contract.md'}"; topic or ledger edits also need its "Shared writer" and "Related notes and ledgers" sections.
-Record it in one call, JSON on stdin (Bash heredoc <<'EOF'; use --input <file> only from Windows PowerShell 5.1): python "{HERE / 'vaultctl.py'}" checkpoint --summary --source claude --session {session_id} --transcript \"{transcript}\" with {{"reason": "...", "days": [{{"topic": "...", "sections": {{"What Got Done": ["..."]}}}}], "operations": []}}. The controller fills event day/time, evidence and signature; a turn spanning several days needs one days entry per day (checkpoint-context lists each day's times). Omitted sections become None; add "open_next" only to replace the Open line.
-Nothing durable: the same command with --trivial "<reason>" instead of JSON. Topic and handoff edits replace current state; history stays in the daily session.
-"""
-    return 2, instruction
+    if substantive and not durable and pending_agents(rows, current_ms):
+        substantive = False
+    return {"turn_key": turn_key, "through": through, "substantive": substantive}
 
 
-def run():
-    payload = json.loads(sys.stdin.read() or "{}")
-    code, output = stop_gate(payload)
-    if output:
-        print(output)
-    return code
-
-
-if __name__ == "__main__":
-    try:
-        sys.exit(run())
-    except Exception as exc:
-        try:
-            with (DEFAULT_AUTOMATION / "hook-errors.jsonl").open("a", encoding="utf-8") as log:
-                log.write(json.dumps({"at": now().isoformat(), "hook": "Stop", "error": str(exc)[:800]}) + "\n")
-        except OSError:
-            pass
-        sys.exit(0)
+def stop_gate(payload, vault=None, directory=DEFAULT_AUTOMATION, current_ms=None):
+    """The shared Stop gate for a Claude session, as (exit code, request text): (2, text) asks for a checkpoint."""
+    import vault_gate  # lazy: vault_gate imports this module's command heuristics
+    text = vault_gate.stop(vault or Vault(), "claude", payload, current_ms, directory, transcript_adapter="claude-jsonl")
+    return (2, text) if text else (0, "")

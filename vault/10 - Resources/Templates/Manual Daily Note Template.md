@@ -10,10 +10,6 @@ updated: "{{date:YYYY-MM-DD}}"
 
 **Open for tomorrow:** Add the next action here.
 
-## Index
-
-- **Manual entry** — Created the day's manual entry. `(human)`
-
 ## Session 1 — {{time:h:mm A}}: Manual entry — `human`
 
 ### What Got Done

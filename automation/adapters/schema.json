@@ -242,6 +242,10 @@
     },
     "notes": {
       "type": "string"
+    },
+    "experimental": {
+      "type": "boolean",
+      "description": "True while the manifest is written from the vendor's documentation and has not been run against the real CLI."
     }
   }
 }

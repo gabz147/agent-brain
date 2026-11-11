@@ -12,6 +12,7 @@ Setup id: `qwen` (`python install.py --client qwen`). Tier: instructions only: t
 | Checkpoint | attested (`--source qwen --model <runtime id>` with the summary flags) |
 | Detected by | `~/.qwen`, `qwen` on PATH |
 | Verified version | not yet fixture-verified on a named release |
+| Status | experimental: written from the vendor's documentation, not yet run against the real CLI |
 
 The line this agent gets after the shared rules:
 

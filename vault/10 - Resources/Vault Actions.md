@@ -17,9 +17,9 @@ Run the built-in read-only audit; it needs only Python:
 python <BRAIN_AUTOMATION_DIR>/vaultctl.py links
 ```
 
-Resolve the placeholder from your environment or ~/.agent-brain/config.json, defaulting to ~/.agent-brain/automation (older installs: ~/.claude/vault-automation); `brain links` does the same. Default output is counts plus 20 findings per kind; --full returns everything. It reports missing targets, ambiguous names (with the file Obsidian would pick), unmatched headings or blocks, and orphan candidates in folders 02-07 and 10. Archive is excluded as a source; archived targets can resolve.
+`<BRAIN_AUTOMATION_DIR>` is the controller folder your boot rules resolve; `brain links` does the same. Default output is counts plus 20 findings per kind; --full returns everything. It reports missing targets, ambiguous names (with the file Obsidian would pick), unmatched headings or blocks, and orphan candidates in the indexed folders (`index_folders` in the schema) and 10. Archive is excluded as a source; archived targets can resolve.
 
-For Obsidian's own resolution, the native CLI (Obsidian 1.12.7+) gives a quick file-link view without a debug port: `python <BRAIN_AUTOMATION_DIR>/obsidian_read.py link-audit` or `backlinks "<vault-relative.md>"`. The debug-port checker that uses Obsidian's parser for headings and blocks is optional, in the repository's contrib/obsidian-links.
+For Obsidian's own resolution, two optional tools live in the repository's contrib/: obsidian-cli (the native CLI's file-link and backlink view, Obsidian 1.12.7+) and obsidian-links (a debug-port checker that uses Obsidian's parser for headings and blocks).
 
 Report findings for review: external URLs/files are not fetched, heading formatting and intentional orphans need judgment. Never create stubs, merge/delete notes or rewrite history automatically.
 

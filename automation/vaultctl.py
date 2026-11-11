@@ -10,13 +10,13 @@ import re
 import subprocess
 import sys
 
-from vault_core import (DEFAULT_AUTOMATION, DEFAULT_BACKUPS, DEFAULT_STATE, DEFAULT_VAULT, HERE, Conflict, Vault, VaultError,
-                        ISO_TIME, append_jsonl, atomic_json, file_lock, format_note_time, frontmatter,
+from vault_core import (DEFAULT_AUTOMATION, DEFAULT_BACKUPS, DEFAULT_STATE, DEFAULT_VAULT, Vault, VaultError,
+                        ISO_TIME, append_jsonl, atomic_json, brain_config, file_lock, format_note_time, frontmatter,
                         is_daily, model_label, now, parse_note_time, read_text, sha, validate)
-from vault_sources import source_key, stream_units, uncovered, verified_receipts
+from vault_sources import source_key, stream_units, verified_receipts
 from vault_capture import apply_proposal
-from vault_hygiene import hygiene
-from vault_recall import consolidate_context, fact_freshness, mark_consolidated, recall_eval, session_brief
+from vault_hygiene import hygiene, profile_drift, snapshots
+from vault_recall import consolidate_context, fact_freshness, find_notes, mark_consolidated, recall_eval, session_brief
 
 
 def load_input(path):
@@ -54,7 +54,7 @@ def daily_context(vault, path):
         raise VaultError("daily-context requires a dated daily-note path")
     entry = vault.inspect(path)
     text = entry.pop("text")
-    entry.update(scope="Navigation only; session bodies and Index bullets omitted",
+    entry.update(scope="Navigation only; session bodies omitted",
                  exists=text is not None, open_next=None, sessions=[])
     if text is None:
         return entry
@@ -80,6 +80,11 @@ def daily_context(vault, path):
         if match:
             entry["sessions"].append({"line": number, "heading": line})
     return entry
+
+
+def byline(model):
+    """The line a report carries under its title: the real local write time and the model that wrote it."""
+    return f"_Written {format_note_time(now().replace(microsecond=0))} by {model_label(model)}_"
 
 
 def receipt_summary(receipt):
@@ -271,13 +276,8 @@ def hook_mode(vault, agent, event):
     try:
         import vault_adapters
         import vault_gate
-        config = {}
-        try:
-            config = json.loads(read_text(Path.home() / ".agent-brain/config.json"))
-        except (OSError, RuntimeError, ValueError):
-            pass
         adapter = vault_adapters.load()[agent]
-        return HookResult(vault_gate.hook(agent, event, json.loads(sys.stdin.read() or "{}"), adapter, vault, config))
+        return HookResult(vault_gate.hook(agent, event, json.loads(sys.stdin.read() or "{}"), adapter, vault, brain_config()))
     except Exception as exc:  # a hook never blocks or continues a session on an internal error
         try:
             append_jsonl(DEFAULT_AUTOMATION / "hook-errors.jsonl", {"at": now().isoformat(), "hook": f"{agent} {event}", "error": str(exc)[:800]}, vault.state)
@@ -308,6 +308,21 @@ def main(argv=None):
     check.add_argument("--hook", metavar="AGENT", help="Post-tool hook mode: read the agent's payload on stdin, validate the notes it wrote, log the write; fails open")
     gate = sub.add_parser("gate", help="Stop hook mode: read the agent's payload on stdin and request a checkpoint for an unrecorded delta; fails open")
     gate.add_argument("--agent", required=True)
+    guard = sub.add_parser("guard", help="Pre-tool hook mode: read the agent's payload on stdin and refuse a direct write to a vault note; fails open")
+    guard.add_argument("--agent", required=True)
+    finder = sub.add_parser("find", help="Rank live notes for search terms (filename, headings, links, body); read-only, no index")
+    finder.add_argument("terms", nargs="+", help="One term or quoted phrase per argument")
+    finder.add_argument("--top", type=int, default=8)
+    finder.add_argument("--daily", action="store_true", help="Search only the daily notes, for chronology")
+    finder.add_argument("--archive", action="store_true", help="Include 09 - Archive")
+    stamp = sub.add_parser("stamp", help="Print the byline a report carries under its title: real local write time and model label")
+    stamp.add_argument("--model", required=True, help="Verified runtime model id, not client name")
+    snaps = sub.add_parser("snapshots", help="Snapshot inventory; --prune previews what is safe to drop, --apply removes it")
+    snaps.add_argument("--prune", action="store_true")
+    snaps.add_argument("--keep-days", type=int, default=30)
+    snaps.add_argument("--apply", action="store_true")
+    resume = sub.add_parser("resume", help="Finish a commit that wrote only some of its notes, from its prepared bytes")
+    resume.add_argument("transaction")
     maintenance = sub.add_parser("hygiene", help="Records state-v2/hygiene-latest.json and an outcomes row even without --fix; only --fix edits notes")
     maintenance.add_argument("--fix", action="store_true")
     maintenance.add_argument("--no-parity", action="store_true")
@@ -320,8 +335,9 @@ def main(argv=None):
     consolidate.add_argument("--note", help="Only sessions whose heading names this note or whose Notes Touched links it")
     consolidate.add_argument("--mark", help="Record consolidation through this day, after the updates are written")
     freshness = sub.add_parser("fact-freshness", help="Stale (as of <date>) facts; read-only")
-    sub.add_parser("session-brief", help="Plain-text startup continuity: Open line, last sessions, Active Now, recent hook errors; read-only")
     freshness.add_argument("--max-age-days", type=int, default=90)
+    sub.add_parser("profile-drift", help="Profile Updates newer than the Who I Am review marker, and active projects Who I Am omits; read-only")
+    sub.add_parser("session-brief", help="Plain-text startup continuity: Open line, last sessions, Active Now, recent hook errors; read-only")
     links = sub.add_parser("links", help="Read-only wikilink audit: missing targets, ambiguous names, unmatched headings/blocks, orphan candidates")
     links.add_argument("--full", action="store_true", help="Every finding, not the first 20 per kind")
     helper = sub.add_parser("help", help="`help write [section ...]`: list the Contract's sections, or print the named ones")
@@ -369,8 +385,19 @@ def main(argv=None):
     if args.command == "commit":
         payload = load_input(args.input)
         return vault.commit(payload["operations"], model_label(args.model), args.reason, payload.get("transaction_id"))
-    if args.command == "gate" or (args.command == "validate" and args.hook):
-        return hook_mode(vault, args.agent if args.command == "gate" else args.hook, "Stop" if args.command == "gate" else "PostToolUse")
+    if args.command in ("gate", "guard") or (args.command == "validate" and args.hook):
+        event = {"gate": "Stop", "guard": "PreToolUse", "validate": "PostToolUse"}[args.command]
+        return hook_mode(vault, args.hook if args.command == "validate" else args.agent, event)
+    if args.command == "find":
+        return find_notes(vault, args.terms, top=args.top, daily=args.daily, archive=args.archive)
+    if args.command == "stamp":
+        return byline(args.model)
+    if args.command == "snapshots":
+        if args.apply and not args.prune:
+            raise VaultError("--apply needs --prune")
+        return snapshots(vault, prune=args.prune, keep_days=args.keep_days, apply=args.apply)
+    if args.command == "resume":
+        return vault.resume(args.transaction)
     if args.command == "validate":
         paths = [vault.path(path) for path in args.paths] if args.paths else vault.notes()
         issues = [{"path": str(path), "problems": validate(read_text(path), path)} for path in paths]
@@ -387,6 +414,8 @@ def main(argv=None):
         return consolidate_context(vault, days=args.days, since=args.since, note=args.note)
     if args.command == "fact-freshness":
         return fact_freshness(vault, max_age_days=args.max_age_days)
+    if args.command == "profile-drift":
+        return profile_drift(vault)
     if args.command == "session-brief":
         return session_brief(vault, DEFAULT_AUTOMATION)
     if args.command == "links":

@@ -42,6 +42,8 @@ def page(adapter):
     lines.append(f"| Detected by | " + ", ".join([f"`{d}`" for d in a["detect"]["dirs"]] + [f"`{b}` on PATH" for b in a["detect"]["binaries"]]
                                                  + [f"`${e}`" for e in a["detect"]["env"]]) + " |")
     lines.append(f"| Verified version | {a['verified_version'] or 'not yet fixture-verified on a named release'} |")
+    if a.get("experimental"):
+        lines.append("| Status | experimental: written from the vendor's documentation, not yet run against the real CLI |")
     if a.get("min_version"):
         lines.append(f"| Minimum version | {a['min_version']} |")
     lines += ["", "The line this agent gets after the shared rules:", "", "> " + a["instructions"]["tail"], "", a["notes"], ""]
@@ -55,7 +57,7 @@ def index(adapters):
              "Each agent is one manifest in `automation/adapters/`; a new agent is a JSON file plus fixtures, not code.", "",
              "| Agent | Setup id | Tier | Instructions |", "|---|---|---|---|"]
     for a in adapters.values():
-        tier = "hooks" if a.get("hooks") else "instructions only"
+        tier = ("hooks" if a.get("hooks") else "instructions only") + (", experimental" if a.get("experimental") else "")
         lines.append(f"| [{a['display']}]({a['id']}.md) | `{a['id']}` | {tier} | `{a['instructions']['path'] or 'project only'}` |")
     return "\n".join(lines) + "\n"
 

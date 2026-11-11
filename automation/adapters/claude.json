@@ -46,5 +46,5 @@
   "docs": "https://code.claude.com/docs/en/setup",
   "transcript_adapter": "claude-jsonl",
   "verified_version": "2.1.270",
-  "notes": "Hooks: SessionStart brief (startup|resume), PostToolUse frontmatter check, Stop gate with asyncRewake and exit 2. Tested minimum 2.1.270 for direct-execution hook args."
+  "notes": "Hooks, all through agent-hook.py: SessionStart brief (startup|resume) with this session's checkpoint flags, PreToolUse refusal of direct vault-note writes, PostToolUse frontmatter check, Stop gate with asyncRewake and exit 2. The Stop gate reads the transcript and falls back to the turn log and git when it is missing. Tested minimum 2.1.270 for direct-execution hook args."
 }

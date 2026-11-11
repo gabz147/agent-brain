@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 REPO = Path(__file__).resolve().parents[2]
@@ -25,7 +26,8 @@ class InstallTests(unittest.TestCase):
     def test_startup_context_budget(self):
         # Byte budgets are deterministic across clients/tokenizers and need no dependency.
         index = (REPO / "vault/VAULT-INDEX.md").read_bytes()
-        self.assertLessEqual(len(vault_adapters.block_body().encode()), 2400, "shared block body")
+        # 2026-11-10: 2,576 bytes with the report byline rule and the find and session-line hints; cap is that plus 3%.
+        self.assertLessEqual(len(vault_adapters.block_body().encode()), 2650, "shared block body")
         for name, adapter in vault_adapters.load().items():
             boot = vault_adapters.render_file(adapter).encode("utf-8")
             self.assertLessEqual(len(boot), 3600, name)
@@ -73,8 +75,8 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(probe.stdout.strip(), str(vault), probe.stderr)
             note = vault / "00 - Inbox/Config probe.md"
             note.write_text("# no metadata\n", encoding="utf-8")
-            hook = subprocess.run([sys.executable, str(home / ".claude/hooks/vault/validate-vault-frontmatter.py")],
-                                  input=json.dumps({"tool_input": {"file_path": str(note)}}), capture_output=True, text=True, env=env, timeout=30)
+            hook = subprocess.run([sys.executable, str(home / ".claude/hooks/vault/agent-hook.py"), "claude", "PostToolUse"],
+                                  input=json.dumps({"tool_name": "Edit", "tool_input": {"file_path": str(note)}}), capture_output=True, text=True, env=env, timeout=30)
             self.assertEqual(hook.returncode, 2, hook.stdout + hook.stderr)
             self.assertIn("Missing opening frontmatter", hook.stderr)
 
@@ -125,15 +127,92 @@ class InstallTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "config.json is not valid JSON"):
                 installer.read_config(home)
 
-    def test_upgrade_prunes_only_the_retired_session_end_hook(self):
+    def test_upgrade_moves_claude_to_the_one_adapter_and_keeps_old_sessions_working(self):
+        spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")
+        installer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        with tempfile.TemporaryDirectory(prefix="brain-upgrade-") as temporary:
+            home, vault = Path(temporary) / "home", Path(temporary) / "home/Documents/Brain"
+            scripts = home / ".claude/hooks/vault"
+            scripts.mkdir(parents=True)
+            for name in installer.RETIRED_SCRIPTS:
+                (scripts / name).write_text("# an older release's adapter\n", encoding="utf-8")
+            old = lambda name: {"type": "command", "command": "python", "args": [str(scripts / name)]}
+            other = {"type": "command", "command": "node", "args": ["/elsewhere/other.js"]}
+            (home / ".claude/settings.json").write_text(json.dumps({"hooks": {
+                "SessionStart": [{"matcher": "startup|resume", "hooks": [old("session-brief.py")]}],
+                "PostToolUse": [{"matcher": "Write|Edit|MultiEdit", "hooks": [old("validate-vault-frontmatter.py")]}, {"matcher": "Read", "hooks": [other]}],
+                "Stop": [{"hooks": [old("stop-vault-gate.py")]}]}}), encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                installer.install(home, vault, apply=True, client="claude")
+            hooks = json.loads((home / ".claude/settings.json").read_text(encoding="utf-8"))["hooks"]
+            self.assertEqual(sorted(hooks), ["PostToolUse", "PreToolUse", "SessionStart", "Stop"])
+            for event in ("SessionStart", "PreToolUse", "PostToolUse", "Stop"):
+                ours = [h for group in hooks[event] for h in group["hooks"] if "agent-hook.py" in json.dumps(h)]
+                self.assertEqual([h["args"][1:] for h in ours], [["claude", event]], event)
+            self.assertNotIn("stop-vault-gate.py", json.dumps(hooks))
+            self.assertIn(other, [h for group in hooks["PostToolUse"] for h in group["hooks"]])
+            # A session started before the upgrade still calls the old file names: each now forwards to the one adapter.
+            for name, event in installer.RETIRED_SCRIPTS.items():
+                self.assertIn(f'"claude", "{event}"', (scripts / name).read_text(encoding="utf-8"))
+            env = {k: v for k, v in os.environ.items() if not k.startswith("BRAIN_") and k not in ("VAULT_AUTOMATION_DIR", "VAULT_AUTOMATION")}
+            env.update(HOME=str(home), USERPROFILE=str(home), PYTHONIOENCODING="utf-8")
+            brief = subprocess.run([sys.executable, str(scripts / "session-brief.py")], input=json.dumps({"session_id": "old-session"}),
+                                   capture_output=True, text=True, encoding="utf-8", env=env, timeout=30)
+            self.assertEqual(brief.returncode, 0, brief.stderr)
+            self.assertIn("This session's checkpoint flags: --source claude --session old-session", brief.stdout)
+            # A fresh install ships no retired scripts at all.
+            fresh = Path(temporary) / "fresh"
+            with contextlib.redirect_stdout(io.StringIO()):
+                installer.install(fresh, fresh / "Documents/Brain", apply=True, client="claude")
+            self.assertEqual(sorted(p.name for p in (fresh / ".claude/hooks/vault").glob("*.py")), ["agent-hook.py", "brain_paths.py"])
+            # Hooks that are installed but have never started a session are named until they run once.
+            sys.path.insert(0, str(fresh / ".agent-brain/automation"))
+            import vault_core, vault_gate, vault_hygiene
+            state = vault_core.Vault(fresh / "Documents/Brain", Path(temporary) / "state", Path(temporary) / "backups")
+            self.assertEqual(vault_hygiene.idle_hooks(state, fresh), ["claude"])
+            vault_gate.mark_seen(state, "claude")
+            self.assertEqual(vault_hygiene.idle_hooks(state, fresh), [])
+
+    def test_experimental_adapters_are_marked_and_not_auto_selected(self):
+        spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")
+        installer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        flagged = sorted(name for name, adapter in installer.ADAPTERS.items() if adapter.get("experimental"))
+        self.assertEqual(flagged, ["copilot", "factory", "kiro", "qwen"])
+        with tempfile.TemporaryDirectory(prefix="brain-auto-") as temporary:
+            home = Path(temporary)
+            (home / ".kiro").mkdir()
+            chosen = installer.selected("auto", home)
+            self.assertNotIn("kiro", chosen)
+            self.assertTrue(chosen)
+
+    def test_auto_selects_only_the_agents_this_machine_has(self):
+        # Detection reads PATH and the environment, so both are emptied: the result must come from the home alone.
+        spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")
+        installer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        with tempfile.TemporaryDirectory(prefix="brain-auto-") as temporary, \
+                patch("shutil.which", return_value=None), patch.dict(os.environ, {}, clear=True):
+            home = Path(temporary)
+            self.assertEqual(installer.selected("auto", home), ("claude", "codex"), "nothing detected: the two defaults")
+            (home / ".claude").mkdir()
+            self.assertEqual(installer.selected("auto", home), ("claude",), "only Claude Code is here")
+            (home / ".codex").mkdir()
+            self.assertEqual(installer.selected("auto", home), ("claude", "codex"))
+
+    def test_upgrade_prunes_only_retired_brain_hooks(self):
         spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")
         installer = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(installer)
         retired = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/vault/session-end-enqueue.js"]}
         other = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/other-session-end.js"]}
         old_stop = {"type": "command", "command": "node", "args": ["/home/x/.claude/hooks/vault/stop-vault-gate.js"]}
-        stop = {"type": "command", "command": "python", "args": ["/home/x/.claude/hooks/vault/stop-vault-gate.py"]}
-        hooks = {"SessionEnd": [{"hooks": [retired]}, {"hooks": [other, dict(retired)]}], "Stop": [{"hooks": [old_stop]}, {"hooks": [stop]}]}
+        older_stop = {"type": "command", "command": "python", "args": ["/home/x/.claude/hooks/vault/stop-vault-gate.py"]}
+        stop = {"type": "command", "command": "python", "args": ["/home/x/.claude/hooks/vault/agent-hook.py", "claude", "Stop"]}
+        brief = {"type": "command", "command": "python", "args": ["/home/x/.claude/hooks/vault/session-brief.py"]}
+        hooks = {"SessionEnd": [{"hooks": [retired]}, {"hooks": [other, dict(retired)]}], "Stop": [{"hooks": [old_stop]}, {"hooks": [older_stop]}, {"hooks": [stop]}],
+                 "SessionStart": [{"matcher": "startup|resume", "hooks": [brief]}]}
         installer.prune_retired_hooks(hooks)
         self.assertEqual(hooks, {"SessionEnd": [{"hooks": [other]}], "Stop": [{"hooks": [stop]}]})
         only_retired = {"SessionEnd": [{"hooks": [retired]}]}
@@ -176,7 +255,8 @@ class InstallTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="brain laptop ") as tmp:
             home = Path(tmp).resolve() / "Different User"
             vault = home / "Custom Vault"
-            args = [sys.executable, str(REPO / "install.py"), "--home", str(home), "--vault", str(vault)]
+            # Both agents are named: the default (auto) follows what the machine running the tests has installed.
+            args = [sys.executable, str(REPO / "install.py"), "--home", str(home), "--vault", str(vault), "--client", "both"]
 
             def run(command, success=True, env=None):
                 result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", env=env, timeout=30)

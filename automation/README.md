@@ -9,10 +9,9 @@ The Python controller is required for live vault writes and checkpoints. Nothing
 | `vaultctl.py`, `vault_core.py`, `vault-schema.json` | Shared CLI, schema, containment, locks, snapshots, atomic commits, and exact-byte restore |
 | `vault_sources.py` | Claude/Codex transcript fragments, real model attribution, and source-bound coverage |
 | `vault_capture.py` | Validates checkpoint proposals and records source-bound receipts; controller alone writes |
-| `vault_hooks.py` | Live Stop decision logic; a request never claims capture |
-| `vault_gate.py` | Transcript-free hook logic for any agent with a hooks manifest (Codex today): session baseline, post-tool validation and turn log, a Stop gate on logged writes, git and controller-commit deltas, emitted in the agent's dialect; fails open |
-| `vault_recall.py` | Read-only session brief, recall eval, consolidation digest and `(as of <date>)` fact freshness; no index |
-| `obsidian_read.py` | Optional read-only Obsidian CLI observations (links, backlinks, properties, local recovery history, write preflight); never writes |
+| `vault_gate.py` | The one hook gate for every agent with a hooks manifest: session baseline and brief with the session's checkpoint flags, refusal of direct vault-note writes, post-tool validation and turn log, and the Stop request, emitted in the agent's dialect; fails open. A request never claims capture |
+| `vault_hooks.py` | Transcript evidence for that gate (Claude Code): the latest human turn, what it wrote and ran, what its last checkpoint covers. Without a readable transcript the gate uses the turn log, git and controller-commit deltas |
+| `vault_recall.py` | Read-only session brief, ranked `find`, recall eval over the same ranking, consolidation digest and `(as of <date>)` fact freshness; no index |
 | `vault_adapters.py`, `adapters/*.json`, `BRAIN.md` | One data-only manifest per agent (instructions path and strategy, skills dirs, hooks, transcript adapter), validated against `adapters/schema.json`, plus the shared boot block each agent's file is rendered from |
 | `vault_hygiene.py` | Deterministic schema/index/priority checks and boot/skill parity against one rendering per installed agent; runtime drift checks when the optional `contrib/windows-audit` baseline is installed |
 | `vault_links.py` | `vaultctl.py links`: read-only wikilink audit (missing targets, ambiguous names, unmatched headings and blocks, orphan candidates) |
@@ -28,6 +27,10 @@ python vaultctl.py commit --model '<verified-runtime-id>' --reason '<actual chan
 python vaultctl.py checkpoint --summary --source codex --session '<id>' --transcript '<actual.jsonl>' --input '<checkpoint.json>'
 python vaultctl.py checkpoint --summary --source codex --session '<id>' --transcript '<actual.jsonl>' --trivial '<reason>'
 python vaultctl.py checkpoint --summary --source <agent> --model '<verified-runtime-id>' --topic '<topic>' --done '<outcome>' --next '<remaining>' --open '<next action>'
+python vaultctl.py find '<term>' '<second term>'
+python vaultctl.py stamp --model '<verified-runtime-id>'
+python vaultctl.py resume '<transaction-id>'
+python vaultctl.py snapshots [--prune --keep-days 30 [--apply]]
 python vaultctl.py validate
 python vaultctl.py hygiene
 python vaultctl.py recall-eval [--record]
@@ -54,7 +57,7 @@ Keep `state-v2/`, any legacy queue/spool files and journals, logs, toggles, lock
 
 ## Optional extras
 
-The scheduled Windows audit and its runtime baseline, the Obsidian debug-port link checker and the Agent Pulse plugin live in the repository's `contrib/` folder; setup does not install them. For a cross-platform nightly `hygiene --fix`, see `docs/scheduling.md`.
+The scheduled Windows audit and its runtime baseline, the Obsidian debug-port link checker, the read-only Obsidian CLI helper and the Agent Pulse plugin live in the repository's `contrib/` folder; setup does not install them. For a cross-platform nightly `hygiene --fix`, see `docs/scheduling.md`.
 
 ## Readable note timestamps
 

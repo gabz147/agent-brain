@@ -1,5 +1,5 @@
 {
-  "_comment": "Merge these three vault hooks into the `hooks` object of your ~/.claude/settings.json. Do NOT paste this file wholesale over settings.json if you already have other hooks — merge each array. Replace {{CLAUDE_DIR}} with the absolute path to your .claude directory (e.g. C:/Users/you/.claude), using forward slashes. `python` must be on PATH; if not, replace it with the absolute executable path. The installer does both substitutions for you.",
+  "_comment": "Merge these four vault hooks into the `hooks` object of your ~/.claude/settings.json. Do NOT paste this file wholesale over settings.json if you already have other hooks: merge each array. Replace {{CLAUDE_DIR}} with the absolute path to your .claude directory (e.g. C:/Users/you/.claude), using forward slashes. `python` must be on PATH; if not, replace it with the absolute executable path. The installer does both substitutions for you. One script serves every event: agent-hook.py <agent id> <event>.",
 
   "hooks": {
     "SessionStart": [
@@ -9,8 +9,21 @@
           {
             "type": "command",
             "command": "python",
-            "args": ["{{CLAUDE_DIR}}/hooks/vault/session-brief.py"],
+            "args": ["{{CLAUDE_DIR}}/hooks/vault/agent-hook.py", "claude", "SessionStart"],
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": ["{{CLAUDE_DIR}}/hooks/vault/agent-hook.py", "claude", "PreToolUse"],
+            "timeout": 5
           }
         ]
       }
@@ -22,7 +35,7 @@
           {
             "type": "command",
             "command": "python",
-            "args": ["{{CLAUDE_DIR}}/hooks/vault/validate-vault-frontmatter.py"],
+            "args": ["{{CLAUDE_DIR}}/hooks/vault/agent-hook.py", "claude", "PostToolUse"],
             "timeout": 5
           }
         ]
@@ -34,7 +47,7 @@
           {
             "type": "command",
             "command": "python",
-            "args": ["{{CLAUDE_DIR}}/hooks/vault/stop-vault-gate.py"],
+            "args": ["{{CLAUDE_DIR}}/hooks/vault/agent-hook.py", "claude", "Stop"],
             "timeout": 30,
             "asyncRewake": true
           }

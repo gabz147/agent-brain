@@ -1,10 +1,11 @@
 """Deterministic, read-only checks of hook wiring and the scheduled vault audit task."""
+import datetime as dt
 import json
 import os
 from pathlib import Path
 import subprocess
 
-from vault_core import DEFAULT_STATE, VaultError, atomic_json, now, read_text, sha
+from vault_core import DEFAULT_STATE, VaultError, atomic_json, iso_normalize, now, read_text, sha
 
 BASELINE = DEFAULT_STATE / "runtime-contract.json"
 TASK_QUERY = r"""
@@ -58,6 +59,24 @@ def write_baseline():
     return {"status": "recorded", "path": str(BASELINE), "runtime": snapshot}
 
 
+def comparable(task):
+    """A task with each trigger start as a UTC instant.
+
+    Windows renders one stored start boundary with the current UTC offset, so its text changes at every
+    daylight-saving switch (03:30-06:00 becomes 02:30-07:00) while the definition has not changed."""
+    if not isinstance(task, dict):
+        return task
+    task = json.loads(json.dumps(task))
+    for trigger in task.get("triggers") or []:
+        try:
+            start = dt.datetime.fromisoformat(iso_normalize(trigger["start"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if start.tzinfo is not None:
+            trigger["start"] = start.astimezone(dt.timezone.utc).isoformat()
+    return task
+
+
 def check_runtime():
     if not BASELINE.exists():
         return ["Missing approved runtime baseline"]
@@ -71,7 +90,7 @@ def check_runtime():
         issues.append("Claude hook wiring differs from the approved baseline")
     expected_tasks = {task["name"]: task for task in expected["tasks"]}
     for task in actual["tasks"]:
-        if task != expected_tasks.get(task["name"]):
+        if comparable(task) != comparable(expected_tasks.get(task["name"])):
             issues.append("Scheduled task definition differs: " + task["name"])
         if task["logon_type"] != "Interactive" or not task["hidden"] or not task["enabled"]:
             issues.append("Task no longer satisfies enabled/hidden/Interactive contract: " + task["name"])
