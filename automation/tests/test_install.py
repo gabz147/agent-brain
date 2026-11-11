@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 REPO = Path(__file__).resolve().parents[2]
@@ -186,6 +187,20 @@ class InstallTests(unittest.TestCase):
             self.assertNotIn("kiro", chosen)
             self.assertTrue(chosen)
 
+    def test_auto_selects_only_the_agents_this_machine_has(self):
+        # Detection reads PATH and the environment, so both are emptied: the result must come from the home alone.
+        spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")
+        installer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        with tempfile.TemporaryDirectory(prefix="brain-auto-") as temporary, \
+                patch("shutil.which", return_value=None), patch.dict(os.environ, {}, clear=True):
+            home = Path(temporary)
+            self.assertEqual(installer.selected("auto", home), ("claude", "codex"), "nothing detected: the two defaults")
+            (home / ".claude").mkdir()
+            self.assertEqual(installer.selected("auto", home), ("claude",), "only Claude Code is here")
+            (home / ".codex").mkdir()
+            self.assertEqual(installer.selected("auto", home), ("claude", "codex"))
+
     def test_upgrade_prunes_only_retired_brain_hooks(self):
         spec = importlib.util.spec_from_file_location("brain_install", REPO / "install.py")
         installer = importlib.util.module_from_spec(spec)
@@ -240,7 +255,8 @@ class InstallTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="brain laptop ") as tmp:
             home = Path(tmp).resolve() / "Different User"
             vault = home / "Custom Vault"
-            args = [sys.executable, str(REPO / "install.py"), "--home", str(home), "--vault", str(vault)]
+            # Both agents are named: the default (auto) follows what the machine running the tests has installed.
+            args = [sys.executable, str(REPO / "install.py"), "--home", str(home), "--vault", str(vault), "--client", "both"]
 
             def run(command, success=True, env=None):
                 result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", env=env, timeout=30)

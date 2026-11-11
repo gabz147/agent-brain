@@ -770,7 +770,6 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertEqual(vault_runtime.vault_hook_entries(base), vault_runtime.vault_hook_entries(changed))
         self.assertNotEqual(vault_runtime.vault_hook_entries(base), vault_runtime.vault_hook_entries({"PostToolUse": base["PostToolUse"]}))
 
-    @unittest.skipUnless(os.name == "nt", "PowerShell job runner")
     def test_daylight_saving_rendering_of_a_trigger_is_not_drift(self):
         sys.path.insert(0, str(CONTRIB))
         import vault_runtime
@@ -782,6 +781,7 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertEqual(summer["triggers"][0]["start"], "2026-07-27T03:30:00-06:00")  # the input is not modified
         self.assertIsNone(vault_runtime.comparable(None))
 
+    @unittest.skipUnless(os.name == "nt", "PowerShell job runner")
     def test_job_log_rotates_past_128_kb(self):
         import re
         script = (CONTRIB / "invoke-vault-job.ps1").read_text(encoding="utf-8")
