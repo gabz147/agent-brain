@@ -12,13 +12,13 @@ trust the three Agent Brain hooks). Paste the prompt for its tier.
 > contract's applicable writing/checkpoint sections. Resolve BRAIN paths and
 > verify your actual runtime model from this session. Use the shared vaultctl.py writer to add a
 > short installation verification to the existing Vault Autonomy Pipeline note.
-> Then record one checkpoint --summary for this actual session transcript to
-> append a five-section daily session, and report its receipt ID, model and
-> daily anchor. Preserve existing entries. Report any failed check;
+> Then record one checkpoint --summary for this actual session transcript (the
+> session start line gives its flags) to append a daily session, and report its
+> receipt ID, model and daily anchor. Preserve existing entries. Report any failed check;
 > do not claim success from a requested write alone.
 
-**Instructions tier** (GitHub Copilot CLI, Kiro CLI, Qwen Code, Factory Droid, and
-any agent without a transcript adapter):
+**Instructions tier** (the experimental GitHub Copilot CLI, Kiro CLI, Qwen Code and
+Factory Droid adapters, and any agent without a transcript adapter):
 
 > Follow your global instructions for Agent Brain. Run vaultctl.py session-brief once,
 > read the Brain VAULT-INDEX.md and only the contract sections a checkpoint needs.

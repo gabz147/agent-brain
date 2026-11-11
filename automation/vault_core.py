@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import time
 import uuid
 
@@ -37,7 +38,44 @@ DEFAULT_AUTOMATION = Path(os.environ.get("BRAIN_AUTOMATION_DIR") or os.environ.g
 DEFAULT_VAULT = Path(os.environ.get("BRAIN_VAULT_ROOT") or _config_vault_root() or Path.home() / "Documents" / "Brain").expanduser()
 DEFAULT_STATE = Path(os.environ.get("BRAIN_STATE_DIR") or DEFAULT_AUTOMATION / "state-v2").expanduser()
 DEFAULT_BACKUPS = Path(os.environ.get("BRAIN_BACKUPS_DIR") or DEFAULT_VAULT.parent / (DEFAULT_VAULT.name + " Backups") / "versions").expanduser()
-SCHEMA = json.loads((HERE / "vault-schema.json").read_text(encoding="utf-8-sig"))
+# Packaged defaults. The installed vault-schema.json is the user's file and is never replaced on upgrade,
+# so every key the code reads has a default here: a key added in a later release cannot break an older file.
+DEFAULT_SCHEMA = {
+    "version": 2,
+    "required": ["status", "project", "type", "updated_by", "updated"],
+    "optional": ["aliases"],
+    "status": ["active", "completed", "parked", "idea", "archived"],
+    "project": ["example-project", "personal", "meta"],
+    "type": ["index", "reference", "guide", "plan", "log"],
+    "signature_pattern": "^[a-z0-9][a-z0-9 ._-]{0,79}$",
+    "legacy_signatures": ["claude", "codex"],
+    "non_model_signatures": ["human", "automation", "unknown-model"],
+    "model_labels": {},
+    "exempt": ["09 - Archive/Old Memory"],
+    "daily_sections": ["What Got Done", "What's Still In Progress", "Decisions Made", "Notes Touched", "Profile Updates"],
+    # Written only when they have content; every other daily section always appears.
+    "daily_optional_sections": ["Profile Updates"],
+    "project_pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+    "project_allowlist": None,
+    "folder_projects": {"01": "personal", "02": "example-project", "10": "meta"},
+    # Two-digit prefixes of the top-level folders that must carry a same-named index note.
+    "index_folders": ["02", "03", "04", "05", "06", "07"],
+}
+
+
+def load_schema(path=None):
+    """The user's vault-schema.json laid over the packaged defaults; a missing file means the defaults."""
+    path = Path(path) if path else HERE / "vault-schema.json"
+    try:
+        user = json.loads(path.read_text(encoding="utf-8-sig"))
+    except FileNotFoundError:
+        user = {}
+    if not isinstance(user, dict):
+        raise ValueError(f"{path} must hold a JSON object")
+    return {**DEFAULT_SCHEMA, **user}
+
+
+SCHEMA = load_schema()
 DAILY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 
 
@@ -106,10 +144,20 @@ def model_label(model_id):
     name = model_id.strip().lower()
     if name in SCHEMA["model_labels"]:
         return SCHEMA["model_labels"][name]
-    match = re.fullmatch(r"claude-(opus|sonnet|haiku|fable)-(\d+)(?:[.-](\d+))?(?:-\d{8})?", name)
-    if match:
-        family, major, minor = match.groups()
-        return family + " " + major + ("." + minor if minor else "")
+    # Client and cloud decorations are not part of the model: a context suffix (`[1m]`), a provider
+    # prefix (`us.anthropic.`), a revision (`-v1:0`) and a release date (`-20250514`, `@20250514`).
+    core_id = re.sub(r"\[[^\]]*\]$", "", name).strip()
+    if core_id in SCHEMA["model_labels"]:
+        return SCHEMA["model_labels"][core_id]
+    claude = re.search(r"claude-.*", core_id)
+    if claude:
+        bare = re.sub(r"(?:-v\d+(?::\d+)?)?$", "", claude.group(0))
+        bare = re.sub(r"[-@]\d{8}$", "", bare)
+        match = (re.fullmatch(r"claude-(?P<family>[a-z]+)-(?P<major>\d{1,2})(?:[.-](?P<minor>\d{1,2}))?", bare)
+                 or re.fullmatch(r"claude-(?P<major>\d{1,2})(?:[.-](?P<minor>\d{1,2}))?-(?P<family>[a-z]+)", bare))
+        if match:
+            return match["family"] + " " + match["major"] + ("." + match["minor"] if match["minor"] else "")
+    name = core_id
     if not re.fullmatch(SCHEMA["signature_pattern"], name):
         raise VaultError("Invalid model identifier")
     if name in SCHEMA["legacy_signatures"]:
@@ -230,7 +278,6 @@ def restamp(text, signer, date=None):
         raise VaultError("Invalid signer")
     fields, _ = frontmatter(text)
     newline = "\r\n" if "\r\n" in text else "\n"
-    end = re.search(r"^---\s*\r?$", text, re.M)
     # Replace only the leading fenced block, never matches in body examples.
     lines = text.splitlines(keepends=True)
     fence = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
@@ -258,12 +305,19 @@ def ensure_new_daily_sections(text):
         if not re.search(r"`[a-z0-9][a-z0-9 ._-]*`\s*$", heading):
             raise VaultError("New session heading requires model signature")
         found = re.findall(r"^### (.+?)\r?$", block, re.M)
-        if found != SCHEMA["daily_sections"]:
-            raise VaultError("New session must contain the five ordered sections")
+        optional = SCHEMA.get("daily_optional_sections", [])
+        ordered = [name for name in SCHEMA["daily_sections"] if name in found]
+        missing = [name for name in SCHEMA["daily_sections"] if name not in optional and name not in found]
+        # Known sections, each once, in schema order; only the optional ones may be left out.
+        if found != ordered or missing:
+            raise VaultError("New session must contain the ordered daily sections; only "
+                             + (", ".join(optional) or "none") + " may be omitted")
 
 
 def assert_daily_append(before, after):
-    """Existing session bytes are immutable; only header/Open/Index may change."""
+    """Existing session bytes are immutable; only frontmatter and the Open line may change.
+
+    Daily notes written before November 2026 carry a `## Index` block; its lines stay as they are."""
     if not before:
         _, body = frontmatter(after)
         match = re.search(r"^## Session\b", body, re.M)
@@ -288,12 +342,14 @@ def assert_daily_append(before, after):
         prefix = re.sub(r"^\*\*Open for tomorrow:\*\*[^\r\n]*", "**Open for tomorrow:**", prefix, flags=re.M)
         match = re.search(r"^## Index[ \t]*\r?$", prefix, re.M)
         if not match:
-            raise VaultError("Daily note requires an Index block")
+            return prefix, None  # no legacy Index block: the whole header is compared
         return prefix[:match.end()], prefix[match.end():].splitlines(keepends=True)
     old_head, old_index = prefix_parts(old_prefix)
     new_head, new_index = prefix_parts(new_prefix)
-    if old_head != new_head:
+    if old_head != new_head or (old_index is None) != (new_index is None):
         raise VaultError("Daily header outside frontmatter/Open changed")
+    if old_index is None:
+        return
     pos = 0
     for line in new_index:
         if pos < len(old_index) and line == old_index[pos]:
@@ -351,7 +407,15 @@ def atomic_bytes(path, data):
             out.write(data)
             out.flush()
             os.fsync(out.fileno())
-        os.replace(temp, path)
+        # On Windows an editor, indexer or scanner can hold the target for a moment.
+        for attempt in range(6):
+            try:
+                os.replace(temp, path)
+                break
+            except PermissionError:
+                if attempt == 5:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
     finally:
         temp.unlink(missing_ok=True)
 
@@ -415,8 +479,12 @@ class Vault:
             raise VaultError("Invalid transaction id")
         manifest_path = self.backups / txid / "manifest.json"
         with file_lock(self.state / "locks" / "commits.lock"):
-            if manifest_path.exists():
-                manifest = json.loads(read_text(manifest_path))
+            manifest = json.loads(read_text(manifest_path)) if manifest_path.exists() else None
+            if manifest is not None and manifest.get("status") == "abandoned":
+                # Nothing of that attempt reached the vault: prepare again from the current notes.
+                shutil.rmtree(manifest_path.parent, ignore_errors=True)
+                manifest = None
+            if manifest is not None:
                 if manifest.get("root") != str(self.root):
                     raise VaultError("Transaction belongs to a different vault")
                 if manifest.get("signer") != signer or manifest.get("reason") != reason:
@@ -425,66 +493,12 @@ class Vault:
                 # re-run a model or apply a newly generated append on retry.
                 prepared = manifest["files"]
             else:
-                prepared = []
-                seen = set()
-                for op in operations:
-                    path = self.path(op["path"])
-                    rel = path.relative_to(self.root).as_posix()
-                    if rel in seen:
-                        raise VaultError("Duplicate operation path")
-                    seen.add(rel)
-                    before = path.read_bytes() if path.exists() else None
-                    expected = op.get("expected_sha256")
-                    if expected != (sha(before) if before is not None else None):
-                        raise Conflict("File changed before commit: " + rel)
-                    old = before.decode("utf-8-sig") if before is not None else ""
-                    formatting_time = op.get("format_updated") is True
-                    if formatting_time:
-                        if restore or before is None or set(op) != {"path", "expected_sha256", "format_updated"}:
-                            raise VaultError("Timestamp formatting requires only an existing path, hash and format_updated")
-                        fields, _ = frontmatter(old)
-                        new = restamp(old, fields["updated_by"], format_note_time(parse_note_time(fields["updated"])))
-                    elif "content" in op:
-                        if before is not None and is_daily(path) and not restore:
-                            raise VaultError("Existing daily notes require targeted edits/append")
-                        new = op["content"]
-                    else:
-                        new = old
-                        for edit in op.get("edits", []):
-                            find = edit["old"]
-                            if not find or new.count(find) != 1:
-                                raise Conflict("Targeted edit must match exactly once: " + rel)
-                            new = new.replace(find, edit["new"], 1)
-                        new += op.get("append", "")
-                    if not restore:
-                        if formatting_time:
-                            pass  # Preserve the original writer and instant; only format metadata.
-                        elif rel != "10 - Resources/Templates/Manual Daily Note Template.md":
-                            # A repeated identical write is not a new change.
-                            if new == old and frontmatter(old)[0].get("updated_by") == signer:
-                                continue
-                            new = restamp(new, signer)
-                        else:
-                            template_fields, _ = frontmatter(new)
-                            if template_fields.get("updated_by") != "human" or template_fields.get("updated") != "{{date:YYYY-MM-DD}}":
-                                raise VaultError("Manual output template requires human and the date token")
-                        problems = validate(new, path)
-                        if problems:
-                            raise VaultError(rel + ": " + "; ".join(problems))
-                        if is_daily(path):
-                            assert_daily_append(old, new)
-                    after = new.encode("utf-8")
-                    if before == after:
-                        continue
-                    entry = {"path": rel, "before_sha256": sha(before) if before is not None else None,
-                             "after_sha256": sha(after), "before": str(len(prepared)) + ".before",
-                             "after": str(len(prepared)) + ".after"}
-                    prepared.append(entry)
-                    directory = manifest_path.parent
-                    directory.mkdir(parents=True, exist_ok=True)
-                    if before is not None:
-                        atomic_bytes(directory / entry["before"], before)
-                    atomic_bytes(directory / entry["after"], after)
+                try:
+                    prepared = self._prepare(operations, signer, restore, manifest_path.parent)
+                except Exception:
+                    # A refused operation leaves no half-written snapshot folder behind.
+                    shutil.rmtree(manifest_path.parent, ignore_errors=True)
+                    raise
                 if not prepared:
                     return {"status": "unchanged", "files": [], "transaction_id": None}
                 manifest = {"version": 2, "transaction_id": txid, "root": str(self.root), "time": now().isoformat(),
@@ -514,10 +528,119 @@ class Vault:
                 manifest["completed_at"] = now().isoformat()
                 atomic_json(manifest_path, manifest)
                 return {"status": "committed", "transaction_id": txid, "files": prepared}
-            except Exception:
-                manifest["status"] = "interrupted"
+            except Exception as exc:
+                applied = 0
+                for entry in prepared:
+                    try:
+                        target = self.root / entry["path"]
+                        applied += (sha(target.read_bytes()) if target.exists() else None) == entry["after_sha256"]
+                    except OSError:
+                        pass
+                # Nothing written means nothing to resume; a partial write is named so it can be finished.
+                manifest["status"] = "interrupted" if applied else "abandoned"
+                manifest["error"] = f"{type(exc).__name__}: {exc}"[:400]
                 atomic_json(manifest_path, manifest)
-                raise
+                if not applied:
+                    raise
+                kind = Conflict if isinstance(exc, Conflict) else VaultError
+                raise kind(f"Commit {txid} stopped after {applied} of {len(prepared)} notes ({type(exc).__name__}: {exc}). "
+                           f"Those notes are written; finish the rest with `vaultctl.py resume {txid}`") from exc
+
+    def _prepare(self, operations, signer, restore, directory):
+        """Validate every operation and snapshot its before/after bytes; nothing in the vault changes here."""
+        prepared = []
+        seen = set()
+        for op in operations:
+            path = self.path(op["path"])
+            rel = path.relative_to(self.root).as_posix()
+            if rel in seen:
+                raise VaultError("Duplicate operation path")
+            seen.add(rel)
+            before = path.read_bytes() if path.exists() else None
+            expected = op.get("expected_sha256")
+            if expected != (sha(before) if before is not None else None):
+                raise Conflict("File changed before commit: " + rel)
+            old = before.decode("utf-8-sig") if before is not None else ""
+            formatting_time = op.get("format_updated") is True
+            if formatting_time:
+                if restore or before is None or set(op) != {"path", "expected_sha256", "format_updated"}:
+                    raise VaultError("Timestamp formatting requires only an existing path, hash and format_updated")
+                fields, _ = frontmatter(old)
+                new = restamp(old, fields["updated_by"], format_note_time(parse_note_time(fields["updated"])))
+            elif "content" in op:
+                if before is not None and is_daily(path) and not restore:
+                    raise VaultError("Existing daily notes require targeted edits/append")
+                new = op["content"]
+            else:
+                new = old
+                for edit in op.get("edits", []):
+                    find = edit["old"]
+                    if not find or new.count(find) != 1:
+                        raise Conflict("Targeted edit must match exactly once: " + rel)
+                    new = new.replace(find, edit["new"], 1)
+                new += op.get("append", "")
+            if not restore:
+                if formatting_time:
+                    pass  # Preserve the original writer and instant; only format metadata.
+                elif rel != "10 - Resources/Templates/Manual Daily Note Template.md":
+                    # An untouched note keeps its writer and time, whoever asks.
+                    if before is not None and new == old:
+                        continue
+                    new = restamp(new, signer)
+                else:
+                    template_fields, _ = frontmatter(new)
+                    if template_fields.get("updated_by") != "human" or template_fields.get("updated") != "{{date:YYYY-MM-DD}}":
+                        raise VaultError("Manual output template requires human and the date token")
+                problems = validate(new, path)
+                if problems:
+                    raise VaultError(rel + ": " + "; ".join(problems))
+                if is_daily(path):
+                    assert_daily_append(old, new)
+            after = new.encode("utf-8")
+            if before == after:
+                continue
+            entry = {"path": rel, "before_sha256": sha(before) if before is not None else None,
+                     "after_sha256": sha(after), "before": str(len(prepared)) + ".before",
+                     "after": str(len(prepared)) + ".after"}
+            prepared.append(entry)
+            directory.mkdir(parents=True, exist_ok=True)
+            if before is not None:
+                atomic_bytes(directory / entry["before"], before)
+            atomic_bytes(directory / entry["after"], after)
+        return prepared
+
+    def unfinished(self):
+        """Transactions whose notes were only partly written (`interrupted`) or never applied after a crash (`prepared`)."""
+        found = []
+        if not self.backups.is_dir():
+            return found
+        for entry in os.scandir(self.backups):
+            try:
+                if not entry.is_dir():
+                    continue
+                manifest = json.loads(read_text(Path(entry.path) / "manifest.json"))
+            except (OSError, ValueError):
+                continue
+            if manifest.get("status") in ("interrupted", "prepared") and manifest.get("root") == str(self.root):
+                found.append({"transaction_id": manifest.get("transaction_id") or entry.name, "status": manifest["status"],
+                              "time": manifest.get("time"), "reason": manifest.get("reason"),
+                              "notes": [item["path"] for item in manifest.get("files", [])]})
+        return sorted(found, key=lambda row: str(row["time"]))
+
+    def resume(self, transaction_id):
+        """Finish a partly written transaction from its prepared bytes; a concurrent edit still stops it."""
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,120}", transaction_id):
+            raise VaultError("Invalid transaction id")
+        manifest_path = self.backups / transaction_id / "manifest.json"
+        if not manifest_path.exists():
+            raise VaultError("No such transaction: " + transaction_id)
+        manifest = json.loads(read_text(manifest_path))
+        if manifest.get("status") == "committed":
+            return {"status": "committed", "transaction_id": transaction_id, "files": manifest.get("files", [])}
+        if manifest.get("status") == "abandoned" or not manifest.get("files"):
+            raise VaultError("Nothing of that transaction was written; rebuild the commit from the current notes")
+        # The manifest exists, so commit applies its prepared bytes and prepares nothing new.
+        return self.commit([{"path": manifest["files"][0]["path"]}], manifest["signer"], manifest["reason"], transaction_id, restore=True)
 
     def restore(self, snapshot_id, relative_path, expected_sha256):
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,120}", snapshot_id):
@@ -560,17 +683,21 @@ def daily_operation(vault, day, local_time, topic, sections, signer, marker, ope
         if index_ending:
             newline = index_ending.group(1)
     body = [f"## Session {number} — {local_time}: {topic} — `{signer}`", marker, ""]
+    optional = SCHEMA.get("daily_optional_sections", [])
     for heading in SCHEMA["daily_sections"]:
-        body.append("### " + heading)
-        entries = sections.get(heading) or ["None"]
+        entries = sections.get(heading) or []
         for entry in entries:
             if not isinstance(entry, str) or "\n" in entry or "\r" in entry:
                 raise VaultError("Daily bullets must be single lines")
-            body.append("- " + entry)
+        # An optional section with nothing to record is left out instead of written as None.
+        if heading in optional and not [e for e in entries if e.strip().rstrip(".").lower() != "none"]:
+            continue
+        body.append("### " + heading)
+        body.extend("- " + entry for entry in entries or ["None"])
         body.append("")
     session = newline.join(body)
-    # New sessions add no Index bullet: the session heading already carries
-    # number, time, topic and signer. Existing Index entries stay immutable.
+    # The session heading carries number, time, topic and signer, so a daily note has no Index block.
+    # Notes written before November 2026 keep theirs untouched.
     if old is None:
         day_date = dt.date.fromisoformat(day)
         title = day_date.strftime("%A, %B ") + str(day_date.day) + day_date.strftime(", %Y")
@@ -587,12 +714,12 @@ def daily_operation(vault, day, local_time, topic, sections, signer, marker, ope
         template = re.sub(r"<!--.*?-->", "", template, flags=re.S)
         fields, _ = frontmatter(template)
         # Keep template authority for schema and required body layout; remove
-        # its human session stub and render the verified capture's session.
-        prefix = template.split("## Index", 1)[0]
+        # its human session stub (and any legacy Index block) and render the verified capture's session.
+        prefix = re.split(r"^## (?:Index|Session)\b", template, maxsplit=1, flags=re.M)[0]
         # A function replacement keeps backslashes (Windows paths) literal.
         open_line = "**Open for tomorrow:** " + (open_next or "See Active Priorities.")
         prefix = re.sub(r"^\*\*Open for tomorrow:\*\*[^\n]*", lambda _: open_line, prefix, flags=re.M)
-        content = prefix.rstrip() + "\n\n## Index\n\n" + session
+        content = prefix.rstrip() + "\n\n" + session
         return {"path": rel, "expected_sha256": None, "content": content}
     edits = []
     if open_next:

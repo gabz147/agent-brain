@@ -4,7 +4,7 @@ Agent Brain loads context according to the task:
 
 | Task | Additional vault context |
 |---|---|
-| Session start, Claude hook or `session-brief` | A capped brief: latest Open line, last session headings, Active Now, recent hook errors |
+| Session start, hook or `session-brief` | A capped brief: latest Open line, last session headings, Active Now, recent hook errors; a hook adds the session's checkpoint flags |
 | Greeting or self-contained question | None beyond the brief, unless it establishes something durable |
 | Project work or recall | Root map once, then relevant project notes |
 | Status or continuation | Relevant priorities section and current project handoff |
@@ -53,33 +53,33 @@ they do not prove a particular model follows the policy or measure its billing.
 `vaultctl.py session-brief` prints at most 700 bytes of plain text: the newest
 daily note's Open line, its last two session headings, the Active Now bullets,
 and a count of fail-open hook errors from the last seven days. It reads notes
-and never writes. Claude's SessionStart hook injects it on startup and resume;
-Codex, which has no hooks here, is instructed to run it once at the start of
+and never writes. The SessionStart hook (Claude Code, and Codex once its hooks are trusted) injects it
+on startup and resume and appends one line with the flags that checkpoint this session;
+an agent without hooks is instructed to run it once at the start of
 substantive work. The brief is navigation
 for the model, not evidence: the notes it points at still have to be read.
 
 ## Compact checkpointing and optional vault actions
 
 `vaultctl.py daily-context <daily-path>` returns the Open line, all real session
-headings with source line numbers, and the file hash. Index bullets and session
-bodies are explicitly omitted. Read matching sessions completely for history or
+headings with source line numbers, and the file hash. Session bodies are
+explicitly omitted. Read matching sessions completely for history or
 coverage, and honor every full-read request. The writer still reads and protects
 the entire daily note and chooses the next session number at commit.
 
-A checkpoint is one `checkpoint --summary` call (JSON on stdin or `--input`, or
-`--trivial "<reason>"` when nothing is durable). Its short result contains the verified receipt ID, model and daily
+A checkpoint is one `checkpoint --summary` call (summary flags, JSON in `--input` for
+several days or note operations, or `--trivial '<reason>'` when nothing is durable). Its short result contains the verified receipt ID, model and daily
 anchor path/heading/hash; complete source evidence remains stored on disk. Omit
 --summary when diagnosing those details. Neither option changes write safety.
 
 Fresh vaults include Home (existing priorities plus a native Base) and Vault
-Actions. The link checker uses Node 22+ and Obsidian's own metadata on a dedicated
-local debugging port; it returns compact findings and never fixes notes or
-fetches external links. Workflows are on demand, with no weekly reviews or new
+Actions. `vaultctl.py links` is the built-in pure-Python link audit and `vaultctl.py find`
+the built-in ranked search; both return compact findings and never fix notes or
+fetch external links. Workflows are on demand, with no weekly reviews or new
 scheduled jobs.
 
 Upgrades preserve existing notes and Obsidian settings, so they do not overwrite
-or automatically add these optional note templates. The upgraded vault skill
-includes a references/vault-actions.md fallback. To add the Home/Actions notes,
+or automatically add these optional note templates. To add the Home/Actions notes,
 ask the agent to adapt the repository templates through the shared writer and
 update the existing root/resource indexes; enable native Bases in Obsidian if
 needed. Existing personalized navigation remains yours.

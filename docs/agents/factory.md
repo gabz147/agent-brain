@@ -12,6 +12,7 @@ Setup id: `factory` (`python install.py --client factory`). Tier: instructions o
 | Checkpoint | attested (`--source factory --model <runtime id>` with the summary flags) |
 | Detected by | `~/.factory`, `droid` on PATH |
 | Verified version | not yet fixture-verified on a named release |
+| Status | experimental: written from the vendor's documentation, not yet run against the real CLI |
 
 The line this agent gets after the shared rules:
 

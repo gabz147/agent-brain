@@ -10,10 +10,6 @@ updated: 2026-09-07
 
 **Open for tomorrow:** See Active Priorities.
 
-## Index
-
-- **Session topic** — Recorded the verified outcome. `({{model}})`
-
 ## Session 1 — {{time:h:mm A}}: Session topic — `{{model}}`
 
 ### What Got Done
@@ -26,7 +22,4 @@ updated: 2026-09-07
 - None
 
 ### Notes Touched
-- None
-
-### Profile Updates
 - None

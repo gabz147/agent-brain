@@ -28,6 +28,7 @@ class PortableTests(unittest.TestCase):
         for path in (REPO / "automation").iterdir():
             if path.is_file():
                 shutil.copy2(path, self.auto / path.name)
+        shutil.copytree(REPO / "automation/adapters", self.auto / "adapters")  # every hook goes through an adapter manifest
         shutil.copytree(REPO / "vault", self.vault)
         self.state = self.base / "Private state"
         self.backups = self.base / "Private snapshots"
@@ -76,22 +77,28 @@ class PortableTests(unittest.TestCase):
     def test_post_hook_loads_custom_controller_and_checks_written_note(self):
         target = self.vault / "00 - Inbox/Hook fixture.md"
         target.write_text("# Missing metadata\n", encoding="utf-8")
-        args = [sys.executable, str(REPO / "hooks/vault/validate-vault-frontmatter.py")]
-        result = self.child(args, {"tool_input": {"file_path": str(target)}})
+        args = [sys.executable, str(REPO / "hooks/vault/agent-hook.py"), "claude", "PostToolUse"]
+        payload = {"session_id": "portable", "tool_name": "Edit", "tool_input": {"file_path": str(target)}}
+        result = self.child(args, payload)
         self.assertEqual(result.returncode, 2)
         self.assertIn("Missing opening frontmatter", result.stderr)
         target.write_text("---\nstatus: active\nproject: custom-project\ntype: reference\nupdated_by: astra\nupdated: 2026-09-07\n---\n", encoding="utf-8")
-        self.assertEqual(self.child(args, {"tool_input": {"file_path": str(target)}}).returncode, 0)
+        self.assertEqual(self.child(args, payload).returncode, 0)
+        # The write guard refuses the same write before it happens, and leaves files outside the vault alone.
+        guard = [sys.executable, str(REPO / "hooks/vault/agent-hook.py"), "claude", "PreToolUse"]
+        refused = self.child(guard, payload)
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn("Direct write to a vault note refused: 00 - Inbox/Hook fixture.md", refused.stderr)
+        outside = dict(payload, tool_input={"file_path": str(self.base / "project.py")})
+        self.assertEqual((self.child(guard, outside).returncode, self.child(guard, outside).stderr), (0, ""))
 
     def test_missing_controller_fails_open_and_logs(self):
         missing = self.base / "Uninstalled controller"
         env = dict(self.env, BRAIN_AUTOMATION_DIR=str(missing))
-        result = self.child([sys.executable, str(REPO / "hooks/vault/validate-vault-frontmatter.py")], {}, env)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue((missing / "hook-errors.jsonl").exists())
-        result = self.child([sys.executable, str(REPO / "hooks/vault/stop-vault-gate.py")], {}, env)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len((missing / "hook-errors.jsonl").read_text().splitlines()), 2)
+        for count, event in enumerate(("PostToolUse", "PreToolUse", "Stop", "SessionStart"), 1):
+            result = self.child([sys.executable, str(REPO / "hooks/vault/agent-hook.py"), "claude", event], {}, env)
+            self.assertEqual((result.returncode, result.stdout), (0, ""), result.stderr)
+            self.assertEqual(len((missing / "hook-errors.jsonl").read_text().splitlines()), count)
 
     def test_stop_launcher_resolves_custom_paths_and_python(self):
         transcript = self.base / "source.jsonl"
@@ -102,25 +109,30 @@ class PortableTests(unittest.TestCase):
             {"type": "assistant", "message": {"content": "Verified findings. " * 100}},
         ]
         transcript.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
-        result = self.child([sys.executable, str(REPO / "hooks/vault/stop-vault-gate.py")],
+        result = self.child([sys.executable, str(REPO / "hooks/vault/agent-hook.py"), "claude", "Stop"],
                             {"session_id": "portable", "transcript_path": str(transcript)})
         self.assertEqual(result.returncode, 2, result.stderr + result.stdout)
         self.assertIn(str(self.vault / "10 - Resources/Vault Workflow Contract.md"), result.stdout)
         self.assertIn(str(self.auto / "vaultctl.py"), result.stdout)
         self.assertIn('load only the "Daily checkpoints and coverage" section', result.stdout)
-        self.assertTrue(list((self.state / "requested").glob("*.json")))
+        self.assertIn(f'--session portable --transcript "{transcript}"', result.stdout)
+        self.assertTrue(list((self.state / "gate").glob("*.json")))
 
     def test_session_brief_adapter_prints_continuity_and_fails_open(self):
-        result = self.child([sys.executable, str(REPO / "hooks/vault/session-brief.py")], {"source": "startup"})
+        start = [sys.executable, str(REPO / "hooks/vault/agent-hook.py"), "claude", "SessionStart"]
+        result = self.child(start, {"source": "startup"})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Brain: no sessions recorded yet.", result.stdout)
         self.assertIn("navigation, not evidence", result.stdout)
         self.assertLessEqual(len(result.stdout.encode("utf-8")), 720)
+        # With a session in the payload the brief ends with the flags that checkpoint it.
+        result = self.child(start, {"source": "startup", "session_id": "abc", "transcript_path": str(self.base / "abc.jsonl")})
+        self.assertIn(f'This session\'s checkpoint flags: --source claude --session abc --transcript "{self.base / "abc.jsonl"}"', result.stdout)
         missing = self.base / "Uninstalled controller"
-        result = self.child([sys.executable, str(REPO / "hooks/vault/session-brief.py")], {}, dict(self.env, BRAIN_AUTOMATION_DIR=str(missing)))
+        result = self.child(start, {}, dict(self.env, BRAIN_AUTOMATION_DIR=str(missing)))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
-        self.assertIn("SessionStart brief", (missing / "hook-errors.jsonl").read_text(encoding="utf-8"))
+        self.assertIn("claude SessionStart", (missing / "hook-errors.jsonl").read_text(encoding="utf-8"))
 
     def test_one_two_and_n_agent_parity(self):
         home = self.base / "Fresh home"

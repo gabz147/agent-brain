@@ -17,5 +17,6 @@
   "docs": "https://qwenlm.github.io/qwen-code-docs/",
   "transcript_adapter": null,
   "verified_version": null,
+  "experimental": true,
   "notes": "Global context ~/.qwen/QWEN.md (default context.fileName) and personal skills ~/.qwen/skills per qwenlm.github.io docs, checked 2026-10-18. A custom context.fileName needs the block copied by hand. Hooks (settings.json) are not wired yet."
 }

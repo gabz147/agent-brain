@@ -3,13 +3,16 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 from pathlib import Path
 import re
+import shutil
 
 from vault_core import (DEFAULT_VAULT, HERE, SCHEMA, VaultError, append_jsonl, atomic_json, file_lock,
-                        format_note_time, frontmatter, is_daily, now, read_text, sha, validate)
+                        MONTHS, format_note_time, frontmatter, is_daily, now, parse_note_time, read_text, sha, validate)
 
 FOLDER_PROJECTS = SCHEMA["folder_projects"]
+PRIORITY_LINE = 300  # characters an Active Priorities item may take, without its bullet
 
 
 def schema_block():
@@ -151,12 +154,97 @@ def parity(home):
     return issues
 
 
+def idle_hooks(vault, home):
+    """Agents whose Brain hooks are installed but have never started a session, usually because the client still waits for a trust step."""
+    import vault_adapters as adapters_module
+    try:
+        seen = json.loads(read_text(vault.state / "hooks-seen.json"))
+    except (OSError, ValueError):
+        seen = {}
+    idle = []
+    for adapter in adapters_module.load().values():
+        hooks = adapter.get("hooks")
+        if not hooks or adapter["id"] in seen:
+            continue
+        config = adapters_module.expand(hooks["path"], home)
+        try:
+            wired = config.is_file() and "agent-hook.py" in config.read_text(encoding="utf-8-sig")
+        except OSError:
+            wired = False
+        if wired:
+            idle.append(adapter["id"])
+    return idle
+
+
+def snapshot_rows(vault):
+    """One row per transaction folder: id, time, status, the notes it touched and its size on disk."""
+    rows = []
+    if not vault.backups.is_dir():
+        return rows
+    for entry in os.scandir(vault.backups):
+        if not entry.is_dir() or not re.fullmatch(r"[A-Za-z0-9_-]{1,120}", entry.name):
+            continue
+        size, newest = 0, 0.0
+        for item in os.scandir(entry.path):
+            try:
+                stat = item.stat()
+            except OSError:
+                continue
+            size += stat.st_size
+            newest = max(newest, stat.st_mtime)
+        try:
+            manifest = json.loads(read_text(Path(entry.path) / "manifest.json"))
+        except (OSError, ValueError):
+            manifest = {}
+        try:
+            at = dt.datetime.fromisoformat(manifest["time"]).timestamp()
+        except (KeyError, TypeError, ValueError):
+            at = newest
+        rows.append({"id": entry.name, "path": Path(entry.path), "at": at, "bytes": size, "status": manifest.get("status") or "no-manifest",
+                     "notes": [item["path"] for item in manifest.get("files", []) if isinstance(item, dict) and "path" in item]})
+    return sorted(rows, key=lambda row: row["at"])
+
+
+def snapshots(vault, prune=False, keep_days=30, apply=False):
+    """Snapshot inventory, and with prune the transactions safe to drop.
+
+    Kept whatever their age: unfinished transactions, and for every note the newest transaction that
+    touched it, so each note always has one recovery point. Notes themselves are never touched."""
+    rows = snapshot_rows(vault)
+    report = {"outcome": "report", "transactions": len(rows), "megabytes": round(sum(r["bytes"] for r in rows) / 1e6, 1),
+              "oldest": dt.datetime.fromtimestamp(rows[0]["at"]).date().isoformat() if rows else None,
+              "unfinished": [r["id"] for r in rows if r["status"] in ("interrupted", "prepared")]}
+    if not prune:
+        return report
+    if keep_days < 1:
+        raise VaultError("--keep-days must be at least 1")
+    cutoff = now().timestamp() - keep_days * 86400
+    newest_for_note = {}
+    for row in rows:
+        if row["status"] == "committed":
+            for note in row["notes"]:
+                newest_for_note[note] = row["id"]
+    protected = set(newest_for_note.values())
+    removable = [r for r in rows if r["at"] < cutoff and r["id"] not in protected and r["status"] not in ("interrupted", "prepared")]
+    report.update(outcome="pruned" if apply else "preview", keep_days=keep_days, removable=len(removable),
+                  removable_megabytes=round(sum(r["bytes"] for r in removable) / 1e6, 1),
+                  kept_as_newest_for_a_note=len(protected))
+    if apply:
+        with file_lock(vault.state / "locks" / "commits.lock"):
+            for row in removable:
+                if row["path"].parent == vault.backups:
+                    shutil.rmtree(row["path"], ignore_errors=True)
+        report["remaining"] = len(snapshot_rows(vault))
+        append_jsonl(vault.state / "outcomes.jsonl", {"at": now().isoformat(), "kind": "snapshots", "outcome": "pruned",
+                     "removed": len(removable), "megabytes": report["removable_megabytes"], "keep_days": keep_days}, vault.state)
+    return report
+
+
 def daily_structure(text, path=None):
     issues = []
     _, body = frontmatter(text)
     for pattern, problem in [(r"^# \w+, \w+ \d{1,2}, \d{4}\r?$", "Missing human-readable date heading"),
-                             (r"^\*\*Open for tomorrow:\*\*[^\r\n]*", "Missing Open for tomorrow line"),
-                             (r"^## Index\r?$", "Missing daily Index")]:
+                             (r"^\*\*Open for tomorrow:\*\*[^\r\n]*", "Missing Open for tomorrow line")]:
         # The Open-line contract was introduced September 3. Do not rewrite
         # older immutable history to retrofit a later template convention.
         legacy = path is not None and is_daily(path) and Path(path).stem < "2026-09-03"
@@ -167,17 +255,114 @@ def daily_structure(text, path=None):
     return issues
 
 
+def _section(text, heading):
+    match = re.search(r"^## " + re.escape(heading) + r"[ \t]*\r?\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+    return match.group(1) if match else ""
+
+
+def _marker_time(value):
+    """Naive local wall-clock time from ISO (`2026-10-20T22:40`, space form, date only) or the readable note format."""
+    value = value.strip()
+    try:
+        parsed = parse_note_time(value)
+        return parsed.replace(tzinfo=None)
+    except ValueError:
+        pass
+    match = re.fullmatch(r"(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}(?::\d{2})?))?", value)
+    if match:
+        day, clock = match.groups()
+        return dt.datetime.fromisoformat(day + "T" + clock) if clock else _day_end(day)
+    match = re.fullmatch(r"([A-Za-z]+) (\d{1,2}), (\d{4}) at (\d{1,2}):(\d{2}) ?([AP]M)", value)
+    if match and match.group(1) in MONTHS:
+        month, day, year, hour, minute, period = match.groups()
+        return dt.datetime(int(year), MONTHS.index(month) + 1, int(day), int(hour) % 12 + (12 if period == "PM" else 0), int(minute))
+    raise ValueError("Unrecognized timestamp: " + value)
+
+
+def _day_end(day):
+    return dt.datetime.fromisoformat(day + "T23:59:59")
+
+
+def profile_drift(vault):
+    """Read-only check that the Who I Am profile covers recent Profile Updates and the active projects."""
+    info = vault.inspect("VAULT-INDEX.md")
+    text = info["text"] or ""
+    who = _section(text, "Who I Am")
+    marker = re.search(r"Profile reviewed through:\s*(.+?)\s*$", _section(text, "Living Profile"), re.M)
+    baseline = None
+    if marker:
+        marker = marker.group(1).strip().strip("*_`").strip()
+        try:
+            baseline = _marker_time(marker)
+        except ValueError:
+            pass
+    if baseline is None:
+        marker = None
+        try:
+            baseline = _marker_time(frontmatter(text)[0]["updated"])
+        except (VaultError, KeyError, ValueError):
+            baseline = dt.datetime.min
+    pending = []
+    for path in vault.notes():
+        if not is_daily(path) or path.stem < baseline.date().isoformat():
+            continue
+        rel = path.relative_to(vault.root).as_posix()
+        lines = read_text(path).splitlines()
+        session, session_at, in_updates = None, None, False
+        for number, line in enumerate(lines, 1):
+            if line.startswith("## "):
+                in_updates = False
+                session = line[3:].strip() if re.match(r"## Session \d+\b", line) else None
+                at = re.search(r"[—-]\s*(\d{1,2}):(\d{2}) ?([AP]M)\b", line)
+                session_at = _day_end(path.stem)
+                if at:
+                    hour, minute, period = at.groups()
+                    session_at = dt.datetime.fromisoformat(path.stem + "T00:00:00").replace(
+                        hour=int(hour) % 12 + (12 if period == "PM" else 0), minute=int(minute))
+            elif line.startswith("#"):
+                in_updates = session is not None and line.strip() == "### Profile Updates"
+            elif in_updates and line.lstrip().startswith("-"):
+                item = line.lstrip()[1:].strip()
+                if item and not item.lower().startswith("none") and session_at > baseline:
+                    pending.append({"date": path.stem, "path": rel, "line": number, "session": session, "text": item})
+    missing = []
+    stems = {}
+    for path in vault.notes():
+        stems.setdefault(path.stem, path)
+    priorities = vault.inspect("Active Priorities.md")["text"] or ""
+    lowered = who.lower()
+    for section in ("Active Now", "Next"):
+        for line in _section(priorities, section).splitlines():
+            if not line.startswith("- "):
+                continue
+            for target in dict.fromkeys(t.strip() for t in re.findall(r"\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]", line)):
+                note = stems.get(target)
+                if note is None or target == "Machine Inventory" or any(m["name"] == target for m in missing):
+                    continue
+                try:
+                    fields = frontmatter(read_text(note))[0]
+                except VaultError:
+                    fields = {}
+                if fields.get("project") == "meta":
+                    continue
+                if not any(name.lower() in lowered for name in [target] + list(fields.get("aliases", []))):
+                    missing.append({"name": target, "section": section})
+    return {"outcome": "passed" if not pending and not missing else "needs_review", "marker": marker,
+            "baseline": baseline.isoformat(), "pending_profile_updates": pending, "missing_from_profile": missing}
+
+
 def hygiene(vault, fix=False, check_parity=True, home=None):
     """Fully scan every live note and return a signed machine-readable report."""
     report = {"version": 2, "at": now().isoformat(), "writer": "automation", "notes": 0,
               "issues": [], "repairs": [], "aged": 0, "cost_usd": 0, "model_calls": 0}
     operations = {}
     notes = vault.notes()
-    texts = {}
+    texts, rels = {}, {}
     for path in notes:
         info = vault.inspect(path)
         rel, text = info["path"], info["text"]
         texts[rel] = text
+        rels[path] = rel
         report["notes"] += 1
         problems = validate(text, path)
         if problems and fix:
@@ -192,7 +377,7 @@ def hygiene(vault, fix=False, check_parity=True, home=None):
         report["issues"].extend({"path": rel, "problem": problem} for problem in problems)
     # Contracted folder indexes, including recursively held notes.
     for folder in sorted(vault.root.iterdir()):
-        if not folder.is_dir() or folder.name[:2] not in ("02", "03", "04", "05", "06", "07"):
+        if not folder.is_dir() or folder.name[:2] not in SCHEMA["index_folders"]:
             continue
         index_path = folder / (folder.name + ".md")
         info = vault.inspect(index_path)
@@ -201,8 +386,21 @@ def hygiene(vault, fix=False, check_parity=True, home=None):
             report["issues"].append({"path": rel, "problem": "Missing required folder index"})
             continue
         revised = text
-        for note in [p for p in notes if folder in p.parents and p != index_path]:
-            if not re.search(r"\[\[" + re.escape(note.stem) + r"(?:[|#][^\]]*)?\]\]", revised):
+        links = lambda body, stem: re.search(r"\[\[" + re.escape(stem) + r"(?:[|#][^\]]*)?\]\]", body)
+        members = [p for p in notes if folder in p.parents and p != index_path]
+        # A subfolder index (<dir>/<dir>.md) reachable from the folder index covers the notes it links.
+        covering, frontier = [text], [text]
+        sub_indexes = {p for p in members if p.stem == p.parent.name and p.parent != folder}
+        while frontier:
+            body = frontier.pop()
+            for sub in [p for p in sub_indexes if links(body, p.stem)]:
+                sub_indexes.discard(sub)
+                covering.append(texts.get(rels[sub], ""))
+                frontier.append(covering[-1])
+        for note in members:
+            if any(links(body, note.stem) for body in covering[1:]):
+                continue
+            if not links(revised, note.stem):
                 if fix:
                     revised = revised.rstrip() + f"\n- [[{note.stem}]] — Reference for {note.stem}. `(automation)`\n"
                     report["repairs"].append("Added index member: " + note.stem)
@@ -223,6 +421,9 @@ def hygiene(vault, fix=False, check_parity=True, home=None):
         misfiled = recent_review(texts[priority])
         if misfiled:
             report["recent_review"] = misfiled  # informational; does not block the stamp
+        long_items = [line[:60] for line in texts[priority].splitlines() if line.startswith("- ") and len(line) > PRIORITY_LINE + 2]
+        if long_items:
+            report["long_priorities"] = long_items  # informational: the Contract caps an item at 300 characters
         if count_active > 5:
             report["issues"].append({"path": priority, "problem": "Active Now exceeds five committed items"})
         if aged:
@@ -232,8 +433,18 @@ def hygiene(vault, fix=False, check_parity=True, home=None):
                 report["aged"] = aged
             else:
                 report["issues"].append({"path": priority, "problem": f"{aged} actionable items need aging to Review"})
+    # A commit that wrote only some of its notes is a real inconsistency, so it blocks the stamp until resumed.
+    for row in vault.unfinished():
+        report["issues"].append({"path": "snapshots", "problem": f"Unfinished vault transaction {row['transaction_id']} ({row['status']}, "
+                                 f"{len(row['notes'])} notes): run vaultctl.py resume {row['transaction_id']}"})
     if check_parity:
         report["issues"].extend({"path": "boot/skills", "problem": problem} for problem in parity(home or Path.home()))
+        try:
+            idle = idle_hooks(vault, home or Path.home())
+        except Exception:
+            idle = []
+        if idle:
+            report["hooks_idle"] = idle  # informational: installed hooks that have never started a session
         if vault.root == DEFAULT_VAULT.resolve():
             try:  # the runtime baseline is an optional contrib/windows-audit tool
                 from vault_runtime import BASELINE, check_runtime
@@ -257,6 +468,10 @@ def hygiene(vault, fix=False, check_parity=True, home=None):
                 report["issues"].append({"path": contract, "problem": "Human schema block differs from machine schema"})
     if operations:
         report["commit"] = vault.commit(list(operations.values()), "automation", "Deterministic schema/index/priority hygiene")
+    try:
+        report["profile_drift"] = profile_drift(vault)  # informational; never blocks the stamp
+    except Exception as exc:
+        report["profile_drift"] = {"outcome": "error", "error": str(exc)}
     report["outcome"] = "verified" if not report["issues"] else "needs_review"
     atomic_json(vault.state / "hygiene-latest.json", report)
     append_jsonl(vault.state / "outcomes.jsonl", {"at": report["at"], "kind": "hygiene", "outcome": report["outcome"],

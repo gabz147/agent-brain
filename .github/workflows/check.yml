@@ -36,9 +36,14 @@ jobs:
           python dist/brain.pyz test
       - name: Read-only native link audit fixtures
         run: node contrib/obsidian-links/test_vault_links.mjs
+      - name: Optional Obsidian CLI helper (offline fixtures)
+        run: python contrib/obsidian-cli/test_obsidian_read.py
+      # Two vendor endpoints outside this repository: informative, never a reason to fail a change here.
       - name: Official native CLI installers (no login or model calls)
+        continue-on-error: true
         run: python -c "import install; install.install_client('claude'); install.install_client('codex')"
       - name: Check both real CLIs
+        continue-on-error: true
         run: python install.py --doctor --client both
       - name: Check POSIX bootstrap syntax
         if: runner.os != 'Windows'

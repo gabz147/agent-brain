@@ -2,8 +2,8 @@
 
 ![Agent Brain: your notes, your agent, your memory.](docs/graphics/brain-cover.png)
 
-Give **your terminal coding agent** (Claude Code, Codex CLI, GitHub Copilot CLI,
-Kiro CLI, Qwen Code or Factory Droid, any mix) a private Obsidian vault it can
+Give **your terminal coding agent** (Claude Code or Codex CLI; experimental adapters for
+GitHub Copilot CLI, Kiro CLI, Qwen Code and Factory Droid) a private Obsidian vault it can
 maintain and recall across sessions. One public setup with only the skills and tools
 needed for the Brain workflow. Your notes stay on your computer.
 
@@ -79,7 +79,7 @@ hooks; setup installs them together from this one repository.
 | Startup instructions | Load relevant context on demand; checkpoint substantive work and decisions |
 | Shared writer | Validate notes, preserve history, back up changes and return compact verified receipts |
 | On-demand actions | Read-only link checks, inbox triage, next actions and evidence freshness |
-| Claude hooks, if selected | Inject the startup brief, remind Claude to checkpoint and validate completed Markdown writes |
+| Claude and Codex hooks, if selected | Inject the startup brief with the session's checkpoint flags, refuse direct writes to vault notes (Claude), validate completed Markdown writes and remind the agent to checkpoint |
 
 No personal skill bundle, unrelated plugins, credentials or prewritten personal
 notes are installed. Existing notes and unrelated client settings are preserved.
@@ -89,9 +89,10 @@ Client accounts and usage costs remain your own.
 
 ![Work in your agent, checkpoint verified findings into Markdown, and recall them in a future session.](docs/graphics/brain-workflow.png)
 
-The agent starts with a compact boot policy. On Claude Code a SessionStart hook
-injects a short brief, about 200 tokens: the latest Open line, the last session
-headings, Active Now and any recent hook errors. Codex, which has no hooks here, is
+The agent starts with a compact boot policy. On Claude Code, and on Codex once its
+hooks are trusted in `/hooks`, a SessionStart hook injects a short brief, about 200
+tokens: the latest Open line, the last session headings, Active Now, any recent hook
+errors and the flags that checkpoint this session. Agents without hooks are
 instructed to run `vaultctl.py session-brief` once instead. Greetings and self-contained
 questions need no vault reads. For substantive project work, it reads the map
 and relevant notes. Priorities are for status/continuation, daily history starts
@@ -106,15 +107,18 @@ readable local write timestamp with 12-hour time, seconds and timezone in `updat
 `September 23, 2026 at 6:20:14 AM (UTC-06:00)`. Existing date-only notes remain valid. Future sessions retrieve that context
 from the same Markdown files you see in Obsidian.
 
-Claude has a Stop-hook reminder. Codex checkpoints through startup instructions
-and skills. This guides agent behavior; the [first-checkpoint check](FIRST-CHECKPOINT.md)
+Claude and Codex get a Stop-hook reminder from one shared gate; the experimental
+agents checkpoint through startup instructions and skills. This guides agent behavior; the [first-checkpoint check](FIRST-CHECKPOINT.md)
 confirms it works with your account, permissions and installed client version.
 Brief replies need not become notes.
 
 ## Platforms and optional features
 
 The core installer, vault writer and live checkpoints support **Windows, macOS
-and Linux**, for any one agent or any mix. Your chosen
+and Linux**, for any one agent or any mix. Claude Code and Codex CLI are the agents
+this is used with daily; the Copilot, Kiro, Qwen and Factory adapters are
+**experimental**: written from each vendor's documentation, instructions only, and
+not yet run against the real CLI. Your chosen
 CLI must also support your OS/version. WSL is a separate Linux installation.
 
 Checkpoints are live only: the agent writes them inside its own session, and
@@ -122,7 +126,7 @@ nothing in this package starts a model call in the background. The former
 optional Windows retrospective-capture drain was removed because it spent plan
 usage on unattended runs. A scheduled `hygiene --fix` (no model calls) is a one-line
 entry in [your OS's scheduler](docs/scheduling.md); a guarded Windows audit task, a
-debug-port link checker and the Agent Pulse indicator are optional, in [contrib/](contrib/README.md).
+debug-port link checker, the read-only Obsidian CLI helper and the Agent Pulse indicator are optional, in [contrib/](contrib/README.md).
 
 This installs a template, not a cloud sync service. Keep actual notes and runtime
 state outside this public repository. Configure your own private backup or

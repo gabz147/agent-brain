@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from vault_core import read_text
+from vault_core import SCHEMA, read_text
 
 LINK = re.compile(r"(!?)\[\[([^\[\]|#^]*)((?:#\^?[^\[\]|]*)?)(?:\|[^\[\]]*)?\]\]")
 FENCE = re.compile(r"^(```|~~~).*?^\1[^\n]*$", re.S | re.M)
@@ -86,9 +86,10 @@ def audit(vault, full=False):
                     ok = wanted in {_norm(h) for h in HEADING.findall(INLINE.sub("", FENCE.sub("", content)))}
                 if not ok:
                     report["fragments"].append({"source": rel.as_posix(), "link": link})
+    indexed = set(SCHEMA["index_folders"]) | {"10"}  # folders whose notes are expected to be linked from an index
     for rel, count in incoming.items():
         top = rel.parts[0]
-        if count == 0 and len(rel.parts) > 1 and top[:2] in ("02", "03", "04", "05", "06", "07", "10") and rel.stem != top:
+        if count == 0 and len(rel.parts) > 1 and top[:2] in indexed and rel.stem != top:
             report["orphans"].append(rel.as_posix())
     counts = {key: len(value) for key, value in report.items()}
     result = {"outcome": "needs_review" if counts["missing"] or counts["fragments"] else "clean", "notes": len(sources), "counts": counts}

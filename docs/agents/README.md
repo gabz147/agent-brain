@@ -7,7 +7,7 @@ Each agent is one manifest in `automation/adapters/`; a new agent is a JSON file
 |---|---|---|---|
 | [Claude Code](claude.md) | `claude` | hooks | `~/.claude/CLAUDE.md` |
 | [Codex CLI](codex.md) | `codex` | hooks | `~/.codex/AGENTS.md` |
-| [GitHub Copilot CLI](copilot.md) | `copilot` | instructions only | `~/.copilot/copilot-instructions.md` |
-| [Factory Droid](factory.md) | `factory` | instructions only | `~/.factory/AGENTS.md` |
-| [Kiro CLI](kiro.md) | `kiro` | instructions only | `~/.kiro/steering/agent-brain.md` |
-| [Qwen Code](qwen.md) | `qwen` | instructions only | `~/.qwen/QWEN.md` |
+| [GitHub Copilot CLI](copilot.md) | `copilot` | instructions only, experimental | `~/.copilot/copilot-instructions.md` |
+| [Factory Droid](factory.md) | `factory` | instructions only, experimental | `~/.factory/AGENTS.md` |
+| [Kiro CLI](kiro.md) | `kiro` | instructions only, experimental | `~/.kiro/steering/agent-brain.md` |
+| [Qwen Code](qwen.md) | `qwen` | instructions only, experimental | `~/.qwen/QWEN.md` |
